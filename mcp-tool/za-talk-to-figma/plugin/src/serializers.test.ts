@@ -75,30 +75,55 @@ describe("serializePaints", () => {
   it("returns undefined for empty array", () => {
     expect(serializePaints([])).toBeUndefined();
   });
-  it("filters out non-SOLID paints", () => {
-    const paints = [{ type: "IMAGE" }, { type: "GRADIENT_LINEAR" }];
-    expect(serializePaints(paints)).toBeUndefined();
+  it("preserves image and gradient paint types for audit", () => {
+    const paints = [{ type: "IMAGE", scaleMode: "FILL" }, { type: "GRADIENT_LINEAR" }];
+    expect(serializePaints(paints)).toEqual([
+      { type: "IMAGE", scaleMode: "FILL" },
+      { type: "GRADIENT_LINEAR" },
+    ]);
   });
-  it("serializes a solid paint with opacity 1 as plain hex", () => {
+  it("serializes a solid paint with opacity 1 as a typed paint", () => {
     const paints = [{ type: "SOLID", color: { r: 1, g: 0, b: 0 }, opacity: 1 }];
-    expect(serializePaints(paints)).toEqual(["#ff0000"]);
+    expect(serializePaints(paints)).toEqual([{ type: "SOLID", color: "#ff0000" }]);
   });
-  it("appends alpha hex when opacity < 1", () => {
-    // opacity 0.5 → Math.round(0.5 * 255) = 128 = 0x80
+  it("keeps opacity separate when opacity < 1", () => {
     const paints = [{ type: "SOLID", color: { r: 1, g: 0, b: 0 }, opacity: 0.5 }];
-    const result = serializePaints(paints) as string[];
-    expect(result[0]).toBe("#ff000080");
+    expect(serializePaints(paints)).toEqual([{ type: "SOLID", color: "#ff0000", opacity: 0.5 }]);
   });
   it("defaults opacity to 1 when not provided", () => {
     const paints = [{ type: "SOLID", color: { r: 0, g: 0, b: 1 } }];
-    expect(serializePaints(paints)).toEqual(["#0000ff"]);
+    expect(serializePaints(paints)).toEqual([{ type: "SOLID", color: "#0000ff" }]);
   });
   it("serializes multiple solid paints", () => {
     const paints = [
       { type: "SOLID", color: { r: 1, g: 0, b: 0 } },
       { type: "SOLID", color: { r: 0, g: 1, b: 0 } },
     ];
-    expect(serializePaints(paints)).toEqual(["#ff0000", "#00ff00"]);
+    expect(serializePaints(paints)).toEqual([
+      { type: "SOLID", color: "#ff0000" },
+      { type: "SOLID", color: "#00ff00" },
+    ]);
+  });
+  it("serializes gradient stops and color alpha", () => {
+    const paints = [{
+      type: "GRADIENT_LINEAR",
+      gradientStops: [
+        { position: 0, color: { r: 1, g: 0, b: 0, a: 0.25 } },
+        { position: 1, color: { r: 0, g: 0, b: 1, a: 1 } },
+      ],
+    }];
+    expect(serializePaints(paints)).toEqual([{
+      type: "GRADIENT_LINEAR",
+      gradientStops: [
+        { position: 0, color: "#ff0000", colorOpacity: 0.25 },
+        { position: 1, color: "#0000ff" },
+      ],
+    }]);
+  });
+  it("omits hidden paints", () => {
+    expect(serializePaints([
+      { type: "SOLID", color: { r: 1, g: 0, b: 0 }, visible: false },
+    ])).toBeUndefined();
   });
 });
 
@@ -267,7 +292,7 @@ describe("serializeStyles", () => {
   it("includes fills when fills is a solid paint array", async () => {
     const node = { fills: [{ type: "SOLID", color: { r: 1, g: 0, b: 0 } }] };
     const result = await serializeStyles(node);
-    expect(result.fills).toEqual(["#ff0000"]);
+    expect(result.fills).toEqual([{ type: "SOLID", color: "#ff0000" }]);
   });
 
   it("includes fillStyle name when fillStyleId resolves to a style", async () => {
@@ -278,7 +303,7 @@ describe("serializeStyles", () => {
     };
     const result = await serializeStyles(node);
     expect(result.fillStyle).toBe("Red");
-    expect(result.fills).toEqual(["#ff0000"]);
+    expect(result.fills).toEqual([{ type: "SOLID", color: "#ff0000" }]);
   });
 
   it("skips fillStyle when fillStyleId resolves to null", async () => {
@@ -288,7 +313,7 @@ describe("serializeStyles", () => {
     };
     const result = await serializeStyles(node);
     expect(result.fillStyle).toBeUndefined();
-    expect(result.fills).toEqual(["#ff0000"]);
+    expect(result.fills).toEqual([{ type: "SOLID", color: "#ff0000" }]);
   });
 
   it("skips fillStyle when fillStyleId is not a string", async () => {
@@ -308,7 +333,7 @@ describe("serializeStyles", () => {
     };
     const result = await serializeStyles(node);
     expect(result.strokeStyle).toBe("Border");
-    expect(result.strokes).toEqual(["#000000"]);
+    expect(result.strokes).toEqual([{ type: "SOLID", color: "#000000" }]);
   });
 
   it("omits cornerRadius when value is 0", async () => {

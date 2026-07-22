@@ -102,14 +102,14 @@ Signature moment:
 
 ### BUG-001 - Figma plugin serializer contract drift
 
-- **Status:** OPEN
+- **Status:** FIXED
 - **Found:** 2026-07-22, baseline MCP review before PM app implementation.
 - **Symptom:** `bun test` reports 9 failures in `serializers.test.ts`; 242 tests pass.
 - **Trigger:** Run plugin test suite. Failures expect solid paints as hex strings and non-solid paints to be discarded.
 - **Root cause:** Confirmed implementation/test contract mismatch. `serializePaints` now returns structured paint objects and preserves gradients/images, while tests still assert the older hex-only contract. Product intent for the new rich shape must be confirmed before changing either side.
-- **Fix:** Pending `P0-FIG-000`. Preferred direction is to preserve rich structured paint data for DS auditing, document/version the response shape and update stale tests/consumers after compatibility review.
+- **Fix:** Preserved rich structured paint data, documented the response contract and updated stale tests. Go `extractPrimaryColor` keeps compatibility with typed objects and legacy hex arrays.
 - **Regression test:** Existing `serializers.test.ts` plus new gradient/image/opacity contract cases; full `bun test` must pass.
-- **Caveat:** Do not “fix” by reverting to hex-only output without checking read consumers and DS audit requirements.
+- **Caveat:** Do not revert to hex-only output; gradients, images and opacity are required for DS audit fidelity.
 
 ### BUG-002 - Electron preload ESM caused a white window
 

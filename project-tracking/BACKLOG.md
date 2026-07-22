@@ -251,14 +251,15 @@
 
 ### `P0-FIG-000` Resolve baseline serializer contract drift
 
-- **Status:** IN_PROGRESS
+- **Status:** DONE (2026-07-22)
 - **Depends on:** none
 - **Deliver:** decide/document rich paint object contract versus legacy hex-string contract; align serializer consumers and tests.
 - **Acceptance:** all plugin tests pass; gradients/images/solid opacity behavior has explicit tests; no DS read regression.
+- **Evidence:** 253/253 `bun test` pass, plugin typecheck pass and `go test ./...` pass; rich contract documented in `docs/paint-serialization-contract.md`.
 
 ### `P0-FIG-001` Existing MCP capability adapter and DS context cache
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS
 - **Depends on:** P0-FIG-000, P0-FND-003, P0-DOM-001
 - **Deliver:** stdio process adapter, health/session pinning, typed error mapper, `capture_design_system_context` normalization và synthetic cache fallback.
 - **Acceptance:** explicit session/page allowlist; live hoặc fixture DS context có fingerprint/version; không đọc full document không giới hạn.
