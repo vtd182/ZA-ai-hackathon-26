@@ -41,7 +41,7 @@ import {
 } from '@pm-agent/domain'
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
 import { syntheticZaloDesignSystem } from '@pm-agent/fixture-zalo-design-system'
-import { FigmaIntegrationStore, HistoryStore, LifecycleStore, OutboxStore } from '@pm-agent/persistence'
+import { DEMO_FIXTURE_VERSION, FigmaIntegrationStore, HistoryStore, LifecycleStore, OutboxStore } from '@pm-agent/persistence'
 import { ProviderRegistry } from '@pm-agent/reasoning'
 import { SecretStore } from './secret-store'
 
@@ -105,6 +105,14 @@ function workspaceFor(threadId: string): LifecycleWorkspaceState {
     : null
   const execution = outbox.listRun(runState.id).length > 0 ? outbox.summary(runState.id) : null
   return { runState, preview, execution }
+}
+
+function resetDemoWorkspace(): { fixtureVersion: 1; thread: ReturnType<HistoryStore['resetDemoWorkspace']>; workspace: LifecycleWorkspaceState } {
+  for (const controller of activeRuns.values()) controller.abort()
+  activeRuns.clear()
+  mockFigmaStore.reset()
+  const thread = history.resetDemoWorkspace()
+  return { fixtureVersion: DEMO_FIXTURE_VERSION, thread, workspace: workspaceFor(thread.id) }
 }
 
 interface FigmaExecutionContext {
@@ -412,6 +420,7 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle('chat:cancel', (_event, threadId: string) => activeRuns.get(threadId)?.abort())
+  ipcMain.handle('demo:reset', () => resetDemoWorkspace())
 }
 
 function createWindow(): void {
@@ -452,8 +461,46 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     const wait = (milliseconds: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, milliseconds))
     const expectedFailureTarget = process.env.PM_AGENT_SMOKE_FAIL_TARGET ?? ''
     await wait(2_500)
+    const expectedResetCount = Number(process.env.PM_AGENT_SMOKE_RESET_COUNT ?? 0)
+    const resetSnapshots: string[] = []
+    let resetControlReady = false
+    for (let index = 0; index < expectedResetCount; index += 1) {
+      if (index === 0) {
+        resetControlReady = await window.webContents.executeJavaScript(`(async () => {
+          const open = document.querySelector('.reset-demo-button');
+          open?.click();
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          const confirm = document.querySelector('.confirm-reset-button');
+          confirm?.click();
+          return Boolean(open && confirm);
+        })()`) as boolean
+        await wait(500)
+      } else {
+        await window.webContents.executeJavaScript(`window.pmAgent.demo.reset()`)
+      }
+      const snapshot = await window.webContents.executeJavaScript(`(async () => {
+        const threads = await window.pmAgent.threads.list();
+        const thread = await window.pmAgent.threads.get(threads[0].id);
+        const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
+        return JSON.stringify({
+          threadCount: threads.length,
+          threadId: thread.id,
+          title: thread.title,
+          messages: thread.messages.map(({ id, role, content, createdAt }) => ({ id, role, content, createdAt })),
+          specVersion: workspace.runState.productSpec.version
+        });
+      })()`) as string
+      resetSnapshots.push(snapshot)
+    }
+    const reset = {
+      count: expectedResetCount,
+      controlReady: expectedResetCount === 0
+        ? await window.webContents.executeJavaScript(`Boolean(document.querySelector('.reset-demo-button'))`) as boolean
+        : resetControlReady,
+      deterministic: expectedResetCount === 0 || (resetSnapshots.length === expectedResetCount && new Set(resetSnapshots).size === 1),
+    }
     const initial = await window.webContents.executeJavaScript(`({
-      hasApi: Boolean(window.pmAgent?.threads && window.pmAgent?.chat && window.pmAgent?.lifecycle),
+      hasApi: Boolean(window.pmAgent?.threads && window.pmAgent?.chat && window.pmAgent?.lifecycle && window.pmAgent?.demo),
       hasCanvas: Boolean(document.querySelector('.tl-container')),
       hasSeed: document.body.innerText.includes('REQ-PAYMENT')
     })`) as { hasApi: boolean; hasCanvas: boolean; hasSeed: boolean }
@@ -607,6 +654,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     const image = await window.webContents.capturePage()
     writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!, image.toPNG())
     const passed = initial.hasApi && initial.hasCanvas && initial.hasSeed
+      && reset.controlReady && reset.deterministic
       && final.hasPreview && !final.pending && !final.hasError
       && approval.committed && approval.specVersion === 2
       && approval.paymentStatus === 'removed' && approval.actionsApproved
@@ -616,7 +664,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && recovery.verified && recovery.preservedTargets
       && figmaSetup.hasSetupDialog && figmaSetup.runtimeReady && figmaSetup.pluginBuilt && figmaSetup.waitingForPlugin
       && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady))
-    console.log(`[smoke] ${JSON.stringify({ passed, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
+    console.log(`[smoke] ${JSON.stringify({ passed, reset, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
     app.exit(passed ? 0 : 1)
   } catch (error) {
     console.error('[smoke] failed', error)
@@ -639,6 +687,7 @@ app.whenReady().then(() => {
   figmaRuntime = new FigmaRuntimeManager(figmaPaths)
   figmaMcp = new FigmaMcpAdapter({ binaryPath: figmaPaths.binaryPath })
   secrets = new SecretStore(join(app.getPath('userData'), 'provider-secrets.json'))
+  if (process.env.PM_AGENT_RESET_ON_START === '1') resetDemoWorkspace()
   registerIpc()
   createWindow()
   void figmaRuntime.start()

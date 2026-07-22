@@ -99,6 +99,12 @@ export interface ConfigureProviderInput {
   apiKey?: string
 }
 
+export interface DemoResetOutput {
+  fixtureVersion: 1
+  thread: ThreadDetail
+  workspace: LifecycleWorkspaceState
+}
+
 export interface DesktopApi {
   threads: {
     list(query?: string): Promise<ThreadSummary[]>
@@ -131,6 +137,9 @@ export interface DesktopApi {
   chat: {
     send(input: SendChatInput): Promise<SendChatOutput>
     cancel(threadId: string): Promise<void>
+  }
+  demo: {
+    reset(): Promise<DemoResetOutput>
   }
 }
 

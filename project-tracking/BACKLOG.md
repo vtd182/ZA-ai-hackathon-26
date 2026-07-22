@@ -28,11 +28,11 @@
 
 ### `P0-FND-003` Synthetic demo fixtures
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-FND-001
 - **Deliver:** meal-ordering idea, discovery sources, 3 questions/options, mock Jira/Zdoc data, design-system fixture.
 - **Acceptance:** fixture deterministic, versioned, không có production URL/PII/secret; có script reset.
-- **Progress:** meal-ordering + synthetic Zalo-like DS fixtures parse tại module boundary; deterministic payment impact path có regression test. Còn thiếu reset command/control chạy lặp lại được và seeded Mock Jira/Zdoc stores.
+- **Evidence:** versioned meal-ordering + synthetic Zalo-like DS fixtures parse tại module boundary; deterministic thread/message IDs and timestamps seed SQLite. `./run.sh reset` và UI reset preserve provider/Figma setup while replacing history/canvas/run/outbox/mock artifacts. Unit test plus `./run.sh smoke-reset` prove three resets produce identical state before a fully verified flow.
 
 ## Epic E1 - Domain and workflow
 
@@ -72,7 +72,7 @@
 
 ### `P0-AGT-001` Reasoning provider contract and mock
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-DOM-001, P0-FND-003
 - **Deliver:** provider interface, phase-specific schemas, deterministic MockReasoningProvider.
 - **Acceptance:** cùng input/version cho cùng output; malformed output không mutate RunState.

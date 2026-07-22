@@ -175,6 +175,10 @@ button {
 }
 
 .collapse-button {
+  margin-left: 0;
+}
+
+.reset-demo-button {
   margin-left: auto;
 }
 
@@ -917,6 +921,35 @@ button {
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 18px 54px rgba(23, 33, 38, 0.2);
+}
+
+.confirm-dialog {
+  width: min(390px, calc(100vw - 40px));
+  padding: 18px;
+  border: 1px solid #cfd9dc;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 54px rgba(23, 33, 38, 0.2);
+}
+
+.confirm-dialog header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #27353b;
+}
+
+.confirm-dialog p {
+  margin: 14px 0 18px;
+  color: #617077;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.confirm-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .figma-setup-dialog {

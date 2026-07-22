@@ -45,8 +45,9 @@ Signature moment:
 - **Completed tasks:** `P0-MCK-002/003` SQLite-backed Mock Jira and Mock Zdoc pass the common connector suite, durable retry and traceability tamper tests.
 - **Completed task:** `P0-AGT-005` receipt-first outbox execution and verification orchestration; production smoke read-back verifies Figma, Mock Jira and Mock Zdoc.
 - **Completed task:** `P0-CHG-003` multi-target partial retry; deterministic recovery smoke proves successful targets are not duplicated.
-- **Current task:** `P0-FND-003` deterministic demo fixtures and reset is `IN_PROGRESS`.
-- **Current slice:** Add a repeatable seeded reset command/control and prove three clean demo runs produce the same canonical outcome.
+- **Completed task:** `P0-FND-003` deterministic demo fixtures and reset; three repeated resets produce identical canonical state.
+- **Current task:** `P0-AGT-001` phase-specific reasoning contract and malformed-output guard is `IN_PROGRESS`.
+- **Current slice:** Define versioned phase request/result schemas, make MockReasoningProvider deterministic per phase and prove malformed provider output cannot mutate RunState.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -240,11 +241,13 @@ App commands đã chạy thành công:
 ```text
 ./run.sh             # verified 2026-07-22; Electron dev app opens
 ./run.sh setup       # verified 2026-07-22; installs/builds app, Go runtime and Figma plugin bundle
+./run.sh reset       # verified by shared reset path 2026-07-22; resets then opens dev app
 ./run.sh typecheck   # verified 2026-07-22
 ./run.sh test        # verified 2026-07-22; 56 tests pass, 1 optional live test skipped
 ./run.sh build       # verified 2026-07-22
 ./run.sh smoke       # verified 2026-07-22; Mock provider + canvas
 ./run.sh smoke-recovery  # verified 2026-07-22; injected Jira failure + target-only UI retry
+./run.sh smoke-reset # verified 2026-07-22; UI reset + three deterministic seeds + full flow
 PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke  # verified 2026-07-22
 PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke  # verified 2026-07-22; live allowlist + bounded DS capture + cache + UI
 ```
@@ -337,6 +340,14 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - The test proves Figma/Zdoc external IDs and attempts remain unchanged, then requires all three read-backs to verify.
 - Signature screenshots now include preview, partial failure, final verified state and Figma setup readiness.
 - Next action: implement deterministic demo reset and seeded external stores, then run the full path three times.
+
+### 2026-07-22 - Deterministic demo reset
+
+- Replaced first-run random seed data with fixture version 1, stable thread/message IDs and fixed timestamps.
+- Added typed reset IPC, guarded UI control and `./run.sh reset`; provider profiles, credentials and Figma allowlist are preserved.
+- History, canvas, lifecycle runs/outbox and SQLite mock artifacts are replaced atomically/cascade-safe.
+- `./run.sh smoke-reset` resets three times, proves identical state and completes the verified signature flow.
+- Next action: harden phase-specific reasoning contracts and malformed-output boundaries.
 
 ## 10. End-of-session checklist
 

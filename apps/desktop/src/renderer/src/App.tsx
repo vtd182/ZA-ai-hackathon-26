@@ -13,6 +13,7 @@ import {
   LoaderCircle,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Send,
   Settings,
@@ -65,6 +66,7 @@ export function App(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [settingsProfile, setSettingsProfile] = useState<ProviderProfile | null>(null)
   const [figmaSetupOpen, setFigmaSetupOpen] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
   const [figmaStatus, setFigmaStatus] = useState<FigmaSetupStatus | null>(null)
   const [selection, setSelection] = useState<CanvasSelectionContext | undefined>()
   const [lifecycleWorkspace, setLifecycleWorkspace] = useState<LifecycleWorkspaceState | null>(null)
@@ -221,6 +223,25 @@ export function App(): React.JSX.Element {
 
   const activeProfile = profiles.find((profile) => profile.id === activeThread?.providerId)
 
+  const resetDemo = async (): Promise<void> => {
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await window.pmAgent.demo.reset()
+      setSearch('')
+      setActiveThread(result.thread)
+      setLifecycleWorkspace(result.workspace)
+      setSelection(undefined)
+      setCommandBatch({ id: 0, commands: [] })
+      setThreads(await window.pmAgent.threads.list())
+      setResetOpen(false)
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <main className={historyOpen ? 'app-shell' : 'app-shell history-collapsed'}>
       <aside className="history-panel">
@@ -230,6 +251,9 @@ export function App(): React.JSX.Element {
             <strong>PM Lifecycle</strong>
             <span>Local workspace</span>
           </div>
+          <button className="icon-button reset-demo-button" title="Reset demo" onClick={() => setResetOpen(true)}>
+            <RotateCcw size={17} />
+          </button>
           <button className="icon-button collapse-button" title="Thu gọn lịch sử" onClick={() => setHistoryOpen(false)}>
             <ChevronLeft size={18} />
           </button>
@@ -374,6 +398,19 @@ export function App(): React.JSX.Element {
           onShowManifest={() => window.pmAgent.figma.showManifest()}
           onOpenControlPlane={() => window.pmAgent.figma.openControlPlane()}
         />
+      )}
+
+      {resetOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setResetOpen(false)}>
+          <section className="confirm-dialog" role="dialog" aria-modal="true" aria-label="Reset demo" onMouseDown={(event) => event.stopPropagation()}>
+            <header><RotateCcw size={19} /><strong>Reset demo workspace?</strong></header>
+            <p>History, canvas, runs và mock artifacts sẽ được thay bằng fixture meal-ordering ban đầu.</p>
+            <footer>
+              <button className="secondary-button" onClick={() => setResetOpen(false)}>Hủy</button>
+              <button className="primary-button confirm-reset-button" disabled={loading} onClick={() => void resetDemo()}>Reset</button>
+            </footer>
+          </section>
+        </div>
       )}
     </main>
   )

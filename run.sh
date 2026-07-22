@@ -68,19 +68,31 @@ case "$MODE" in
     unset ELECTRON_RUN_AS_NODE
     exec "${PNPM[@]}" dev
     ;;
+  reset)
+    if [[ ! -x "$FIGMA_RUNTIME_DIR/bin/za-talk-to-figma" || ! -f "$FIGMA_RUNTIME_DIR/plugin/dist/code.js" || ! -f "$FIGMA_RUNTIME_DIR/plugin/dist/index.html" ]]; then
+      prepare_figma
+    fi
+    unset ELECTRON_RUN_AS_NODE
+    PM_AGENT_RESET_ON_START=1 exec "${PNPM[@]}" dev
+    ;;
   build)
     exec "${PNPM[@]}" build
     ;;
-  smoke|smoke-recovery)
+  smoke|smoke-recovery|smoke-reset)
     unset ELECTRON_RUN_AS_NODE
     "${PNPM[@]}" build
     SMOKE_FAIL_TARGET="${PM_AGENT_SMOKE_FAIL_TARGET:-}"
     if [[ "$MODE" == "smoke-recovery" ]]; then
       SMOKE_FAIL_TARGET="jira"
     fi
+    SMOKE_RESET_COUNT="${PM_AGENT_SMOKE_RESET_COUNT:-0}"
+    if [[ "$MODE" == "smoke-reset" ]]; then
+      SMOKE_RESET_COUNT="3"
+    fi
     PM_AGENT_USER_DATA="${TMPDIR:-/tmp}/pm-agent-smoke-$$" \
       PM_AGENT_SMOKE_CAPTURE="${TMPDIR:-/tmp}/pm-agent-smoke.png" \
       PM_AGENT_SMOKE_FAIL_TARGET="$SMOKE_FAIL_TARGET" \
+      PM_AGENT_SMOKE_RESET_COUNT="$SMOKE_RESET_COUNT" \
       exec "${PNPM[@]}" exec electron apps/desktop/out/main/index.js
     ;;
   test)
@@ -90,7 +102,7 @@ case "$MODE" in
     exec "${PNPM[@]}" typecheck
     ;;
   *)
-    echo "Usage: ./run.sh [setup|dev|build|test|typecheck|smoke|smoke-recovery]" >&2
+    echo "Usage: ./run.sh [setup|dev|reset|build|test|typecheck|smoke|smoke-recovery|smoke-reset]" >&2
     exit 2
     ;;
 esac

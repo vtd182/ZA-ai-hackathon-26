@@ -36,6 +36,9 @@ const api: DesktopApi = {
     send: (input: SendChatInput) => ipcRenderer.invoke('chat:send', input),
     cancel: (threadId) => ipcRenderer.invoke('chat:cancel', threadId),
   },
+  demo: {
+    reset: () => ipcRenderer.invoke('demo:reset'),
+  },
 }
 
 contextBridge.exposeInMainWorld('pmAgent', api)

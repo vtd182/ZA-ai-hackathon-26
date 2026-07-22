@@ -50,6 +50,24 @@ const defaultProfiles: Omit<ProviderProfile, 'hasCredential'>[] = [
   { id: 'anthropic-api', providerId: 'anthropic', displayName: 'Claude API', modelId: 'claude-sonnet-4-6', costMode: 'api_paid', enabled: true },
 ]
 
+export const DEMO_FIXTURE_VERSION = 1 as const
+export const DEMO_THREAD_ID = 'demo:meal-ordering:v1'
+const DEMO_CREATED_AT = '2026-07-22T03:00:00.000Z'
+const DEMO_MESSAGES = [
+  {
+    id: 'demo:meal-ordering:v1:message:idea',
+    role: 'user' as const,
+    content: 'Mini App đặt suất ăn trước cho nhân viên, nhận tại pantry và thanh toán bằng ví nội bộ.',
+    createdAt: '2026-07-22T03:00:01.000Z',
+  },
+  {
+    id: 'demo:meal-ordering:v1:message:discovery',
+    role: 'assistant' as const,
+    content: 'Mình đã dựng discovery map ban đầu. Hãy chọn một card hoặc yêu cầu thay đổi scope ngay trong chat.',
+    createdAt: '2026-07-22T03:00:02.000Z',
+  },
+] as const
+
 function now(): string {
   return new Date().toISOString()
 }
@@ -228,6 +246,15 @@ export class HistoryStore {
     return this.getProfile(profileId)
   }
 
+  resetDemoWorkspace(): ThreadDetail {
+    const transaction = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM conversation_threads').run()
+      this.insertDemoThread()
+    })
+    transaction()
+    return this.getThread(DEMO_THREAD_ID)
+  }
+
   getActiveRemoteRef(threadId: string, profileId: string): string | null {
     const row = this.db.prepare(`
       SELECT remote_ref FROM provider_segments
@@ -332,8 +359,26 @@ export class HistoryStore {
   private seedDemoThread(): void {
     const count = this.db.prepare('SELECT COUNT(*) AS count FROM conversation_threads').get() as { count: number }
     if (count.count > 0) return
-    const thread = this.createThread()
-    this.addMessage(thread.id, 'user', 'Mini App đặt suất ăn trước cho nhân viên, nhận tại pantry và thanh toán bằng ví nội bộ.')
-    this.addMessage(thread.id, 'assistant', 'Mình đã dựng discovery map ban đầu. Hãy chọn một card hoặc yêu cầu thay đổi scope ngay trong chat.')
+    this.insertDemoThread()
+  }
+
+  private insertDemoThread(): void {
+    const profile = this.getProfile('mock-local')
+    this.db.prepare(`
+      INSERT INTO conversation_threads (
+        id, title, phase, status, provider_id, model_id, canvas_snapshot, created_at, updated_at
+      ) VALUES (?, ?, 'discover', 'active', ?, ?, NULL, ?, ?)
+    `).run(
+      DEMO_THREAD_ID,
+      'Mini App đặt suất ăn trước cho nhân viên',
+      profile.id,
+      profile.modelId,
+      DEMO_CREATED_AT,
+      DEMO_MESSAGES.at(-1)!.createdAt,
+    )
+    const insertMessage = this.db.prepare('INSERT INTO messages (id, thread_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)')
+    for (const message of DEMO_MESSAGES) {
+      insertMessage.run(message.id, DEMO_THREAD_ID, message.role, message.content, message.createdAt)
+    }
   }
 }
