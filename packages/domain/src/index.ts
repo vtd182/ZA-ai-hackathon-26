@@ -1,7 +1,9 @@
 import { z } from 'zod'
+import type { FigmaSetupStatus } from './figma-setup'
 import type { ApproveChangeOutput, ChangePreview, LifecycleWorkspaceState } from './lifecycle'
 
 export * from './design-system'
+export * from './figma-setup'
 export * from './invariants'
 export * from './lifecycle'
 export * from './product-spec'
@@ -107,6 +109,12 @@ export interface DesktopApi {
   lifecycle: {
     getWorkspace(threadId: string): Promise<LifecycleWorkspaceState>
     approveChange(threadId: string): Promise<ApproveChangeOutput>
+  }
+  figma: {
+    status(): Promise<FigmaSetupStatus>
+    start(): Promise<FigmaSetupStatus>
+    showManifest(): Promise<void>
+    openControlPlane(): Promise<void>
   }
   providers: {
     list(): Promise<ProviderProfile[]>

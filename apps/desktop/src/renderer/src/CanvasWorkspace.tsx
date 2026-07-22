@@ -126,6 +126,7 @@ export function CanvasWorkspace({
   const lastCommandBatch = useRef(0)
   const [view, setView] = useState<WorkflowView>(initialView)
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
+  const [editorEpoch, setEditorEpoch] = useState(0)
   const changeKey = changeEntityIds.join('|')
 
   const scheduleSave = useCallback(() => {
@@ -140,6 +141,7 @@ export function CanvasWorkspace({
 
   const handleMount = useCallback((editor: Editor) => {
     editorRef.current = editor
+    setEditorEpoch((value) => value + 1)
     removeLegacySeed(editor)
     if (productSpec) reconcileProductSpec(editor, productSpec)
     const stopDocumentListener = editor.store.listen(scheduleSave, { scope: 'document' })
@@ -188,7 +190,7 @@ export function CanvasWorkspace({
       if (selectedBefore && visibleShapeIds.includes(selectedBefore)) editor.select(selectedBefore)
       else editor.selectNone()
     }
-  }, [changeKey, changePreview, productSpec?.version, view])
+  }, [changeKey, changePreview, editorEpoch, productSpec?.version, view])
 
   useEffect(() => {
     const editor = editorRef.current

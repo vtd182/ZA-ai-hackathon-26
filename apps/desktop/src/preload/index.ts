@@ -18,6 +18,12 @@ const api: DesktopApi = {
     getWorkspace: (threadId) => ipcRenderer.invoke('lifecycle:get-workspace', threadId),
     approveChange: (threadId) => ipcRenderer.invoke('lifecycle:approve-change', threadId),
   },
+  figma: {
+    status: () => ipcRenderer.invoke('figma:status'),
+    start: () => ipcRenderer.invoke('figma:start'),
+    showManifest: () => ipcRenderer.invoke('figma:show-manifest'),
+    openControlPlane: () => ipcRenderer.invoke('figma:open-control-plane'),
+  },
   providers: {
     list: () => ipcRenderer.invoke('providers:list'),
     configure: (input: ConfigureProviderInput) => ipcRenderer.invoke('providers:configure', input),

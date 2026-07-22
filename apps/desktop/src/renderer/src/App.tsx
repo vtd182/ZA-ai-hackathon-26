@@ -2,10 +2,13 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import {
   Archive,
   Bot,
+  Cable,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
+  ExternalLink,
+  FolderOpen,
   GitCompareArrows,
   LoaderCircle,
   Plus,
@@ -20,6 +23,7 @@ import type {
   CanvasSelectionContext,
   ChangePreview,
   ChatMessage,
+  FigmaSetupStatus,
   LifecycleWorkspaceState,
   ProviderCommand,
   ProviderProbe,
@@ -57,6 +61,8 @@ export function App(): React.JSX.Element {
   const [approving, setApproving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [settingsProfile, setSettingsProfile] = useState<ProviderProfile | null>(null)
+  const [figmaSetupOpen, setFigmaSetupOpen] = useState(false)
+  const [figmaStatus, setFigmaStatus] = useState<FigmaSetupStatus | null>(null)
   const [selection, setSelection] = useState<CanvasSelectionContext | undefined>()
   const [lifecycleWorkspace, setLifecycleWorkspace] = useState<LifecycleWorkspaceState | null>(null)
   const [commandBatch, setCommandBatch] = useState<{ id: number; commands: ProviderCommand[] }>({ id: 0, commands: [] })
@@ -87,10 +93,11 @@ export function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
-    void Promise.all([window.pmAgent.threads.list(), window.pmAgent.providers.list()])
-      .then(async ([initialThreads, initialProfiles]) => {
+    void Promise.all([window.pmAgent.threads.list(), window.pmAgent.providers.list(), window.pmAgent.figma.status()])
+      .then(async ([initialThreads, initialProfiles, initialFigmaStatus]) => {
         setThreads(initialThreads)
         setProfiles(initialProfiles)
+        setFigmaStatus(initialFigmaStatus)
         if (initialThreads[0]) await openThread(initialThreads[0].id)
         else setLoading(false)
       })
@@ -99,6 +106,14 @@ export function App(): React.JSX.Element {
         setLoading(false)
       })
   }, [openThread])
+
+  useEffect(() => {
+    if (!figmaSetupOpen) return
+    const refresh = (): void => { void window.pmAgent.figma.status().then(setFigmaStatus) }
+    refresh()
+    const timer = setInterval(refresh, 1_500)
+    return () => clearInterval(timer)
+  }, [figmaSetupOpen])
 
   useEffect(() => {
     const timer = setTimeout(() => void refreshThreads(search), 220)
@@ -254,6 +269,15 @@ export function App(): React.JSX.Element {
             >
               <Settings size={18} />
             </button>
+            <button
+              className={figmaStatus?.pluginConnected ? 'integration-button connected' : 'integration-button'}
+              title="Figma integration"
+              onClick={() => setFigmaSetupOpen(true)}
+            >
+              <Cable size={17} />
+              <span>Figma</span>
+              <i />
+            </button>
           </div>
         </header>
 
@@ -318,7 +342,84 @@ export function App(): React.JSX.Element {
           }}
         />
       )}
+
+      {figmaSetupOpen && (
+        <FigmaSetupDialog
+          status={figmaStatus}
+          onClose={() => setFigmaSetupOpen(false)}
+          onStart={async () => setFigmaStatus(await window.pmAgent.figma.start())}
+          onShowManifest={() => window.pmAgent.figma.showManifest()}
+          onOpenControlPlane={() => window.pmAgent.figma.openControlPlane()}
+        />
+      )}
     </main>
+  )
+}
+
+function FigmaSetupDialog({
+  status,
+  onClose,
+  onStart,
+  onShowManifest,
+  onOpenControlPlane,
+}: {
+  status: FigmaSetupStatus | null
+  onClose(): void
+  onStart(): Promise<void>
+  onShowManifest(): Promise<void>
+  onOpenControlPlane(): Promise<void>
+}): React.JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const run = async (operation: () => Promise<void>): Promise<void> => {
+    setBusy(true)
+    try {
+      await operation()
+    } finally {
+      setBusy(false)
+    }
+  }
+  const runtimeReady = status?.runtime === 'ready'
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="figma-setup-dialog" role="dialog" aria-modal="true" aria-label="Figma setup" onMouseDown={(event) => event.stopPropagation()}>
+        <header>
+          <div className="figma-dialog-title"><Cable size={20} /><div><strong>Kết nối Figma</strong><span>Local sandbox · không cần REST token</span></div></div>
+          <button className="icon-button" title="Đóng" onClick={onClose}><X size={18} /></button>
+        </header>
+        <div className="setup-steps">
+          <div className={runtimeReady ? 'setup-step complete' : 'setup-step'}>
+            <span className="step-index">1</span>
+            <div><strong>Runtime local</strong><small>{status?.detail ?? 'Đang kiểm tra runtime...'}</small></div>
+            {!runtimeReady && status?.binaryReady && <button disabled={busy} onClick={() => void run(onStart)}>Khởi động</button>}
+          </div>
+          <div className={status?.pluginBuilt ? 'setup-step complete' : 'setup-step'}>
+            <span className="step-index">2</span>
+            <div><strong>Plugin build</strong><small>{status?.pluginBuilt ? 'Manifest và bundle đã sẵn sàng.' : 'Chạy ./run.sh setup để build plugin.'}</small></div>
+            {status?.pluginBuilt && <button disabled={busy} onClick={() => void run(onShowManifest)}><FolderOpen size={14} /> Mở manifest</button>}
+          </div>
+          <div className={status?.pluginConnected ? 'setup-step complete' : 'setup-step current'}>
+            <span className="step-index">3</span>
+            <div>
+              <strong>{status?.pluginConnected ? 'Figma đã kết nối' : 'Import vào Figma Desktop'}</strong>
+              <small>{status?.pluginConnected
+                ? `${status.sessionCount} session · ${status.activeSession ?? 'active'}`
+                : 'Plugins → Development → Import plugin from manifest, sau đó chạy ZA Talk To Figma.'}</small>
+            </div>
+          </div>
+        </div>
+        <div className="manifest-path"><span>manifest.json</span><code>{status?.manifestPath ?? 'Đang xác định đường dẫn...'}</code></div>
+        <footer>
+          <span className={status?.pluginConnected ? 'figma-ready-label ready' : 'figma-ready-label'}>
+            {status?.pluginConnected ? <CheckCircle2 size={15} /> : <LoaderCircle size={15} />}
+            {status?.pluginConnected ? 'Sẵn sàng cho preflight' : 'Đang chờ plugin'}
+          </span>
+          <button className="secondary-button" disabled={!runtimeReady || busy} onClick={() => void run(onOpenControlPlane)}>
+            <ExternalLink size={14} /> Runtime console
+          </button>
+        </footer>
+      </section>
+    </div>
   )
 }
 

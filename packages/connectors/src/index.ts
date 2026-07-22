@@ -34,3 +34,4 @@ export interface ArtifactConnector<TPlan, TSnapshot> {
   verify(plan: TPlan, snapshot: TSnapshot): Promise<VerificationResult>
 }
 
+export * from './figma-runtime'

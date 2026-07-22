@@ -387,6 +387,38 @@ button {
   white-space: nowrap;
 }
 
+.integration-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 32px;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid #d5dddf;
+  border-radius: 6px;
+  color: #536269;
+  background: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.integration-button i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d1a33a;
+}
+
+.integration-button.connected {
+  border-color: #9cd6c4;
+  color: #157458;
+}
+
+.integration-button.connected i {
+  background: #15926f;
+}
+
 .workspace-body {
   min-height: 0;
   flex: 1;
@@ -793,6 +825,171 @@ button {
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 18px 54px rgba(23, 33, 38, 0.2);
+}
+
+.figma-setup-dialog {
+  width: min(620px, calc(100vw - 40px));
+  padding: 18px;
+  border: 1px solid #cfd9dc;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 54px rgba(23, 33, 38, 0.2);
+}
+
+.figma-setup-dialog > header,
+.figma-dialog-title,
+.setup-step,
+.figma-setup-dialog footer,
+.figma-ready-label,
+.setup-step button,
+.figma-setup-dialog .secondary-button {
+  display: flex;
+  align-items: center;
+}
+
+.figma-setup-dialog > header {
+  margin-bottom: 16px;
+}
+
+.figma-dialog-title {
+  min-width: 0;
+  gap: 10px;
+}
+
+.figma-dialog-title > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.figma-dialog-title strong {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.figma-dialog-title span {
+  color: #6b797f;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.figma-setup-dialog > header .icon-button {
+  margin-left: auto;
+}
+
+.setup-steps {
+  border-top: 1px solid #e2e7e9;
+}
+
+.setup-step {
+  min-height: 66px;
+  gap: 11px;
+  padding: 10px 2px;
+  border-bottom: 1px solid #e2e7e9;
+}
+
+.step-index {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border: 1px solid #c7d1d4;
+  border-radius: 50%;
+  color: #647279;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.setup-step.complete .step-index {
+  border-color: #15926f;
+  color: #ffffff;
+  background: #15926f;
+}
+
+.setup-step.current .step-index {
+  border-color: #0868df;
+  color: #0868df;
+  box-shadow: 0 0 0 3px #e2efff;
+}
+
+.setup-step > div {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.setup-step strong {
+  color: #29363b;
+  font-size: 12px;
+}
+
+.setup-step small {
+  margin-top: 3px;
+  color: #6b797f;
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
+.setup-step button {
+  min-height: 30px;
+  flex: 0 0 auto;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid #cbd6d9;
+  border-radius: 5px;
+  color: #35434a;
+  background: #ffffff;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.manifest-path {
+  margin-top: 14px;
+  padding: 9px 10px;
+  border-left: 3px solid #0868df;
+  background: #f2f6f8;
+}
+
+.manifest-path span {
+  display: block;
+  margin-bottom: 3px;
+  color: #526167;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.manifest-path code {
+  display: block;
+  overflow: hidden;
+  color: #334147;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.figma-setup-dialog footer {
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.figma-ready-label {
+  min-width: 0;
+  gap: 6px;
+  color: #9a6a1b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.figma-ready-label.ready {
+  color: #157458;
+}
+
+.figma-setup-dialog .secondary-button {
+  min-height: 32px;
+  gap: 6px;
 }
 
 .settings-dialog header {

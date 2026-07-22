@@ -14,6 +14,7 @@
     "@google/genai": "2.13.0",
     "@pm-agent/agent-core": "workspace:*",
     "@pm-agent/canvas": "workspace:*",
+    "@pm-agent/connectors": "workspace:*",
     "@pm-agent/domain": "workspace:*",
     "@pm-agent/fixture-meal-ordering": "workspace:*",
     "@pm-agent/persistence": "workspace:*",

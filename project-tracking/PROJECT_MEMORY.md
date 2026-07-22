@@ -33,14 +33,14 @@ Signature moment:
 ## 3. Current status
 
 - **Date:** 2026-07-22
-- **Milestone:** First runnable desktop vertical slice complete.
+- **Milestone:** Signature change slice complete; Figma import gate ready.
 - **Completed task:** `P0-FND-001` Bootstrap workspace.
 - **Completed tasks:** Foundation/fixtures/domain schemas, workflow state machine, ProductSpec invariants, deterministic impact graph and immutable approval policy.
 - **Completed tasks:** Foundation/domain workflow plus typed signature change preview, approval and persisted ProductSpec v2 projection.
-- **Current task:** `P0-FIG-000` resolve plugin serializer baseline, then prepare the Figma MCP/plugin import gate and installation guidance.
-- **Current slice:** Make the repository self-check and guide a fresh judge/user from one startup command to importing the local Figma plugin, without executing Figma writes yet.
-- **Last known repository state:** Có product spec, `project-tracking/`, root `AGENTS.md` và MCP Figma tại `mcp-tool/`; chưa có Git repository hoặc PM Lifecycle app code.
-- **Known blockers:** Chưa có sanitized/allowed Zalo Design System source; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
+- **Current task:** `P0-FIG-001` complete the existing MCP capability adapter and DS context cache.
+- **Current slice:** Local runtime/setup/import flow is verified. Waiting for the user to import and run `ZA Talk To Figma`, then pin the explicit session/page, capture DS context and add read-back verification.
+- **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a local Figma setup/import gate.
+- **Known blockers:** User must import/run the local Figma plugin before live session work; chưa có sanitized/allowed Zalo Design System source; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 
 ## 4. Important implementation notes
 
@@ -144,6 +144,17 @@ Signature moment:
 - **Regression test:** `PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke` pass một turn thật qua `codex app-server`.
 - **Caveat:** Model IDs vẫn editable; nên capability-discover `model/list` trong Runtime Settings ở task provider hardening.
 
+### BUG-005 - Canvas phase filter raced editor mount
+
+- **Status:** FIXED
+- **Found:** 2026-07-22, Figma setup smoke visual review.
+- **Symptom:** Phase tab label đổi nhưng canvas có thể vẫn hiển thị shapes của phase trước trên startup.
+- **Trigger:** Initial phase filter effect chạy trước khi lazy tldraw editor mount xong.
+- **Root cause:** Effect phụ thuộc phase/snapshot nhưng editor nằm trong ref; ref ready không tạo React render mới nên filter không chạy lại.
+- **Fix:** Increment `editorEpoch` trong tldraw mount callback và dùng epoch làm dependency cho projection filter.
+- **Regression test:** Production smoke verifies the signature change projection after editor mount; screenshot review confirms only the five impacted entities are visible in Change phase.
+- **Caveat:** Giữ editor lifecycle signal nếu sau này tách canvas thành worker hoặc unmount khi đổi thread.
+
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 
 ```md
@@ -169,7 +180,9 @@ Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 - DS tools: capture context, apply screen và audit adoption.
 - Main gap: apply workflow hard-code form registration, mutates before complete strict decision, lacks lifecycle metadata/idempotency tool.
 - Verification: `go test ./...` passed.
-- Plugin verification: `bun run typecheck` passed; `bun test` has 242 pass/9 fail from `BUG-001`.
+- Plugin verification after `BUG-001`: `bun run typecheck` passed; `bun test` has 253 pass/0 fail.
+- Setup adapter starts or reuses the local HTTP/WebSocket runtime on port 1802, detects the built manifest/bundle and polls session health without requiring a Figma REST token.
+- The import gate intentionally performs no Figma write. Session pinning, target page allowlist and DS context capture start only after the user runs the plugin.
 
 Khi tiếp tục spike Figma bridge, ghi lại:
 
@@ -190,8 +203,9 @@ App commands đã chạy thành công:
 
 ```text
 ./run.sh             # verified 2026-07-22; Electron dev app opens
+./run.sh setup       # verified 2026-07-22; installs/builds app, Go runtime and Figma plugin bundle
 ./run.sh typecheck   # verified 2026-07-22
-./run.sh test        # verified 2026-07-22; 5 tests pass
+./run.sh test        # verified 2026-07-22; 23 tests pass
 ./run.sh build       # verified 2026-07-22
 ./run.sh smoke       # verified 2026-07-22; Mock provider + canvas
 PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke  # verified 2026-07-22
@@ -202,6 +216,7 @@ Command MCP đã chạy thành công:
 ```text
 cd mcp-tool/za-talk-to-figma && go test ./...  # verified 2026-07-22
 cd mcp-tool/za-talk-to-figma/plugin && bun run typecheck  # verified 2026-07-22
+cd mcp-tool/za-talk-to-figma/plugin && bun test  # verified 2026-07-22; 253 tests pass
 ```
 
 Chỉ thêm command mới sau khi đã chạy thành công trong workspace hiện tại.
@@ -247,6 +262,15 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Fix white-window preload, Electron/bootstrap, provider SDK bundling, tldraw lifecycle/assets và Codex model/schema compatibility.
 - Verification: typecheck, tests, build, Mock smoke và real Codex smoke pass; canvas screenshot reviewed.
 - Next action: `P0-FND-002`, sau đó ProductSpec schemas/state machine; xin tldraw license trước production packaging.
+
+### 2026-07-22 - Signature flow and Figma import gate
+
+- Added canonical ProductSpec, action/approval/receipt schemas, deterministic meal-ordering and Zalo DS fixtures, package boundary checks and state-machine tests.
+- Implemented the signature request `Bỏ payment khỏi MVP`: exact five-entity impact preview, immutable approval hashes, SQLite atomic commit to ProductSpec v2 and tldraw before/after projection.
+- Resolved the Figma plugin rich paint serializer baseline; all plugin and Go tests pass.
+- Added local Figma runtime lifecycle, typed Electron IPC, setup status modal, manifest reveal action and `./run.sh setup` for judge-friendly installation.
+- Production smoke verifies preload, canvas, signature approval and the Figma import gate; visual review confirms no modal/canvas overlap at desktop demo viewport.
+- Next action: user imports/runs `ZA Talk To Figma`; then finish `P0-FIG-001` with explicit session/page pinning, allowlist, DS context fingerprint/cache and read-back.
 
 ## 10. End-of-session checklist
 

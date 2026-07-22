@@ -5,6 +5,7 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 const workspacePackages = [
   '@pm-agent/agent-core',
   '@pm-agent/canvas',
+  '@pm-agent/connectors',
   '@pm-agent/domain',
   '@pm-agent/fixture-meal-ordering',
   '@pm-agent/persistence',

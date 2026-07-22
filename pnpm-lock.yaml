@@ -38,6 +38,9 @@ importers:
       '@pm-agent/canvas':
         specifier: workspace:*
         version: link:../../packages/canvas
+      '@pm-agent/connectors':
+        specifier: workspace:*
+        version: link:../../packages/connectors
       '@pm-agent/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -155,6 +158,9 @@ importers:
         specifier: workspace:*
         version: link:../domain
     devDependencies:
+      '@types/node':
+        specifier: 24.10.0
+        version: 24.10.0
       typescript:
         specifier: 7.0.2
         version: 7.0.2

@@ -255,7 +255,7 @@
 - **Depends on:** none
 - **Deliver:** decide/document rich paint object contract versus legacy hex-string contract; align serializer consumers and tests.
 - **Acceptance:** all plugin tests pass; gradients/images/solid opacity behavior has explicit tests; no DS read regression.
-- **Evidence:** 253/253 `bun test` pass, plugin typecheck pass and `go test ./...` pass; rich contract documented in `docs/paint-serialization-contract.md`.
+- **Evidence:** 253/253 `bun test` pass, plugin typecheck pass and `go test ./...` pass; rich contract documented in `mcp-tool/za-talk-to-figma/docs/paint-serialization-contract.md`.
 
 ### `P0-FIG-001` Existing MCP capability adapter and DS context cache
 
@@ -263,6 +263,7 @@
 - **Depends on:** P0-FIG-000, P0-FND-003, P0-DOM-001
 - **Deliver:** stdio process adapter, health/session pinning, typed error mapper, `capture_design_system_context` normalization và synthetic cache fallback.
 - **Acceptance:** explicit session/page allowlist; live hoặc fixture DS context có fingerprint/version; không đọc full document không giới hạn.
+- **Progress:** local runtime manager, health probe, plugin bundle detection, Electron setup IPC/UI, one-command setup và import instructions đã verified. Đang chờ user import/run plugin để hoàn tất explicit session pinning, page allowlist và DS context capture.
 
 ### `P0-FIG-002` Semantic Figma artifact planner
 

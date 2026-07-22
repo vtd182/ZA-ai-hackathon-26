@@ -4,9 +4,14 @@ Local-first Electron workspace cho PM discovery, decision, delivery mapping và 
 
 ## Chạy ứng dụng
 
+Lần đầu trên một máy mới:
+
 ```bash
+./run.sh setup
 ./run.sh
 ```
+
+Các lần sau chỉ cần `./run.sh`. Xem [hướng dẫn cài đặt và import Figma plugin](docs/GETTING_STARTED.md).
 
 Script tự dùng `pnpm` hoặc Corepack, cài dependencies khi cần và rebuild `better-sqlite3` đúng Electron ABI.
 
