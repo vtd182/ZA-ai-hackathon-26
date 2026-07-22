@@ -27,6 +27,27 @@ export function approveActions(actions: PlannedAction[], decidedAt: string): App
   }
 }
 
+export function rejectActions(actions: PlannedAction[], decidedAt: string): ApprovedActionSet {
+  const rejected = actions.map((action) => {
+    if (hashActionPayload(action.payload) !== action.payloadHash) {
+      throw new Error(`Action payload changed before rejection: ${action.id}`)
+    }
+    return { ...action, status: 'cancelled' as const }
+  })
+  return {
+    actions: rejected,
+    approvals: rejected.map((action) => ({
+      schemaVersion: 1,
+      id: `rejection:${action.id}:${decidedAt}`,
+      actionId: action.id,
+      payloadHash: action.payloadHash,
+      decision: 'rejected',
+      approver: 'local_user',
+      decidedAt,
+    })),
+  }
+}
+
 export function approvalMatchesAction(approval: Approval, action: PlannedAction): boolean {
   return approval.decision === 'approved'
     && approval.actionId === action.id
@@ -41,4 +62,3 @@ export function invalidateChangedActions(actions: PlannedAction[], approvals: Ap
     return approval && approvalMatchesAction(approval, action) ? action : { ...action, status: 'pending_approval' }
   })
 }
-

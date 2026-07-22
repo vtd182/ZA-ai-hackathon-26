@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { approveActions, createImpactPreview } from '@pm-agent/agent-core'
+import { approveActions, createImpactPreview, rejectActions } from '@pm-agent/agent-core'
 import { transitionRunState, type ChangeIntent } from '@pm-agent/domain'
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
 import { HistoryStore, LifecycleStore, OutboxStore } from './index'
@@ -52,6 +52,33 @@ describe('LifecycleStore', () => {
     expect(outbox.listRun(state.id).map((item) => item.action.target)).toEqual(['figma', 'jira', 'zdoc'])
     outbox.close()
 
+    lifecycle.close()
+    history.close()
+  })
+
+  it('persists rejection without a new ProductSpec version or outbox work', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pm-agent-lifecycle-reject-'))
+    cleanup.push(directory)
+    const filename = join(directory, 'app.db')
+    const history = new HistoryStore(filename)
+    const thread = history.createThread()
+    const lifecycle = new LifecycleStore(filename)
+    const timestamp = '2026-07-22T02:00:00.000Z'
+    const intent: ChangeIntent = { id: 'CHANGE-REJECT', operation: 'remove', targetEntityId: 'REQ-PAYMENT', reason: 'Review' }
+    let state = lifecycle.initializeRun(thread.id, 'RUN-REJECT', mealOrderingProductSpec, timestamp)
+    const preview = createImpactPreview(state.productSpec, intent, state.id, timestamp)
+    state = transitionRunState(state, 'REQUEST_CHANGE', timestamp)
+    state = transitionRunState({ ...state, pendingIntent: intent, pendingActions: preview.actions }, 'PREVIEW_READY', timestamp)
+    lifecycle.savePreview(state)
+    const rejected = rejectActions(state.pendingActions, timestamp)
+    state = transitionRunState({ ...state, pendingIntent: null, pendingActions: rejected.actions }, 'REJECT', timestamp)
+    lifecycle.commitRejectedChange(state, rejected.approvals)
+
+    expect(lifecycle.getRunState(thread.id)).toMatchObject({ phase: 'DELIVERY', status: 'ACTIVE', productSpec: { version: 1 } })
+    expect(lifecycle.getSpecVersion(thread.id, 2)).toBeNull()
+    const outbox = new OutboxStore(filename)
+    expect(outbox.listRun(state.id)).toEqual([])
+    outbox.close()
     lifecycle.close()
     history.close()
   })

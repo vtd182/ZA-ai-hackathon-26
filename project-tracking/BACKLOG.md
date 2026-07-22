@@ -114,7 +114,7 @@
 
 ### `P0-PER-001` SQLite repositories and migrations
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-DOM-001
 - **Deliver:** schema/migration cho projects, threads, turns, messages, provider segments/events, canvas snapshots/patches, runs, spec versions, actions, approvals, receipts và mappings.
 - **Acceptance:** migration chạy trên clean DB; repository round-trip giữ nguyên schema version.
@@ -228,19 +228,19 @@
 
 ### `P0-UI-003` Artifact preview and approval
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-AGT-004, P0-CAN-002
 - **Deliver:** grouped actions, diff/summary, approve/reject, target labels (`Figma`, `Mock Jira`, `Mock Zdoc`).
 - **Acceptance:** payload và target rõ ràng; approval status cập nhật theo state machine.
-- **Progress:** Change Impact panel hiển thị ProductSpec v1→v2, exact entity changes, Figma/Mock Jira/Mock Zdoc và immutable approval commit. Còn thiếu reject/cancel control và execution/verification status per target.
+- **Evidence:** grouped exact diff and target labels show immutable approval, rejection and per-target execution/read-back status. Reject creates hashed audit decisions, cancels actions, keeps ProductSpec v1 and queues no outbox. `./run.sh smoke-reject` rejects through UI, previews again and then completes verified sync.
 
 ### `P0-UI-004` Change Impact view
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-DOM-004, P0-CAN-002
 - **Deliver:** impacted highlights, before/after, target action list, partial failure status.
 - **Acceptance:** remove-payment impact dễ đọc và không overlap ở demo viewport.
-- **Progress:** impacted highlights, before/after version and target action labels render without overlap in smoke screenshot; partial failure/retry status is not wired.
+- **Evidence:** impacted highlights, v1→v2 diff, target actions, partial failure and per-target retry are wired. Production preview/recovery screenshots show no overlap; recovery attempts remain Figma 1, Jira 2, Zdoc 1.
 
 ## Epic E5 - Mock Jira and Zdoc
 
@@ -337,10 +337,11 @@
 
 ### `P0-CHG-002` Approved ProductSpec version update
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-CHG-001, P0-AGT-004, P0-PER-002
 - **Deliver:** version bump, removed scope semantics, new artifact action plans.
 - **Acceptance:** reject/cancel giữ version cũ; approval commit atomic.
+- **Evidence:** ProductSpec v2/actions/approvals/outbox commit atomically with injected rollback coverage; rejection audit leaves v1 and no outbox. Reject-then-approve production smoke passes.
 
 ### `P0-CHG-003` Multi-target execute and partial retry
 

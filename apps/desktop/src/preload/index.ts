@@ -17,6 +17,7 @@ const api: DesktopApi = {
   lifecycle: {
     getWorkspace: (threadId) => ipcRenderer.invoke('lifecycle:get-workspace', threadId),
     approveChange: (threadId) => ipcRenderer.invoke('lifecycle:approve-change', threadId),
+    rejectChange: (threadId) => ipcRenderer.invoke('lifecycle:reject-change', threadId),
     retryAction: (threadId, target) => ipcRenderer.invoke('lifecycle:retry-action', threadId, target),
     advanceDecision: (threadId, answers) => ipcRenderer.invoke('lifecycle:advance-decision', threadId, answers),
     selectDecision: (threadId, optionId) => ipcRenderer.invoke('lifecycle:select-decision', threadId, optionId),

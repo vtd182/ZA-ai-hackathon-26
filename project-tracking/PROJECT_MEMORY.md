@@ -51,8 +51,9 @@ Signature moment:
 - **Completed task:** `P0-AGT-003` normalized provider events/capabilities; partial streams cannot mutate state and real Codex smoke passes.
 - **Completed task:** `P0-PRV-001` canonical handoff and safe provider switching with paid confirmation and capability snapshots.
 - **Completed task:** `P0-UI-002` clarification/decision workspace and ProductSpec inspector; lifecycle UI smoke passes with persisted resume.
-- **Current task:** `P0-UI-003` complete artifact approval controls is `IN_PROGRESS`.
-- **Current slice:** Add reject/cancel with immutable audit record, keep ProductSpec v1 on rejection and cover both approval decisions in UI/state tests.
+- **Completed tasks:** `P0-UI-003`, `P0-UI-004` and `P0-CHG-002`; approve/reject/partial-retry UI paths all have production smoke evidence.
+- **Current task:** `P0-PER-001` migration ledger and complete local schema is `IN_PROGRESS`.
+- **Current slice:** Add versioned migration ownership plus turns/provider-events/canvas checkpoints/artifact mappings tables and clean/upgrade round-trip tests.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -393,6 +394,14 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Added a compact ProductSpec inspector with version/status/counts and selected entity context.
 - Lifecycle smoke drives the full UI, switches away/back, saves clarification/decision screenshots and then confirms the signature change flow still passes.
 - Next action: add explicit reject/cancel to the artifact approval panel.
+
+### 2026-07-22 - Complete approval decisions
+
+- Rejection is an immutable hashed decision, not a UI dismiss: actions become cancelled and no outbox row is created.
+- ProductSpec remains v1 and run returns to Delivery, allowing a revised or repeated preview.
+- `./run.sh smoke-reject` rejects through UI, proves no execution, then previews again and completes v2 verified sync.
+- Change Impact and partial retry panels now satisfy their per-target status acceptance with reviewed screenshots.
+- Next action: consolidate SQLite migration ownership and add missing history/event/mapping tables.
 
 ## 10. End-of-session checklist
 

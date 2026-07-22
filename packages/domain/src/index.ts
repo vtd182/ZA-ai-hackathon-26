@@ -218,6 +218,7 @@ export interface DesktopApi {
   lifecycle: {
     getWorkspace(threadId: string): Promise<LifecycleWorkspaceState>
     approveChange(threadId: string): Promise<ApproveChangeOutput>
+    rejectChange(threadId: string): Promise<ApproveChangeOutput>
     retryAction(threadId: string, target: PlannedAction['target']): Promise<ApproveChangeOutput>
     advanceDecision(threadId: string, answers: Record<string, string>): Promise<LifecycleWorkspaceState>
     selectDecision(threadId: string, optionId: string): Promise<LifecycleWorkspaceState>

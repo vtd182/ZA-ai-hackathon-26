@@ -132,6 +132,31 @@ export class LifecycleStore {
     return state
   }
 
+  commitRejectedChange(stateInput: RunState, approvalsInput: Approval[]): RunState {
+    const state = runStateSchema.parse(stateInput)
+    const approvals = approvalsInput.map((approval) => approvalSchema.parse(approval))
+    const approvalByAction = new Map(approvals.map((approval) => [approval.actionId, approval]))
+    for (const action of state.pendingActions) {
+      const approval = approvalByAction.get(action.id)
+      if (action.status !== 'cancelled' || !approval || approval.decision !== 'rejected' || approval.payloadHash !== action.payloadHash) {
+        throw new Error(`Rejected action is missing a matching immutable decision: ${action.id}`)
+      }
+    }
+    const transaction = this.db.transaction(() => {
+      for (const action of state.pendingActions) this.upsertAction(action)
+      for (const approval of approvals) {
+        this.db.prepare(`
+          INSERT INTO approvals (id, action_id, payload_hash, decision, approver, decided_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(approval.id, approval.actionId, approval.payloadHash, approval.decision, approval.approver, approval.decidedAt)
+      }
+      this.updateRun(state)
+      this.insertCheckpoint(state, state.lastCheckpointAt)
+    })
+    transaction()
+    return state
+  }
+
   getRunState(threadId: string): RunState | null {
     const row = this.db.prepare('SELECT state_json FROM runs WHERE thread_id = ? ORDER BY updated_at DESC LIMIT 1').get(threadId) as JsonRow | undefined
     return row ? runStateSchema.parse(JSON.parse(row.state_json)) : null

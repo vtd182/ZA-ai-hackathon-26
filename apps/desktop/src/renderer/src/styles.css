@@ -798,6 +798,27 @@ button {
   cursor: default;
 }
 
+.approval-actions {
+  display: grid;
+  grid-template-columns: minmax(88px, 0.7fr) minmax(150px, 1.3fr);
+  gap: 6px;
+  padding: 7px 11px 10px;
+}
+
+.approval-actions .approve-button,
+.approval-actions .reject-button {
+  width: 100%;
+  min-height: 34px;
+  margin: 0;
+}
+
+.approval-actions .reject-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
 .execution-panel {
   flex: 0 0 auto;
   margin: 0 14px 12px;

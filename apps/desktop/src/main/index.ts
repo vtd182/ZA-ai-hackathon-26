@@ -2,7 +2,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
-import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, createHandoffPackage, createImpactPreview, executeConnectorAction, selectDecisionOption } from '@pm-agent/agent-core'
+import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, createHandoffPackage, createImpactPreview, executeConnectorAction, rejectActions, selectDecisionOption } from '@pm-agent/agent-core'
 import {
   createFigmaArtifactPlan,
   createMockJiraPlan,
@@ -346,6 +346,24 @@ function registerIpc(): void {
       : `Đã duyệt ProductSpec v${preview.after.version}; một số artifact cần retry sau khi connector sẵn sàng.`
     history.addMessage(threadId, 'assistant', message)
     return { ...executed, message }
+  })
+  ipcMain.handle('lifecycle:reject-change', (_event, threadId: string) => {
+    const workspace = workspaceFor(threadId)
+    if (workspace.runState.status !== 'WAITING_FOR_APPROVAL' || !workspace.runState.pendingIntent) {
+      throw new Error('Không có change plan đang chờ quyết định')
+    }
+    const decidedAt = timestamp()
+    const rejected = rejectActions(workspace.runState.pendingActions, decidedAt)
+    const next = transitionRunState({
+      ...workspace.runState,
+      pendingIntent: null,
+      pendingActions: rejected.actions,
+    }, 'REJECT', decidedAt)
+    lifecycle.commitRejectedChange(next, rejected.approvals)
+    history.setThreadPhase(threadId, 'deliver')
+    const message = `Đã từ chối change plan; ProductSpec vẫn ở v${next.productSpec.version} và không có artifact write nào được queue.`
+    history.addMessage(threadId, 'assistant', message)
+    return { ...workspaceFor(threadId), message }
   })
   ipcMain.handle('lifecycle:retry-action', async (_event, threadId: string, target: PlannedAction['target']) => {
     const workspace = await executeRun(threadId, target)
@@ -692,6 +710,36 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     }
     const previewImage = await window.webContents.capturePage()
     writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!.replace(/\.png$/, '-preview.png'), previewImage.toPNG())
+    const rejection = { required: process.env.PM_AGENT_SMOKE_REJECT === '1', rejected: false, preservedVersion: false, noExecution: false, previewedAgain: false }
+    if (rejection.required && final.hasPreview) {
+      await window.webContents.executeJavaScript(`document.querySelector('.reject-button')?.click()`)
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await wait(250)
+        const state = await window.webContents.executeJavaScript(`(async () => {
+          const [thread] = await window.pmAgent.threads.list();
+          const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
+          return {
+            rejected: document.body.innerText.includes('Đã từ chối change plan'),
+            preservedVersion: workspace.runState.productSpec.version === 1,
+            noExecution: workspace.execution === null
+          };
+        })()`) as Pick<typeof rejection, 'rejected' | 'preservedVersion' | 'noExecution'>
+        Object.assign(rejection, state)
+        if (rejection.rejected && rejection.preservedVersion && rejection.noExecution) break
+      }
+      await window.webContents.executeJavaScript(`(() => {
+        const input = document.querySelector('.composer textarea');
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(input, 'Bỏ payment khỏi MVP');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        setTimeout(() => document.querySelector('.send-button')?.click(), 30);
+      })()`)
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        await wait(250)
+        rejection.previewedAgain = await window.webContents.executeJavaScript(`Boolean(document.querySelector('.change-preview') && document.querySelector('.approve-button'))`) as boolean
+        if (rejection.previewedAgain) break
+      }
+    }
     if (final.hasPreview) {
       await window.webContents.executeJavaScript(`document.querySelector('.approve-button')?.click()`)
     }
@@ -816,6 +864,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && reset.controlReady && reset.deterministic
       && providerSwitch.paidDialogReady && providerSwitch.paidBlocked && providerSwitch.stableThread && providerSwitch.stableSpec
       && (!lifecycleFlow.required || (lifecycleFlow.questions > 0 && lifecycleFlow.questions <= 3 && lifecycleFlow.options >= 2 && lifecycleFlow.options <= 3 && lifecycleFlow.delivered && lifecycleFlow.resumed))
+      && (!rejection.required || (rejection.rejected && rejection.preservedVersion && rejection.noExecution && rejection.previewedAgain))
       && final.hasPreview && !final.pending && !final.hasError
       && approval.committed && approval.specVersion === 2
       && approval.paymentStatus === 'removed' && approval.actionsApproved
@@ -825,7 +874,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && recovery.verified && recovery.preservedTargets
       && figmaSetup.hasSetupDialog && figmaSetup.runtimeReady && figmaSetup.pluginBuilt && figmaSetup.waitingForPlugin
       && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady))
-    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, lifecycleFlow, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
+    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, lifecycleFlow, rejection, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
     app.exit(passed ? 0 : 1)
   } catch (error) {
     console.error('[smoke] failed', error)

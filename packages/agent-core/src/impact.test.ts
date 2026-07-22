@@ -8,7 +8,7 @@ import {
   type WorkflowEvent,
 } from '@pm-agent/domain'
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
-import { approvalMatchesAction, approveActions, createImpactPreview, invalidateChangedActions } from './index'
+import { approvalMatchesAction, approveActions, createImpactPreview, invalidateChangedActions, rejectActions } from './index'
 
 const timestamp = '2026-07-22T01:00:00.000Z'
 const intent: ChangeIntent = {
@@ -65,6 +65,13 @@ describe('deterministic change impact', () => {
     expect(invalidated[0]?.status).toBe('pending_approval')
     expect(invalidated.slice(1).every((action) => action.status === 'approved')).toBe(true)
   })
+
+  it('rejects immutable actions without approving a write', () => {
+    const preview = createImpactPreview(mealOrderingProductSpec, intent, 'RUN-TEST', timestamp)
+    const rejected = rejectActions(preview.actions, timestamp)
+    expect(rejected.actions.every((action) => action.status === 'cancelled')).toBe(true)
+    expect(rejected.approvals.every((approval) => approval.decision === 'rejected')).toBe(true)
+  })
 })
 
 describe('workflow state machine', () => {
@@ -97,4 +104,3 @@ describe('ProductSpec invariants', () => {
     }))
   })
 })
-

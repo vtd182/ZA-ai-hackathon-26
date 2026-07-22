@@ -217,6 +217,23 @@ export function App(): React.JSX.Element {
     }
   }
 
+  const rejectChange = async (): Promise<void> => {
+    if (!activeThread || approving) return
+    setApproving(true)
+    setError(null)
+    try {
+      const result = await window.pmAgent.lifecycle.rejectChange(activeThread.id)
+      setLifecycleWorkspace(result)
+      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      setCommandBatch({ id: Date.now(), commands: [{ type: 'switch_view', view: 'deliver' }] })
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setApproving(false)
+    }
+  }
+
   const retryAction = async (target: PlannedAction['target']): Promise<void> => {
     if (!activeThread) return
     setApproving(true)
@@ -420,6 +437,7 @@ export function App(): React.JSX.Element {
         onSend={sendMessage}
         onStop={stopMessage}
         onApprove={approveChange}
+        onReject={rejectChange}
         onRetry={retryAction}
         onAdvanceDecision={advanceDecision}
         onSelectDecision={selectDecision}
@@ -597,6 +615,7 @@ function ChatPanel({
   onSend,
   onStop,
   onApprove,
+  onReject,
   onRetry,
   onAdvanceDecision,
   onSelectDecision,
@@ -613,6 +632,7 @@ function ChatPanel({
   onSend(content: string): Promise<void>
   onStop(): Promise<void>
   onApprove(): Promise<void>
+  onReject(): Promise<void>
   onRetry(target: PlannedAction['target']): Promise<void>
   onAdvanceDecision(answers: Record<string, string>): Promise<void>
   onSelectDecision(optionId: string): Promise<void>
@@ -654,7 +674,7 @@ function ChatPanel({
           </article>
         )}
       </div>
-      {preview && <ChangePreviewPanel preview={preview} approving={approving} onApprove={onApprove} />}
+      {preview && <ChangePreviewPanel preview={preview} approving={approving} onApprove={onApprove} onReject={onReject} />}
       {execution && <ExecutionPanel execution={execution} busy={approving} onRetry={onRetry} />}
       {reasoning && (reasoning.phase === 'discover' || reasoning.phase === 'decide') && (
         <PhaseReasoningPanel
@@ -772,10 +792,12 @@ function ChangePreviewPanel({
   preview,
   approving,
   onApprove,
+  onReject,
 }: {
   preview: ChangePreview
   approving: boolean
   onApprove(): Promise<void>
+  onReject(): Promise<void>
 }): React.JSX.Element {
   return (
     <section className="change-preview" aria-label="Change impact approval">
@@ -797,10 +819,13 @@ function ChangePreviewPanel({
       <div className="artifact-targets">
         {preview.actions.map((action) => <span key={action.id}>{action.target === 'jira' || action.target === 'zdoc' ? 'Mock ' : ''}{action.target}</span>)}
       </div>
-      <button className="approve-button" disabled={approving} onClick={() => void onApprove()}>
-        {approving ? <LoaderCircle className="spin" size={16} /> : <ShieldCheck size={16} />}
-        {approving ? 'Đang đồng bộ' : 'Duyệt & đồng bộ'}
-      </button>
+      <div className="approval-actions">
+        <button className="secondary-button reject-button" disabled={approving} onClick={() => void onReject()}><X size={15} /> Từ chối</button>
+        <button className="approve-button" disabled={approving} onClick={() => void onApprove()}>
+          {approving ? <LoaderCircle className="spin" size={16} /> : <ShieldCheck size={16} />}
+          {approving ? 'Đang đồng bộ' : 'Duyệt & đồng bộ'}
+        </button>
+      </div>
     </section>
   )
 }
