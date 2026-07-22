@@ -33,15 +33,16 @@ Signature moment:
 ## 3. Current status
 
 - **Date:** 2026-07-22
-- **Milestone:** Signature change slice and live Figma read connection complete.
+- **Milestone:** M2 guarded artifact execution and demo readiness.
 - **Completed task:** `P0-FND-001` Bootstrap workspace.
 - **Completed tasks:** Foundation/fixtures/domain schemas, workflow state machine, ProductSpec invariants, deterministic impact graph and immutable approval policy.
 - **Completed tasks:** Foundation/domain workflow plus typed signature change preview, approval and persisted ProductSpec v2 projection.
 - **Completed task:** `P0-FIG-001` typed MCP adapter, explicit session/page allowlist, bounded DS capture, normalized cache and synthetic fallback.
-- **Current task:** `P0-FIG-002` semantic Figma artifact planner is the next implementation item.
-- **Current slice:** Live plugin connection is read-only and preflight-ready. Next work converts ScreenSpec into generic component-role recipes before any Figma write path is enabled.
+- **Current task:** `P0-FIG-002` semantic Figma artifact planner is `IN_PROGRESS`.
+- **Current slice:** Reconciled backlog against code evidence. Build deterministic ScreenSpec recipes first, then strict preflight, connector execution/read-back, outbox and demo recovery in dependency order.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
+- **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
 
 ## 4. Important implementation notes
 

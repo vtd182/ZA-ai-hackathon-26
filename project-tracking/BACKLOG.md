@@ -28,11 +28,11 @@
 
 ### `P0-FND-003` Synthetic demo fixtures
 
-- **Status:** DONE (2026-07-22)
+- **Status:** TODO
 - **Depends on:** P0-FND-001
 - **Deliver:** meal-ordering idea, discovery sources, 3 questions/options, mock Jira/Zdoc data, design-system fixture.
 - **Acceptance:** fixture deterministic, versioned, không có production URL/PII/secret; có script reset.
-- **Evidence:** meal-ordering + synthetic Zalo-like DS fixtures parse tại module boundary; deterministic payment impact path có regression test.
+- **Progress:** meal-ordering + synthetic Zalo-like DS fixtures parse tại module boundary; deterministic payment impact path có regression test. Còn thiếu reset command/control chạy lặp lại được và seeded Mock Jira/Zdoc stores.
 
 ## Epic E1 - Domain and workflow
 
@@ -76,6 +76,7 @@
 - **Depends on:** P0-DOM-001, P0-FND-003
 - **Deliver:** provider interface, phase-specific schemas, deterministic MockReasoningProvider.
 - **Acceptance:** cùng input/version cho cùng output; malformed output không mutate RunState.
+- **Progress:** đã có provider interface, Zod-validated structured result và deterministic offline mock; còn thiếu phase-specific result schemas và malformed-output conformance test ở orchestration boundary.
 
 ### `P0-AGT-002` Core orchestration loop
 
@@ -83,6 +84,7 @@
 - **Depends on:** P0-AGT-001, P0-DOM-002
 - **Deliver:** build request, validate result, apply domain commands, completion/error conditions.
 - **Acceptance:** fixture chạy Idea -> WAITING_FOR_DECISION và resume từ checkpoint.
+- **Progress:** signature change flow đã validate provider result, tạo domain command, persist preview và resume ProductSpec/checkpoint; discovery Idea -> WAITING_FOR_DECISION chưa được orchestration thành workflow hoàn chỉnh.
 
 ### `P0-AGT-003` Provider registry and normalized events
 
@@ -90,6 +92,7 @@
 - **Depends on:** P0-AGT-001
 - **Deliver:** registry, capability probe, normalized stream events, cancellation và provider conformance kit.
 - **Acceptance:** core/UI không import provider SDK type; malformed/partial stream không mutate canonical state.
+- **Progress:** registry, probes và cancellation đã có; SDK types không leak khỏi reasoning package. Còn thiếu internal `ProviderEvent` stream union, batching và conformance kit.
 
 ### `P0-AGT-004` Approval policy and payload hash
 
@@ -114,6 +117,7 @@
 - **Depends on:** P0-DOM-001
 - **Deliver:** schema/migration cho projects, threads, turns, messages, provider segments/events, canvas snapshots/patches, runs, spec versions, actions, approvals, receipts và mappings.
 - **Acceptance:** migration chạy trên clean DB; repository round-trip giữ nguyên schema version.
+- **Progress:** đã có clean-create schema cho threads/messages/segments/canvas, runs/spec versions/actions/approvals/checkpoints và Figma cache. Còn thiếu versioned migration ledger, receipts/outbox/artifact mappings, turns/events và round-trip coverage đầy đủ.
 
 ### `P0-PER-002` Transaction and checkpoint service
 
@@ -121,6 +125,7 @@
 - **Depends on:** P0-PER-001, P0-DOM-002
 - **Deliver:** atomic domain commit, approval+outbox commit, checkpoint summary.
 - **Acceptance:** injected failure không tạo half-committed ProductSpec/action; restart load đúng phase.
+- **Progress:** preview và approved ProductSpec/action/approval/checkpoint commit bằng SQLite transaction; restart cache/checkpoint đã có test. Còn thiếu approval+outbox atomic commit, failure injection và checkpoint summary/handoff.
 
 ## Epic E4 - Provider, history, desktop UX and canvas
 
@@ -130,13 +135,15 @@
 - **Depends on:** P0-AGT-003, P0-PER-002
 - **Deliver:** ProviderSegment persistence, HandoffPackage, safe checkpoint guards và cost/privacy confirmation.
 - **Acceptance:** đổi provider giữ nguyên thread/canvas/ProductSpec; switch bị chặn khi stream/write chưa ổn định; không auto-fallback sang paid API.
+- **Progress:** opaque provider segment và per-thread provider selection đã persist; UI chặn switch khi chat đang gửi. Còn thiếu canonical HandoffPackage, write-in-flight guard, explicit paid-provider confirmation và segment capability snapshot.
 
 ### `P0-PRV-002` Codex App Server adapter
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-PRV-001
 - **Deliver:** stdio lifecycle, initialize, generated versioned schema, thread/turn/item event mapper, resume/cancel.
 - **Acceptance:** app chạy một reasoning segment thật hoặc typed unavailable; Codex thread ID chỉ nằm trong opaque segment metadata; không expose write connectors trực tiếp.
+- **Evidence:** native stdio initialize/thread start-resume/turn events/cancel implemented; fixed versioned output schema; real `PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke` pass; remote thread ID chỉ persist trong provider segment và adapter không nhận connector.
 
 ### `P0-PRV-003` Real API adapter release slot
 
@@ -144,6 +151,7 @@
 - **Depends on:** P0-PRV-001
 - **Deliver:** implement một trong OpenAI Responses, Gemini Interactions hoặc Anthropic Messages theo native API, được chọn dựa trên credential sẵn có.
 - **Acceptance:** pass provider conformance kit; có structured output, streaming/cancel, usage và handoff sang/từ Mock.
+- **Progress:** native OpenAI Responses, Gemini và Anthropic adapters đã implement structured output/cancel cơ bản; chưa chọn/live-test release slot, chưa normalize usage/stream và chưa pass conformance/handoff.
 
 ### `P0-HIS-001` Thread, turn and message repositories
 
@@ -151,6 +159,7 @@
 - **Depends on:** P0-PER-001
 - **Deliver:** thread CRUD/archive, paginated messages, normalized parts/events, FTS5 search và indexes.
 - **Acceptance:** 500-message fixture query theo page; app không load full transcript vào renderer.
+- **Progress:** thread create/get/archive, capped recent messages, indexes và substring search đã có. Còn thiếu turns/parts/events, cursor pagination, FTS5 và 500-message performance test.
 
 ### `P0-HIS-002` Thread checkpoint and resume
 
@@ -158,6 +167,7 @@
 - **Depends on:** P0-HIS-001, P0-PER-002
 - **Deliver:** checkpoint schema, migration, latest restore và stale provider handling.
 - **Acceptance:** restart app phục hồi phase, ProductSpec, messages và canvas; resume vẫn xem được offline.
+- **Progress:** phase/messages/canvas snapshot/ProductSpec/run checkpoint đều persist trong SQLite và hydrate offline; còn thiếu stale-provider handling và explicit latest-checkpoint repository test qua full restart.
 
 ### `P0-HIS-003` History sidebar and chat stream UI
 
@@ -165,6 +175,7 @@
 - **Depends on:** P0-HIS-001, P0-UI-001, P0-AGT-003
 - **Deliver:** searchable/virtualized history, new/open/archive thread, paginated chat, streaming/cancel states.
 - **Acceptance:** chuyển thread không trộn messages; provider/model/phase/status nhìn thấy rõ; stream delta được batch.
+- **Progress:** sidebar search/new/open/archive, thread isolation, visible provider/model/phase và cancel state đã có. Còn thiếu virtualized history, paginated chat và normalized batched streaming deltas.
 
 ### `P0-HIS-004` One canvas per thread
 
@@ -172,6 +183,7 @@
 - **Depends on:** P0-HIS-002, P0-CAN-001
 - **Deliver:** CanvasDocument ownership, snapshot/patch persistence, hydrate active/unmount inactive canvas.
 - **Acceptance:** thread A/B có canvas ID/state độc lập; turn tạo checkpoint thay vì canvas mới; resume giữ stable entity refs.
+- **Progress:** active thread owns and hydrates one serialized tldraw snapshot; inactive canvas unmounts and stable ProductSpec refs project deterministically. Còn thiếu explicit CanvasDocument/checkpoint schema và A/B restart integration test.
 
 ### `P0-HIS-005` Chat-canvas bidirectional commands
 
@@ -179,6 +191,7 @@
 - **Depends on:** P0-HIS-004, P0-CAN-002, P0-AGT-002
 - **Deliver:** CanvasSelectionContext, chat domain commands, canvas gestures -> command preview, business/presentation undo boundary.
 - **Acceptance:** chat có thể focus/remove entity; canvas delete/drag không mutate ProductSpec trước preview/approval.
+- **Progress:** chat focus/remove/switch/add proposals and selection context work; canvas persistence is presentation-only. Còn thiếu guarded gesture-to-domain-command preview and business/presentation undo boundary.
 
 ### `P0-UI-001` Typed IPC and app shell
 
@@ -194,6 +207,7 @@
 - **Depends on:** P0-AGT-002, P0-UI-001
 - **Deliver:** history + idea/chat intake, clarification, option lanes, selection, ProductSpec inspector.
 - **Acceptance:** user hoàn thành decision flow; tối đa 3 câu hỏi; refresh/resume không mất thread state.
+- **Progress:** three-panel history/canvas/chat workspace and ProductSpec projection are runnable; clarification questions, option lanes and decision selection are not implemented.
 
 ### `P0-CAN-001` Canvas shapes and deterministic layout
 
@@ -201,6 +215,7 @@
 - **Depends on:** P0-UI-001, P0-DOM-001
 - **Deliver:** custom shapes, four view layouts, stable entity refs and edges.
 - **Acceptance:** snapshot cùng input giống nhau; shape chỉ chứa ref/presentation metadata.
+- **Progress:** deterministic four-view coordinates and stable entity metadata are tested; currently uses tldraw note shapes and lacks explicit traceability edges/custom shape contract.
 
 ### `P0-CAN-002` ProductSpec projection and domain commands
 
@@ -208,14 +223,15 @@
 - **Depends on:** P0-CAN-001, P0-DOM-003
 - **Deliver:** projection renderer, selection sync, commands for option/change.
 - **Acceptance:** canvas edit không sửa business state trực tiếp; command invalid bị reject.
+- **Progress:** canonical ProductSpec projection is separate from canvas snapshots; provider commands are schema-validated and removal stays a visual proposal until approval. Còn thiếu canvas gesture validation and invalid-command tests at the UI/core boundary.
 
 ### `P0-UI-003` Artifact preview and approval
 
-- **Status:** DONE (2026-07-22)
+- **Status:** TODO
 - **Depends on:** P0-AGT-004, P0-CAN-002
 - **Deliver:** grouped actions, diff/summary, approve/reject, target labels (`Figma`, `Mock Jira`, `Mock Zdoc`).
 - **Acceptance:** payload và target rõ ràng; approval status cập nhật theo state machine.
-- **Evidence:** Change Impact panel hiển thị ProductSpec v1→v2, exact entity changes, Figma/Mock Jira/Mock Zdoc và immutable approval commit.
+- **Progress:** Change Impact panel hiển thị ProductSpec v1→v2, exact entity changes, Figma/Mock Jira/Mock Zdoc và immutable approval commit. Còn thiếu reject/cancel control và execution/verification status per target.
 
 ### `P0-UI-004` Change Impact view
 
@@ -223,6 +239,7 @@
 - **Depends on:** P0-DOM-004, P0-CAN-002
 - **Deliver:** impacted highlights, before/after, target action list, partial failure status.
 - **Acceptance:** remove-payment impact dễ đọc và không overlap ở demo viewport.
+- **Progress:** impacted highlights, before/after version and target action labels render without overlap in smoke screenshot; partial failure/retry status is not wired.
 
 ## Epic E5 - Mock Jira and Zdoc
 
@@ -267,7 +284,7 @@
 
 ### `P0-FIG-002` Semantic Figma artifact planner
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-FIG-001, P0-DOM-003
 - **Deliver:** ScreenSpec -> generic recipe/component intents, flow edges, lifecycle metadata, deterministic layout recipe.
 - **Acceptance:** plan không chứa pixel placement do model cung cấp; 4 meal-ordering screens parse hợp lệ.

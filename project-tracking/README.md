@@ -25,6 +25,7 @@ MVP dùng:
 | [UI_HISTORY_AND_PERFORMANCE.md](UI_HISTORY_AND_PERFORMANCE.md) | History, resume, chat-canvas và performance budgets | Khi đổi interaction model hoặc persistence hot path |
 | [FIGMA_MCP_INTEGRATION.md](FIGMA_MCP_INTEGRATION.md) | Review và kế hoạch mở rộng MCP Figma hiện có | Khi sửa connector/MCP/plugin Figma |
 | [TEST_AND_DEMO_PLAN.md](TEST_AND_DEMO_PLAN.md) | Test matrix, demo script, fallback | Khi thêm behavior hoặc sửa demo |
+| [READINESS_AUDIT.md](READINESS_AUDIT.md) | Evidence map và khoảng trống P0 thực tế | Sau mỗi completion audit lớn |
 | [DECISIONS.md](DECISIONS.md) | Quyết định kiến trúc/sản phẩm đã chốt | Trước hoặc ngay sau quyết định quan trọng |
 | [PROJECT_MEMORY.md](PROJECT_MEMORY.md) | Memory ngắn hạn dài hạn, bug/fix, lưu ý | Cuối mỗi phiên implementation |
 
@@ -42,8 +43,8 @@ Không sửa một quyết định nền tảng chỉ bằng cách cập nhật 
 
 ## Trạng thái hiện tại
 
-- **Current milestone:** M0 - Foundation decisions and fixtures.
-- **Current vertical slice:** New/resumed chat thread -> idea fixture -> discovery -> options -> ProductSpec -> thread canvas -> approval -> mock Jira execute -> verify.
+- **Current milestone:** M2 - Guarded artifact execution and demo readiness.
+- **Current vertical slice:** Approved ProductSpec change -> strict Figma/mock plans -> outbox execute -> independent read-back verify -> partial retry.
 - **Demo differentiator:** Change request `Bỏ payment khỏi MVP` cập nhật traceability và Figma projection có kiểm soát.
 - **Integration policy:** Figma first; Jira/Zdoc mock until demo flow is stable.
 - **Provider policy:** App-owned history/checkpoint; provider segments có thể đổi tại safe checkpoint.
