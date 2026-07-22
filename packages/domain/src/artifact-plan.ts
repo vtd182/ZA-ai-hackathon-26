@@ -137,3 +137,15 @@ export const figmaArtifactSnapshotSchema = z.object({
   readAt: z.string().datetime(),
 })
 export type FigmaArtifactSnapshot = z.infer<typeof figmaArtifactSnapshotSchema>
+
+export const figmaApplyResultSchema = figmaArtifactSnapshotSchema.extend({
+  idempotent: z.boolean(),
+})
+export type FigmaApplyResult = z.infer<typeof figmaApplyResultSchema>
+
+export const figmaArtifactAuditResultSchema = z.object({
+  verified: z.boolean(),
+  issues: z.array(artifactIssueSchema),
+  snapshot: figmaArtifactSnapshotSchema,
+})
+export type FigmaArtifactAuditResult = z.infer<typeof figmaArtifactAuditResultSchema>

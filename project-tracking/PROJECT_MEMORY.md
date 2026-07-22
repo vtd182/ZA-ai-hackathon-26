@@ -40,8 +40,9 @@ Signature moment:
 - **Completed task:** `P0-FIG-001` typed MCP adapter, explicit session/page allowlist, bounded DS capture, normalized cache and synthetic fallback.
 - **Completed task:** `P0-FIG-002` deterministic semantic recipes for four meal-ordering screens, with lifecycle metadata and no provider-controlled pixel placement.
 - **Completed task:** `P0-FIG-003` added read-only MCP strict preflight with exact target, manifest, role/token resolution and immutable plan hash; live adapter test passes against the connected Figma session.
-- **Current task:** `P0-FIG-004` approved/idempotent Figma apply bridge is `IN_PROGRESS`.
-- **Current slice:** Add lifecycle metadata storage/search and plan-hash enforcement, then return a normalized receipt without weakening the target allowlist.
+- **Completed tasks:** `P0-FIG-004/005/006` approved/idempotent Figma apply, independent plugin-data read-back, strict postflight audit and offline parity connector.
+- **Current task:** `P0-MCK-001` reusable connector conformance kit is `IN_PROGRESS`.
+- **Current slice:** Lock the common connector behavior before adding SQLite-backed Mock Jira and Mock Zdoc.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -202,6 +203,7 @@ Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 - The public page exposed 6 paint styles, 3 text styles and 312 text nodes, but zero relevant components in the allowlisted subtree. The app stores only normalized counts/manifest data and switches to the clearly labeled synthetic fixture guard.
 - Plugin connection is not permission: readiness requires an immutable hash over exact session/file/page identity plus cached DS context. A session/page mismatch removes ready state.
 - MCP tool `plan_design_system_screens` is intentionally pure: it receives the host-approved target and normalized manifest, computes the full strict decision and plan hash, and has no `Runtime` parameter capable of issuing plugin writes.
+- Lifecycle Figma apply uses plugin data key `za-pm-lifecycle`; root metadata owns idempotency/plan/target identity, screen metadata owns requirement traceability, and slot metadata owns resolved component role. Strict apply removes the root before returning an error if any component cannot be instantiated.
 
 Khi tiếp tục spike Figma bridge, ghi lại:
 

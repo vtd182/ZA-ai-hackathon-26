@@ -112,4 +112,53 @@ describe('FigmaMcpAdapter', () => {
     expect(transport.calls.map((call) => call.name)).toEqual(['get_runtime_health', 'get_pages', 'plan_design_system_screens'])
     expect(transport.calls.at(-1)?.args).toMatchObject({ sessionId, artifactPlan: plan, allowedTarget: target })
   })
+
+  it('applies, reads and audits only after revalidating the allowlisted target', async () => {
+    const bootstrap = new FakeTransport({ get_runtime_health: health, get_pages: pages })
+    const target = await new FigmaMcpAdapter({ binaryPath: '/unused' }, bootstrap)
+      .pinTarget(sessionId, '0:1', '2026-07-22T12:00:00.000Z')
+    const plan = createFigmaArtifactPlan(mealOrderingProductSpec, target, syntheticZaloDesignSystem, {
+      runId: 'RUN-TEST', threadId: 'THREAD-TEST', actionId: 'ACTION-FIGMA', idempotencyKey: 'figma:RUN-TEST:v1',
+    })
+    const preflight = preflightFigmaArtifactPlan(plan, syntheticZaloDesignSystem, target)
+    const snapshot = {
+      schemaVersion: 1,
+      targetHash: target.targetHash,
+      planHash: preflight.planHash,
+      idempotencyKey: plan.metadata.idempotencyKey,
+      rootNodeIds: ['10:1'],
+      screens: plan.screens.map((screen, index) => ({
+        nodeId: `11:${index + 1}`,
+        screenId: screen.screenId,
+        name: screen.name,
+        componentKey: null,
+        semanticRole: null,
+        metadata: { ...plan.metadata, screenId: screen.screenId, requirementIds: screen.requirementIds, planHash: preflight.planHash },
+        childSlots: preflight.plan.resolvedSlots.filter((slot) => slot.screenId === screen.screenId).map((slot) => ({
+          slotKey: slot.slotKey,
+          componentKey: slot.componentKey,
+          semanticRole: slot.semanticRole,
+          primitiveFallback: false,
+        })),
+      })),
+      prototypeEdges: plan.screens.flatMap((screen) => screen.prototypeEdges),
+      readAt: '2026-07-22T12:30:00.000Z',
+    }
+    const transport = new FakeTransport({
+      get_runtime_health: health,
+      get_pages: pages,
+      apply_design_system_plan: { ...snapshot, idempotent: false },
+      read_lifecycle_artifact: snapshot,
+      audit_lifecycle_artifact: { verified: true, issues: [], snapshot },
+    })
+    const adapter = new FigmaMcpAdapter({ binaryPath: '/unused' }, transport)
+
+    await expect(adapter.applyArtifactPlan(preflight, preflight.planHash)).resolves.toMatchObject({ idempotent: false })
+    await expect(adapter.readArtifact(target, plan.metadata.idempotencyKey)).resolves.toEqual(snapshot)
+    await expect(adapter.auditArtifact(preflight)).resolves.toMatchObject({ verified: true, issues: [] })
+    expect(transport.calls.filter((call) => call.name === 'get_runtime_health')).toHaveLength(3)
+    expect(transport.calls.map((call) => call.name)).toContain('apply_design_system_plan')
+    expect(transport.calls.map((call) => call.name)).toContain('read_lifecycle_artifact')
+    expect(transport.calls.map((call) => call.name)).toContain('audit_lifecycle_artifact')
+  })
 })

@@ -3,7 +3,7 @@ package core
 import "testing"
 
 func lifecyclePreflightFixture() (lifecycleArtifactPlan, lifecycleManifest, lifecycleTarget) {
-	target := lifecycleTarget{TargetHash: "allowed-hash", SessionID: "figma:test", PageID: "1:2"}
+	target := lifecycleTarget{SchemaVersion: 1, TargetHash: "allowed-hash", SessionID: "figma:test", FileName: "Sandbox", PageID: "1:2", PageName: "Demo", AllowedAt: "2026-07-22T00:00:00.000Z"}
 	manifest := lifecycleManifest{
 		Fingerprint: "fixture-v1",
 		Components: []lifecycleManifestComponent{
@@ -20,16 +20,65 @@ func lifecyclePreflightFixture() (lifecycleArtifactPlan, lifecycleManifest, life
 		Target:              target,
 		ManifestFingerprint: manifest.Fingerprint,
 		RequiredTokens:      []string{"color/brand/primary"},
-		Metadata:            map[string]interface{}{"runId": "RUN-TEST"},
+		Metadata: map[string]interface{}{
+			"namespace": "za.pm-lifecycle/v1", "runId": "RUN-TEST", "threadId": "THREAD-TEST",
+			"actionId": "ACTION-TEST", "specId": "SPEC-TEST", "specVersion": float64(1),
+			"idempotencyKey": "figma:RUN-TEST:v1",
+		},
 		Screens: []lifecycleScreenRecipe{{
-			ScreenID: "SCREEN-MENU",
+			SchemaVersion: 1, ScreenID: "SCREEN-MENU", Name: "Menu", Purpose: "Choose a meal",
+			RequirementIDs: []string{"REQ-ORDER"}, Layout: "vertical",
 			Slots: []lifecycleSlot{
-				{Key: "header", Required: true, RequiredRoles: []string{"app-header"}},
-				{Key: "menu", Required: true, RequiredRoles: []string{"menu-card"}},
+				{Key: "header", Label: "Header", Required: true, RequiredRoles: []string{"app-header"}, PreferredRoles: []string{}, VariantProperties: map[string]string{}, Content: map[string]string{}, Children: []lifecycleSlot{}},
+				{Key: "menu", Label: "Menu", Required: true, RequiredRoles: []string{"menu-card"}, PreferredRoles: []string{}, VariantProperties: map[string]string{}, Content: map[string]string{}, Children: []lifecycleSlot{}},
 			},
+			PrototypeEdges: []lifecycleEdge{},
 		}},
 	}
 	return plan, manifest, target
+}
+
+func TestValidateApprovedLifecyclePreflightAndAuditReadBack(t *testing.T) {
+	plan, manifest, target := lifecyclePreflightFixture()
+	preflight, err := planLifecycleDesignSystemScreens(plan, manifest, target)
+	if err != nil {
+		t.Fatalf("preflight failed: %v", err)
+	}
+	if err := validateApprovedLifecyclePreflight(preflight, preflight.PlanHash, preflight.PlanHash); err != nil {
+		t.Fatalf("expected approved plan to validate: %v", err)
+	}
+	if err := validateApprovedLifecyclePreflight(preflight, preflight.PlanHash, "changed"); err == nil {
+		t.Fatal("expected approval hash mismatch")
+	}
+
+	componentHeader, roleHeader := "fixture/app-header", "app-header"
+	componentMenu, roleMenu := "fixture/menu-card", "menu-card"
+	snapshot := lifecycleArtifactSnapshot{
+		SchemaVersion: 1, TargetHash: target.TargetHash, PlanHash: preflight.PlanHash,
+		IdempotencyKey: "figma:RUN-TEST:v1", RootNodeIDs: []string{"10:1"},
+		Screens: []lifecycleSnapshotScreen{{
+			NodeID: "11:1", ScreenID: "SCREEN-MENU", Name: "Menu",
+			Metadata: map[string]interface{}{
+				"namespace": "za.pm-lifecycle/v1", "runId": "RUN-TEST", "actionId": "ACTION-TEST",
+				"screenId": "SCREEN-MENU", "requirementIds": []interface{}{"REQ-ORDER"},
+			},
+			ChildSlots: []lifecycleSnapshotSlot{
+				{SlotKey: "header", ComponentKey: &componentHeader, SemanticRole: &roleHeader},
+				{SlotKey: "menu", ComponentKey: &componentMenu, SemanticRole: &roleMenu},
+			},
+		}},
+		PrototypeEdges: []lifecycleEdge{}, ReadAt: "2026-07-22T00:00:00.000Z",
+	}
+	audit := auditLifecycleArtifact(preflight.Plan, preflight.PlanHash, snapshot)
+	if !audit.Verified || len(audit.Issues) != 0 {
+		t.Fatalf("expected verified read-back: %+v", audit)
+	}
+
+	delete(snapshot.Screens[0].Metadata, "requirementIds")
+	audit = auditLifecycleArtifact(preflight.Plan, preflight.PlanHash, snapshot)
+	if audit.Verified {
+		t.Fatal("missing requirement metadata must fail postflight verification")
+	}
 }
 
 func TestPlanLifecycleDesignSystemScreensStrictSuccess(t *testing.T) {

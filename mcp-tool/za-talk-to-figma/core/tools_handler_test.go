@@ -341,6 +341,9 @@ func TestHandlers_DesignSystemSmartTools(t *testing.T) {
 		"manifest":      map[string]any{},
 		"allowedTarget": map[string]any{},
 	})
+	callTool(t, s, "apply_design_system_plan", map[string]any{"preflight": map[string]any{}, "planHash": "x", "approvedPlanHash": "x"})
+	callTool(t, s, "read_lifecycle_artifact", map[string]any{"targetPageId": "0:1", "idempotencyKey": "test"})
+	callTool(t, s, "audit_lifecycle_artifact", map[string]any{"preflight": map[string]any{}, "planHash": "x"})
 }
 
 // ── Write – linked tools (apply_style_to_node, bind_variable_to_node) ─────────

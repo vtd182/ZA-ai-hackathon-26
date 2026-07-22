@@ -245,7 +245,7 @@
 
 ### `P0-MCK-001` Connector contract test kit
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-DOM-001
 - **Deliver:** reusable test suite cho preflight, execute, read-back, verify, idempotency, unavailable.
 - **Acceptance:** mọi connector adapter chạy cùng suite tối thiểu.
@@ -300,24 +300,27 @@
 
 ### `P0-FIG-004` Figma bridge adapter
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-FIG-003, P0-MCK-001
 - **Deliver:** `apply_design_system_plan`, lifecycle metadata, stable idempotency lookup, approved plan hash và normalized receipt.
 - **Acceptance:** adapter tạo nodes trong sandbox allowlist hoặc trả typed unavailable; không ghi ngoài approved page.
+- **Evidence:** MCP enforces preflight/approval hash before dispatch; plugin rechecks current page, writes namespaced metadata, searches idempotency key, returns existing roots on retry and rolls back strict component failures. Typed connector normalizes the result into `ActionReceipt`; Go, plugin and adapter tests pass.
 
 ### `P0-FIG-005` Figma read-back and postflight verification
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-FIG-004
 - **Deliver:** `read_lifecycle_artifact`, `audit_lifecycle_artifact`, snapshot mapper và binding/metadata/edge checks.
 - **Acceptance:** execute response không đủ để pass; node thiếu requirement metadata bị fail verification.
+- **Evidence:** `read_lifecycle_artifact` independently searches plugin data and returns a bounded snapshot; `audit_lifecycle_artifact` checks target/plan/idempotency, screen requirement metadata, component roles, primitive fallbacks and edges. Both Go and TypeScript tests fail a tampered requirement mapping.
 
 ### `P0-FIG-006` Offline Figma mock parity
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-FIG-002, P0-MCK-001
 - **Deliver:** mock execute/read-back/postflight với cùng plan/snapshot contract.
 - **Acceptance:** demo có thể chuyển sang fallback rõ nhãn mà không đổi ProductSpec/workflow.
+- **Evidence:** `MockFigmaArtifactConnector` implements the same plan/preflight/execute/read-back/verify contract, stable idempotency and failure injection; parity tests prove no duplicate and verification mismatch behavior.
 
 ## Epic E7 - Change synchronization
 

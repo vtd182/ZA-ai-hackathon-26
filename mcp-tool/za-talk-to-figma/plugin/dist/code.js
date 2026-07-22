@@ -1226,9 +1226,219 @@ var __async = (__this, __arguments, generator) => {
         return null;
     }
   });
+  const metadataKey = "za-pm-lifecycle";
+  const maxScannedNodes = 5e3;
+  const readMetadata = (node) => {
+    const raw = node.getPluginData(metadataKey);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (e) {
+      return null;
+    }
+  };
+  const writeMetadata = (node, metadata) => {
+    node.setPluginData(metadataKey, JSON.stringify(metadata));
+  };
+  const walkPage = (page) => {
+    const found = [];
+    const queue = [...page.children];
+    while (queue.length > 0 && found.length < maxScannedNodes) {
+      const node = queue.shift();
+      found.push(node);
+      if ("children" in node) queue.push(...node.children);
+    }
+    return found;
+  };
+  const findArtifactRoot = (page, idempotencyKey) => {
+    var _a;
+    return (_a = walkPage(page).find((node) => {
+      const metadata = readMetadata(node);
+      return (metadata == null ? void 0 : metadata.kind) === "artifact_root" && metadata.idempotencyKey === idempotencyKey;
+    })) != null ? _a : null;
+  };
+  const requireCurrentPage = (targetPageId) => {
+    if (typeof targetPageId !== "string" || !targetPageId) throw new Error("targetPageId is required");
+    if (figma.currentPage.id !== targetPageId) {
+      throw new Error(`TARGET_NOT_ALLOWED: current page ${figma.currentPage.id} does not match ${targetPageId}`);
+    }
+    return figma.currentPage;
+  };
+  const localComponentByKey = (key) => __async(null, null, function* () {
+    for (const page of figma.root.children) {
+      yield page.loadAsync();
+      const local = page.findAllWithCriteria({ types: ["COMPONENT"] }).find((component) => component.key === key);
+      if ((local == null ? void 0 : local.type) === "COMPONENT") return local;
+    }
+    try {
+      return yield figma.importComponentByKeyAsync(key);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`COMPONENT_UNAVAILABLE: ${key}: ${detail}`);
+    }
+  });
+  const flattenEdges = (screens) => screens.flatMap((screen) => Array.isArray(screen.prototypeEdges) ? screen.prototypeEdges : []);
+  const applyArtifact = (params) => __async(null, null, function* () {
+    var _a, _b, _c, _d, _e, _f;
+    const resolvedPlan = params.preflightPlan;
+    const source = resolvedPlan == null ? void 0 : resolvedPlan.source;
+    const planHash = typeof params.planHash === "string" ? params.planHash : "";
+    const metadata = source == null ? void 0 : source.metadata;
+    const screens = Array.isArray(source == null ? void 0 : source.screens) ? source.screens : [];
+    const resolvedSlots = Array.isArray(resolvedPlan == null ? void 0 : resolvedPlan.resolvedSlots) ? resolvedPlan.resolvedSlots : [];
+    if (!resolvedPlan || !source || !metadata || screens.length === 0 || !planHash) {
+      throw new Error("preflightPlan, planHash, metadata and screens are required");
+    }
+    const page = requireCurrentPage(params.targetPageId);
+    const idempotencyKey = String((_a = metadata.idempotencyKey) != null ? _a : "");
+    if (!idempotencyKey) throw new Error("lifecycle idempotencyKey is required");
+    const existing = findArtifactRoot(page, idempotencyKey);
+    if (existing) {
+      const existingMetadata = readMetadata(existing);
+      if (existingMetadata.planHash !== planHash) {
+        throw new Error(`IDEMPOTENCY_CONFLICT: ${idempotencyKey} already exists with another plan hash`);
+      }
+      return __spreadProps(__spreadValues({}, readArtifact(page, idempotencyKey)), { idempotent: true });
+    }
+    const root = figma.createSection();
+    root.name = `PM Lifecycle · ${String((_b = metadata.specId) != null ? _b : "Artifact")} · v${String((_c = metadata.specVersion) != null ? _c : "")}`;
+    root.x = 0;
+    root.y = 0;
+    page.appendChild(root);
+    writeMetadata(root, __spreadProps(__spreadValues({}, metadata), {
+      kind: "artifact_root",
+      planHash,
+      targetHash: (_d = source.target) == null ? void 0 : _d.targetHash,
+      targetPageId: page.id
+    }));
+    try {
+      for (const [index, screen] of screens.entries()) {
+        const frame = figma.createFrame();
+        frame.name = `${String(screen.screenId)} · ${String(screen.name)}`;
+        frame.resize(360, 720);
+        frame.x = index * 420;
+        frame.y = 80;
+        frame.layoutMode = "VERTICAL";
+        frame.primaryAxisSizingMode = "FIXED";
+        frame.counterAxisSizingMode = "FIXED";
+        frame.itemSpacing = 16;
+        frame.paddingTop = 24;
+        frame.paddingRight = 16;
+        frame.paddingBottom = 24;
+        frame.paddingLeft = 16;
+        root.appendChild(frame);
+        writeMetadata(frame, __spreadProps(__spreadValues({}, metadata), {
+          kind: "screen",
+          screenId: screen.screenId,
+          requirementIds: screen.requirementIds,
+          planHash
+        }));
+        const screenSlots = resolvedSlots.filter((slot) => slot.screenId === screen.screenId);
+        for (const slot of screenSlots) {
+          let node;
+          if (slot.resolution === "component" && typeof slot.componentKey === "string") {
+            const component = yield localComponentByKey(slot.componentKey);
+            node = component.createInstance();
+          } else if (source.mode === "free" && slot.resolution === "primitive_fallback") {
+            const fallback = figma.createFrame();
+            fallback.name = `Fallback · ${String(slot.slotKey)}`;
+            fallback.resize(328, 56);
+            node = fallback;
+          } else {
+            throw new Error(`STRICT_PLAN_VIOLATION: unresolved slot ${String(slot.slotKey)}`);
+          }
+          node.name = `${String(slot.slotKey)} · ${node.name}`;
+          frame.appendChild(node);
+          writeMetadata(node, __spreadProps(__spreadValues({}, metadata), {
+            kind: "slot",
+            screenId: screen.screenId,
+            requirementIds: screen.requirementIds,
+            slotKey: slot.slotKey,
+            componentKey: (_e = slot.componentKey) != null ? _e : null,
+            semanticRole: (_f = slot.semanticRole) != null ? _f : null,
+            primitiveFallback: slot.resolution === "primitive_fallback",
+            planHash
+          }));
+        }
+      }
+      root.resizeWithoutConstraints(Math.max(420, screens.length * 420), 840);
+      writeMetadata(root, __spreadProps(__spreadValues({}, readMetadata(root)), { prototypeEdges: flattenEdges(screens) }));
+      figma.commitUndo();
+      return __spreadProps(__spreadValues({}, readArtifact(page, idempotencyKey)), { idempotent: false });
+    } catch (error) {
+      root.remove();
+      throw error;
+    }
+  });
+  const readArtifact = (page, idempotencyKey) => {
+    var _a;
+    const root = findArtifactRoot(page, idempotencyKey);
+    if (!root) throw new Error(`ARTIFACT_NOT_FOUND: ${idempotencyKey}`);
+    const rootMetadata = readMetadata(root);
+    const screens = "children" in root ? root.children.flatMap((node) => {
+      const metadata = readMetadata(node);
+      if ((metadata == null ? void 0 : metadata.kind) !== "screen") return [];
+      const childSlots = "children" in node ? node.children.flatMap((child) => {
+        const slot = readMetadata(child);
+        return (slot == null ? void 0 : slot.kind) === "slot" ? [{
+          slotKey: String(slot.slotKey),
+          componentKey: typeof slot.componentKey === "string" ? slot.componentKey : null,
+          semanticRole: typeof slot.semanticRole === "string" ? slot.semanticRole : null,
+          primitiveFallback: Boolean(slot.primitiveFallback)
+        }] : [];
+      }) : [];
+      return [{
+        nodeId: node.id,
+        screenId: String(metadata.screenId),
+        name: node.name,
+        componentKey: null,
+        semanticRole: null,
+        metadata: {
+          namespace: metadata.namespace,
+          runId: metadata.runId,
+          threadId: metadata.threadId,
+          actionId: metadata.actionId,
+          specId: metadata.specId,
+          specVersion: metadata.specVersion,
+          idempotencyKey: metadata.idempotencyKey,
+          screenId: metadata.screenId,
+          requirementIds: metadata.requirementIds,
+          planHash: metadata.planHash
+        },
+        childSlots
+      }];
+    }) : [];
+    return {
+      schemaVersion: 1,
+      targetHash: String((_a = rootMetadata.targetHash) != null ? _a : ""),
+      planHash: String(rootMetadata.planHash),
+      idempotencyKey,
+      rootNodeIds: [root.id],
+      screens,
+      prototypeEdges: Array.isArray(rootMetadata.prototypeEdges) ? rootMetadata.prototypeEdges : [],
+      readAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  };
+  const handleLifecycleArtifactRequest = (request) => __async(null, null, function* () {
+    var _a;
+    const params = (_a = request.params) != null ? _a : {};
+    switch (request.type) {
+      case "apply_lifecycle_artifact_plan":
+        return { type: request.type, requestId: request.requestId, data: yield applyArtifact(params) };
+      case "read_lifecycle_artifact": {
+        const page = requireCurrentPage(params.targetPageId);
+        const idempotencyKey = typeof params.idempotencyKey === "string" ? params.idempotencyKey : "";
+        if (!idempotencyKey) throw new Error("idempotencyKey is required");
+        return { type: request.type, requestId: request.requestId, data: readArtifact(page, idempotencyKey) };
+      }
+      default:
+        return null;
+    }
+  });
   const handleReadRequest = (request) => __async(null, null, function* () {
-    var _a, _b;
-    return (_b = (_a = yield handleReadDocumentRequest(request)) != null ? _a : yield handleReadStyleRequest(request)) != null ? _b : yield handleReadExportRequest(request);
+    var _a, _b, _c;
+    return (_c = (_b = (_a = yield handleReadDocumentRequest(request)) != null ? _a : yield handleReadStyleRequest(request)) != null ? _b : yield handleReadExportRequest(request)) != null ? _c : yield handleLifecycleArtifactRequest(request);
   });
   const readRequestTypes = [
     "get_document",
@@ -1252,7 +1462,8 @@ var __async = (__this, __arguments, generator) => {
     "export_tokens",
     "get_screenshot",
     "export_node_as_svg",
-    "export_frames_to_pdf"
+    "export_frames_to_pdf",
+    "read_lifecycle_artifact"
   ];
   const writeRequestTypes = [
     "create_frame",
@@ -1312,7 +1523,8 @@ var __async = (__this, __arguments, generator) => {
     "add_page",
     "rename_page",
     "delete_page",
-    "navigate_to_page"
+    "navigate_to_page",
+    "apply_lifecycle_artifact_plan"
   ];
   const isReadRequestType = (value) => readRequestTypes.includes(value);
   const isWriteRequestType = (value) => writeRequestTypes.includes(value);
@@ -2910,8 +3122,8 @@ var __async = (__this, __arguments, generator) => {
     }
   });
   const handleWriteRequest = (request) => __async(null, null, function* () {
-    var _a, _b, _c, _d, _e, _f, _g;
-    return (_g = (_f = (_e = (_d = (_c = (_b = (_a = yield handleWriteCreateRequest(request)) != null ? _a : yield handleWriteModifyRequest(request)) != null ? _b : yield handleWriteVectorRequest(request)) != null ? _c : yield handleWriteStyleRequest(request)) != null ? _d : yield handleWriteVariableRequest(request)) != null ? _e : yield handleWriteComponentRequest(request)) != null ? _f : yield handleWritePrototypeRequest(request)) != null ? _g : yield handleWritePageRequest(request);
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    return (_h = (_g = (_f = (_e = (_d = (_c = (_b = (_a = yield handleWriteCreateRequest(request)) != null ? _a : yield handleWriteModifyRequest(request)) != null ? _b : yield handleWriteVectorRequest(request)) != null ? _c : yield handleWriteStyleRequest(request)) != null ? _d : yield handleWriteVariableRequest(request)) != null ? _e : yield handleWriteComponentRequest(request)) != null ? _f : yield handleWritePrototypeRequest(request)) != null ? _g : yield handleWritePageRequest(request)) != null ? _h : yield handleLifecycleArtifactRequest(request);
   });
   const requestHandlers = [handleReadRequest, handleWriteRequest];
   const debugLog = (scope, message, extra) => {

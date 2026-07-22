@@ -66,6 +66,7 @@ func NewCapabilityRegistry() *CapabilityRegistry {
 		"create_variable", "set_variable_value", "bind_variable_to_node", "delete_variable",
 		"set_reactions", "remove_reactions", "add_page", "rename_page", "delete_page",
 		"navigate_to_page",
+		"apply_lifecycle_artifact_plan",
 	}
 	exportOps := []string{
 		"get_screenshot", "export_node_as_svg", "save_screenshots", "export_frames_to_pdf", "export_tokens",
@@ -78,7 +79,7 @@ func NewCapabilityRegistry() *CapabilityRegistry {
 		"safe_page_inventory", "extract_component_candidates", "normalize_review_board",
 		"get_runtime_sessions", "set_runtime_session",
 		"capture_design_system_context", "apply_design_system_screen", "audit_design_system_adoption",
-		"plan_design_system_screens",
+		"plan_design_system_screens", "read_lifecycle_artifact", "audit_lifecycle_artifact",
 		"scan_icon_components",
 	}
 

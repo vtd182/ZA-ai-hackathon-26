@@ -21,6 +21,7 @@ export const readRequestTypes = [
   "get_screenshot",
   "export_node_as_svg",
   "export_frames_to_pdf",
+  "read_lifecycle_artifact",
 ] as const;
 
 export const writeRequestTypes = [
@@ -82,6 +83,7 @@ export const writeRequestTypes = [
   "rename_page",
   "delete_page",
   "navigate_to_page",
+  "apply_lifecycle_artifact_plan",
 ] as const;
 
 export type ReadRequestType = (typeof readRequestTypes)[number];

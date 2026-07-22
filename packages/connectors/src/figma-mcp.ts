@@ -4,12 +4,18 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import {
   figmaDesignSystemCaptureSchema,
   figmaPagesSchema,
+  figmaApplyResultSchema,
+  figmaArtifactAuditResultSchema,
+  figmaArtifactSnapshotSchema,
   figmaPreflightResultSchema,
   figmaRuntimeErrorEnvelopeSchema,
   figmaRuntimeHealthSchema,
   figmaTargetBindingSchema,
   type FigmaDesignSystemCapture,
   type FigmaPages,
+  type FigmaApplyResult,
+  type FigmaArtifactAuditResult,
+  type FigmaArtifactSnapshot,
   type FigmaArtifactPlan,
   type FigmaPreflightResult,
   type DesignSystemManifest,
@@ -181,6 +187,34 @@ export class FigmaMcpAdapter {
       manifest,
       allowedTarget,
     }, figmaPreflightResultSchema, 15_000)
+  }
+
+  async applyArtifactPlan(preflight: FigmaPreflightResult, approvedPlanHash: string): Promise<FigmaApplyResult> {
+    await this.verifyTarget(preflight.plan.source.target)
+    return this.call('apply_design_system_plan', {
+      sessionId: preflight.plan.source.target.sessionId,
+      preflight,
+      planHash: preflight.planHash,
+      approvedPlanHash,
+    }, figmaApplyResultSchema, 60_000)
+  }
+
+  async readArtifact(target: FigmaTargetBinding, idempotencyKey: string): Promise<FigmaArtifactSnapshot> {
+    await this.verifyTarget(target)
+    return this.call('read_lifecycle_artifact', {
+      sessionId: target.sessionId,
+      targetPageId: target.pageId,
+      idempotencyKey,
+    }, figmaArtifactSnapshotSchema, 15_000)
+  }
+
+  async auditArtifact(preflight: FigmaPreflightResult): Promise<FigmaArtifactAuditResult> {
+    await this.verifyTarget(preflight.plan.source.target)
+    return this.call('audit_lifecycle_artifact', {
+      sessionId: preflight.plan.source.target.sessionId,
+      preflight,
+      planHash: preflight.planHash,
+    }, figmaArtifactAuditResultSchema, 20_000)
   }
 
   close(): Promise<void> {

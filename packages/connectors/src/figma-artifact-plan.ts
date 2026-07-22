@@ -13,7 +13,7 @@ import {
   type ProductSpec,
 } from '@pm-agent/domain'
 import { stableStringify, type JsonValue } from '@pm-agent/shared'
-import type { PreflightResult } from './index'
+import type { PreflightResult } from './contract'
 
 export interface FigmaPlanMetadataInput {
   runId: string
