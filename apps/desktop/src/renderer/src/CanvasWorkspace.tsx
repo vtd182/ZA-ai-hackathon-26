@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAssetUrlsByImport } from '@tldraw/assets/imports.vite'
-import { projectProductSpec } from '@pm-agent/canvas'
+import { projectProductSpecGraph } from '@pm-agent/canvas'
 import {
   Tldraw,
   createShapeId,
@@ -65,8 +65,12 @@ function removeLegacySeed(editor: Editor): void {
 }
 
 function reconcileProductSpec(editor: Editor, spec: ProductSpec): void {
-  const projections = projectProductSpec(spec)
-  const canonicalIds = new Set(projections.map((projection) => projection.entityId))
+  const graph = projectProductSpecGraph(spec)
+  const projections = graph.entities
+  const canonicalIds = new Set([
+    ...projections.map((projection) => projection.entityId),
+    ...graph.edges.map((edge) => edge.relationshipId),
+  ])
   const currentShapes = editor.getCurrentPageShapes()
   const byEntityId = new Map(currentShapes.map((shape) => [String(shape.meta.entityId ?? ''), shape]))
 
@@ -77,6 +81,7 @@ function reconcileProductSpec(editor: Editor, spec: ProductSpec): void {
       entityId: projection.entityId,
       entityKind: projection.kind,
       label: projection.label,
+      shapeType: projection.shapeType,
       view: projection.view,
       status: projection.state,
     }
@@ -101,6 +106,45 @@ function reconcileProductSpec(editor: Editor, spec: ProductSpec): void {
         meta,
       })
     }
+  }
+
+
+  const projectionById = new Map(projections.map((projection) => [projection.entityId, projection]))
+  for (const edge of graph.edges) {
+    const source = projectionById.get(edge.sourceEntityId)!
+    const target = projectionById.get(edge.targetEntityId)!
+    const x = source.x + source.width / 2
+    const y = source.y + source.height / 2
+    const edgeId = createShapeId(`edge-${edge.relationshipId.toLowerCase()}`)
+    const meta = {
+      entityId: edge.relationshipId,
+      entityKind: 'relationship',
+      label: edge.relationshipType,
+      view: edge.view,
+      sourceEntityId: edge.sourceEntityId,
+      targetEntityId: edge.targetEntityId,
+      sourceView: edge.sourceView,
+      targetView: edge.targetView,
+      shapeType: edge.shapeType,
+      status: 'active',
+    }
+    const shape = {
+      id: edgeId,
+      type: 'arrow' as const,
+      x,
+      y,
+      props: {
+        start: { x: 0, y: 0 },
+        end: { x: target.x + target.width / 2 - x, y: target.y + target.height / 2 - y },
+        color: 'grey' as const,
+        dash: 'dashed' as const,
+        size: 's' as const,
+        arrowheadEnd: 'arrow' as const,
+      },
+      meta,
+    }
+    if (editor.getShape(edgeId)?.type === 'arrow') editor.updateShape(shape)
+    else editor.createShape(shape)
   }
 
   for (const shape of currentShapes) {
@@ -177,9 +221,16 @@ export function CanvasWorkspace({
       const entityId = String(shape.meta.entityId ?? '')
       const shapeView = shape.meta.view
       const status = shape.meta.status
+      const isEdge = shape.meta.shapeType === 'pm_traceability_edge'
+      const sourceEntityId = String(shape.meta.sourceEntityId ?? '')
+      const targetEntityId = String(shape.meta.targetEntityId ?? '')
       const visible = view === 'change'
-        ? affected.has(entityId) || shapeView === 'change'
-        : shapeView === view
+        ? isEdge
+          ? affected.has(sourceEntityId) && affected.has(targetEntityId)
+          : affected.has(entityId) || shapeView === 'change'
+        : isEdge
+          ? shape.meta.sourceView === view && shape.meta.targetView === view
+          : shapeView === view
       const opacity = !visible ? 0 : status === 'removed' ? 0.18 : changePreview && affected.has(entityId) ? 0.5 : 1
       editor.updateShape({ id: shape.id, type: shape.type, opacity })
       if (visible) visibleShapeIds.push(shape.id)

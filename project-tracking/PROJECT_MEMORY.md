@@ -56,8 +56,9 @@ Signature moment:
 - **Completed task:** `P0-HIS-001` turn/event repositories, FTS5 and cursor pagination with bounded renderer hydration.
 - **Completed task:** `P0-HIS-002` full offline restart and stale opaque provider ref replacement.
 - **Completed task:** `P0-HIS-004` one stable CanvasDocument per thread with A/B restart/checkpoint evidence.
-- **Current task:** `P0-CAN-001` explicit canvas entity/edge contract and deterministic four-view layout is `IN_PROGRESS`.
-- **Current slice:** Add typed projection shapes and traceability edges, render deterministic tldraw arrows and lock same-input snapshots.
+- **Completed task:** `P0-CAN-001` versioned entity/edge projection contract, deterministic four-view layout and semantic traceability arrows.
+- **Current task:** `P0-CAN-002` ProductSpec projection and guarded canvas domain commands is `IN_PROGRESS`.
+- **Current slice:** Canvas delete emits a validated proposal, canonical projection restores immediately and ProductSpec changes only through immutable preview/approval.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.

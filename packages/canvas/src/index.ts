@@ -3,6 +3,7 @@ import type { EntityKind, ProductSpec, WorkflowView } from '@pm-agent/domain'
 export type CanvasTone = 'yellow' | 'green' | 'blue' | 'violet' | 'orange' | 'red'
 
 export interface CanvasEntityProjection {
+  shapeType: 'pm_entity'
   entityId: string
   kind: EntityKind
   label: string
@@ -15,6 +16,23 @@ export interface CanvasEntityProjection {
   state: 'active' | 'removed' | 'affected'
 }
 
+export interface CanvasEdgeProjection {
+  shapeType: 'pm_traceability_edge'
+  relationshipId: string
+  relationshipType: ProductSpec['relationships'][number]['type']
+  sourceEntityId: string
+  targetEntityId: string
+  sourceView: WorkflowView
+  targetView: WorkflowView
+  view: WorkflowView
+}
+
+export interface CanvasGraphProjection {
+  schemaVersion: 1
+  entities: CanvasEntityProjection[]
+  edges: CanvasEdgeProjection[]
+}
+
 function lane(
   entities: Array<{ id: string; kind: EntityKind; title: string }>,
   view: WorkflowView,
@@ -23,6 +41,7 @@ function lane(
   removedIds: Set<string>,
 ): CanvasEntityProjection[] {
   return entities.map((entity, index) => ({
+    shapeType: 'pm_entity',
     entityId: entity.id,
     kind: entity.kind,
     label: `${entity.id}\n${entity.title}`,
@@ -50,3 +69,23 @@ export function projectProductSpec(spec: ProductSpec): CanvasEntityProjection[] 
   ]
 }
 
+export function projectProductSpecGraph(spec: ProductSpec): CanvasGraphProjection {
+  const entities = projectProductSpec(spec)
+  const byId = new Map(entities.map((entity) => [entity.entityId, entity]))
+  const edges = spec.relationships.map((relationship): CanvasEdgeProjection => {
+    const source = byId.get(relationship.source.id)
+    const target = byId.get(relationship.target.id)
+    if (!source || !target) throw new Error(`Canvas edge references an unprojected entity: ${relationship.id}`)
+    return {
+      shapeType: 'pm_traceability_edge',
+      relationshipId: relationship.id,
+      relationshipType: relationship.type,
+      sourceEntityId: source.entityId,
+      targetEntityId: target.entityId,
+      sourceView: source.view,
+      targetView: target.view,
+      view: target.view,
+    }
+  })
+  return { schemaVersion: 1, entities, edges }
+}

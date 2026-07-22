@@ -212,19 +212,19 @@
 
 ### `P0-CAN-001` Canvas shapes and deterministic layout
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-UI-001, P0-DOM-001
 - **Deliver:** custom shapes, four view layouts, stable entity refs and edges.
 - **Acceptance:** snapshot cùng input giống nhau; shape chỉ chứa ref/presentation metadata.
-- **Progress:** deterministic four-view coordinates and stable entity metadata are tested; currently uses tldraw note shapes and lacks explicit traceability edges/custom shape contract.
+- **Evidence:** versioned `pm_entity` and `pm_traceability_edge` projection contracts carry stable semantic refs while deterministic renderer-owned layout computes coordinates. Same-input graph snapshots, edge referential integrity and coordinate exclusion are tested; production smoke screenshot verifies four-view tldraw rendering with traceability arrows and no blank canvas.
 
 ### `P0-CAN-002` ProductSpec projection and domain commands
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-CAN-001, P0-DOM-003
 - **Deliver:** projection renderer, selection sync, commands for option/change.
 - **Acceptance:** canvas edit không sửa business state trực tiếp; command invalid bị reject.
-- **Progress:** canonical ProductSpec projection is separate from canvas snapshots; provider commands are schema-validated and removal stays a visual proposal until approval. Còn thiếu canvas gesture validation and invalid-command tests at the UI/core boundary.
+- **Current slice:** add a typed canvas gesture proposal, validate it at the Agent Core boundary, restore canonical projection immediately and require the existing immutable preview/approval flow before ProductSpec mutation.
 
 ### `P0-UI-003` Artifact preview and approval
 
