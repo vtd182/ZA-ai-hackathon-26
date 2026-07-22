@@ -156,19 +156,19 @@
 
 ### `P0-HIS-001` Thread, turn and message repositories
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-PER-001
 - **Deliver:** thread CRUD/archive, paginated messages, normalized parts/events, FTS5 search và indexes.
 - **Acceptance:** 500-message fixture query theo page; app không load full transcript vào renderer.
-- **Progress:** thread create/get/archive, capped recent messages, indexes và substring search đã có. Còn thiếu turns/parts/events, cursor pagination, FTS5 và 500-message performance test.
+- **Evidence:** repositories now persist turns/text parts/normalized events; cursor pages are stable by `(createdAt,id)`, capped at 100 and wired to renderer “Tải tin cũ”. FTS5 trigger sync/backfill supports transcript search. 500-message test proves two non-overlapping pages within the query budget and initial renderer hydration stays capped.
 
 ### `P0-HIS-002` Thread checkpoint and resume
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-HIS-001, P0-PER-002
 - **Deliver:** checkpoint schema, migration, latest restore và stale provider handling.
 - **Acceptance:** restart app phục hồi phase, ProductSpec, messages và canvas; resume vẫn xem được offline.
-- **Progress:** phase/messages/canvas snapshot/ProductSpec/run checkpoint đều persist trong SQLite và hydrate offline; còn thiếu stale-provider handling và explicit latest-checkpoint repository test qua full restart.
+- **Evidence:** full close/reopen integration restores phase, ProductSpec, messages and canvas without contacting a provider. Opaque stale Codex ref remains inspectable offline and is replaced by a fresh ref on the next successful segment update; Codex adapter already starts a new thread when resume fails.
 
 ### `P0-HIS-003` History sidebar and chat stream UI
 
@@ -176,15 +176,15 @@
 - **Depends on:** P0-HIS-001, P0-UI-001, P0-AGT-003
 - **Deliver:** searchable/virtualized history, new/open/archive thread, paginated chat, streaming/cancel states.
 - **Acceptance:** chuyển thread không trộn messages; provider/model/phase/status nhìn thấy rõ; stream delta được batch.
-- **Progress:** sidebar search/new/open/archive, thread isolation, visible provider/model/phase và cancel state đã có. Còn thiếu virtualized history, paginated chat và normalized batched streaming deltas.
+- **Progress:** sidebar search/new/open/archive, thread isolation, visible provider/model/phase, cancel state, cursor-paginated chat and browser layout virtualization are implemented. Remaining gap is live batched delta rendering for streaming-capable providers.
 
 ### `P0-HIS-004` One canvas per thread
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-HIS-002, P0-CAN-001
 - **Deliver:** CanvasDocument ownership, snapshot/patch persistence, hydrate active/unmount inactive canvas.
 - **Acceptance:** thread A/B có canvas ID/state độc lập; turn tạo checkpoint thay vì canvas mới; resume giữ stable entity refs.
-- **Progress:** active thread owns and hydrates one serialized tldraw snapshot; inactive canvas unmounts and stable ProductSpec refs project deterministically. Còn thiếu explicit CanvasDocument/checkpoint schema và A/B restart integration test.
+- **Evidence:** explicit `canvas_documents/checkpoints/patches` schema owns one unique document per thread; renderer keys/unmounts by active thread. A/B restart test proves isolated snapshots and exactly two documents while three saves create three checkpoints, not turn-scoped canvases.
 
 ### `P0-HIS-005` Chat-canvas bidirectional commands
 
@@ -212,7 +212,7 @@
 
 ### `P0-CAN-001` Canvas shapes and deterministic layout
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-UI-001, P0-DOM-001
 - **Deliver:** custom shapes, four view layouts, stable entity refs and edges.
 - **Acceptance:** snapshot cùng input giống nhau; shape chỉ chứa ref/presentation metadata.

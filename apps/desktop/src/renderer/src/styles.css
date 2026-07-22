@@ -626,7 +626,23 @@ button {
 }
 
 .message {
+  content-visibility: auto;
+  contain-intrinsic-size: 72px;
   max-width: 92%;
+}
+
+.load-earlier-button {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid #d5dee1;
+  border-radius: 5px;
+  color: #526167;
+  background: #ffffff;
+  font-size: 9.5px;
 }
 
 .message > span {

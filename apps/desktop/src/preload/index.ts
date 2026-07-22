@@ -10,6 +10,7 @@ const api: DesktopApi = {
     get: (threadId) => ipcRenderer.invoke('threads:get', threadId),
     archive: (threadId) => ipcRenderer.invoke('threads:archive', threadId),
     setProvider: (threadId, profileId, confirmPaid) => ipcRenderer.invoke('threads:set-provider', threadId, profileId, confirmPaid),
+    messages: (threadId, cursor, limit) => ipcRenderer.invoke('threads:messages', threadId, cursor, limit),
   },
   canvas: {
     save: (threadId, snapshot) => ipcRenderer.invoke('canvas:save', threadId, snapshot),

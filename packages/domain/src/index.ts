@@ -141,6 +141,12 @@ export interface ThreadSummary {
 export interface ThreadDetail extends ThreadSummary {
   canvasSnapshot: unknown | null
   messages: ChatMessage[]
+  messageNextCursor: string | null
+}
+
+export interface MessagePage {
+  items: ChatMessage[]
+  nextCursor: string | null
 }
 
 export interface ProviderProfile {
@@ -211,6 +217,7 @@ export interface DesktopApi {
     get(threadId: string): Promise<ThreadDetail>
     archive(threadId: string): Promise<void>
     setProvider(threadId: string, profileId: string, confirmPaid?: boolean): Promise<ThreadDetail>
+    messages(threadId: string, cursor?: string, limit?: number): Promise<MessagePage>
   }
   canvas: {
     save(threadId: string, snapshot: unknown): Promise<void>

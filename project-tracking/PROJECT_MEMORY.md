@@ -53,8 +53,11 @@ Signature moment:
 - **Completed task:** `P0-UI-002` clarification/decision workspace and ProductSpec inspector; lifecycle UI smoke passes with persisted resume.
 - **Completed tasks:** `P0-UI-003`, `P0-UI-004` and `P0-CHG-002`; approve/reject/partial-retry UI paths all have production smoke evidence.
 - **Completed tasks:** `P0-PER-001/002` migration ledger, full local schema and atomic checkpoint transactions; clean-profile smoke passes.
-- **Current task:** `P0-HIS-001` paginated/FTS history repository is `IN_PROGRESS`.
-- **Current slice:** Add cursor message pages, FTS5 search/index sync and a 500-message query budget test, then keep renderer hydration bounded.
+- **Completed task:** `P0-HIS-001` turn/event repositories, FTS5 and cursor pagination with bounded renderer hydration.
+- **Completed task:** `P0-HIS-002` full offline restart and stale opaque provider ref replacement.
+- **Completed task:** `P0-HIS-004` one stable CanvasDocument per thread with A/B restart/checkpoint evidence.
+- **Current task:** `P0-CAN-001` explicit canvas entity/edge contract and deterministic four-view layout is `IN_PROGRESS`.
+- **Current slice:** Add typed projection shapes and traceability edges, render deterministic tldraw arrows and lock same-input snapshots.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -411,6 +414,14 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Canvas saves now create checkpoints while retaining the legacy snapshot column for upgrade compatibility.
 - Clean/reopen tests and production smoke pass; atomic approval/outbox and canonical checkpoint handoff complete the transaction service acceptance.
 - Next action: add cursor pagination, FTS5 search and 500-message performance coverage.
+
+### 2026-07-22 - Scalable history and canvas ownership
+
+- Added FTS5 transcript search, stable cursor message pages, bounded initial hydration and browser layout virtualization.
+- 500-message test returns two disjoint pages under budget; renderer can prepend older pages on demand.
+- Full offline restart restores phase/ProductSpec/messages/canvas/provider ref and safely replaces a stale opaque ref.
+- Explicit CanvasDocument ownership test proves two threads keep two isolated documents while saves create checkpoints only.
+- Next action: add typed canvas entity/edge projections and deterministic traceability arrows.
 
 ## 10. End-of-session checklist
 

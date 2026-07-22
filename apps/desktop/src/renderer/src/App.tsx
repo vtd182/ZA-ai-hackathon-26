@@ -200,6 +200,16 @@ export function App(): React.JSX.Element {
     await window.pmAgent.chat.cancel(activeThread.id)
   }
 
+  const loadEarlierMessages = async (): Promise<void> => {
+    if (!activeThread?.messageNextCursor) return
+    const page = await window.pmAgent.threads.messages(activeThread.id, activeThread.messageNextCursor, 50)
+    setActiveThread({
+      ...activeThread,
+      messages: [...page.items, ...activeThread.messages],
+      messageNextCursor: page.nextCursor,
+    })
+  }
+
   const approveChange = async (): Promise<void> => {
     if (!activeThread || approving) return
     setApproving(true)
@@ -426,6 +436,7 @@ export function App(): React.JSX.Element {
 
       <ChatPanel
         messages={activeThread?.messages ?? []}
+        hasEarlierMessages={Boolean(activeThread?.messageNextCursor)}
         selection={selection}
         sending={sending}
         approving={approving}
@@ -436,6 +447,7 @@ export function App(): React.JSX.Element {
         disabled={!activeThread}
         onSend={sendMessage}
         onStop={stopMessage}
+        onLoadEarlier={loadEarlierMessages}
         onApprove={approveChange}
         onReject={rejectChange}
         onRetry={retryAction}
@@ -604,6 +616,7 @@ function FigmaSetupDialog({
 
 function ChatPanel({
   messages,
+  hasEarlierMessages,
   selection,
   sending,
   approving,
@@ -614,6 +627,7 @@ function ChatPanel({
   disabled,
   onSend,
   onStop,
+  onLoadEarlier,
   onApprove,
   onReject,
   onRetry,
@@ -621,6 +635,7 @@ function ChatPanel({
   onSelectDecision,
 }: {
   messages: ChatMessage[]
+  hasEarlierMessages: boolean
   selection?: CanvasSelectionContext
   sending: boolean
   approving: boolean
@@ -631,6 +646,7 @@ function ChatPanel({
   disabled: boolean
   onSend(content: string): Promise<void>
   onStop(): Promise<void>
+  onLoadEarlier(): Promise<void>
   onApprove(): Promise<void>
   onReject(): Promise<void>
   onRetry(target: PlannedAction['target']): Promise<void>
@@ -661,6 +677,9 @@ function ChatPanel({
       )}
       {productSpec && <ProductSpecInspector productSpec={productSpec} selection={selection} />}
       <div className="message-list">
+        {hasEarlierMessages && (
+          <button className="load-earlier-button" onClick={() => void onLoadEarlier()}><RefreshCw size={13} /> Tải tin cũ</button>
+        )}
         {messages.map((message) => (
           <article className={`message ${message.role}`} key={message.id}>
             <span>{message.role === 'user' ? 'Bạn' : message.role === 'assistant' ? 'Agent' : 'System'}</span>

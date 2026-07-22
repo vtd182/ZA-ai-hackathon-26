@@ -293,6 +293,7 @@ function registerIpc(): void {
   ipcMain.handle('threads:list', (_event, query?: string) => history.listThreads(query))
   ipcMain.handle('threads:create', () => history.createThread())
   ipcMain.handle('threads:get', (_event, threadId: string) => history.getThread(threadId))
+  ipcMain.handle('threads:messages', (_event, threadId: string, cursor?: string, limit?: number) => history.listMessagesPage(threadId, cursor, limit))
   ipcMain.handle('threads:archive', (_event, threadId: string) => history.archiveThread(threadId))
   ipcMain.handle('threads:set-provider', (_event, threadId: string, profileId: string, confirmPaid = false) => {
     const thread = history.getThread(threadId)

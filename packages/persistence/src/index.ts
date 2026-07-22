@@ -8,6 +8,7 @@ import type {
   ProviderEvent,
   ThreadDetail,
   ThreadSummary,
+  MessagePage,
   WorkflowView,
 } from '@pm-agent/domain'
 import { providerCapabilitiesSchema } from '@pm-agent/domain'
@@ -106,6 +107,24 @@ function summaryFromRow(row: ThreadRow): ThreadSummary {
   }
 }
 
+function ftsQuery(value: string): string {
+  return value.trim().split(/\s+/).filter(Boolean).map((term) => `"${term.replaceAll('"', '""')}"*`).join(' AND ')
+}
+
+function encodeMessageCursor(row: MessageRow): string {
+  return Buffer.from(JSON.stringify([row.created_at, row.id]), 'utf8').toString('base64url')
+}
+
+function decodeMessageCursor(cursor: string): [string, string] {
+  try {
+    const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as unknown
+    if (!Array.isArray(value) || value.length !== 2 || value.some((item) => typeof item !== 'string')) throw new Error()
+    return value as [string, string]
+  } catch {
+    throw new Error('Invalid message cursor')
+  }
+}
+
 export class HistoryStore {
   private readonly db: Database.Database
 
@@ -132,10 +151,10 @@ export class HistoryStore {
           ) AS last_message
           FROM conversation_threads t
           WHERE t.status = 'active' AND (t.title LIKE @query OR EXISTS (
-            SELECT 1 FROM messages m WHERE m.thread_id = t.id AND m.content LIKE @query
+            SELECT 1 FROM messages_fts f WHERE f.thread_id = t.id AND messages_fts MATCH @fts
           ))
           ORDER BY t.updated_at DESC LIMIT @limit
-        `).all({ query: `%${normalized}%`, limit }) as ThreadRow[]
+        `).all({ query: `%${normalized}%`, fts: ftsQuery(normalized), limit }) as ThreadRow[]
       : this.db.prepare(`
           SELECT t.*, (
             SELECT content FROM messages m WHERE m.thread_id = t.id ORDER BY m.created_at DESC LIMIT 1
@@ -168,12 +187,7 @@ export class HistoryStore {
     `).get(threadId) as ThreadRow | undefined
     if (!row) throw new Error('Không tìm thấy cuộc hội thoại')
 
-    const messageRows = this.db.prepare(`
-      SELECT * FROM (
-        SELECT id, thread_id, role, content, created_at FROM messages
-        WHERE thread_id = ? ORDER BY created_at DESC LIMIT ?
-      ) ORDER BY created_at ASC
-    `).all(threadId, messageLimit) as MessageRow[]
+    const messagePage = this.listMessagesPage(threadId, undefined, messageLimit)
 
     let canvasSnapshot: unknown | null = null
     if (row.canvas_snapshot) {
@@ -184,7 +198,29 @@ export class HistoryStore {
       }
     }
 
-    return { ...summaryFromRow(row), canvasSnapshot, messages: messageRows.map(messageFromRow) }
+    return { ...summaryFromRow(row), canvasSnapshot, messages: messagePage.items, messageNextCursor: messagePage.nextCursor }
+  }
+
+  listMessagesPage(threadId: string, cursor?: string, requestedLimit = 50): MessagePage {
+    const limit = Math.max(1, Math.min(100, requestedLimit))
+    const boundary = cursor ? decodeMessageCursor(cursor) : null
+    const rows = this.db.prepare(`
+      SELECT id, thread_id, role, content, created_at FROM messages
+      WHERE thread_id = @threadId
+        AND (@cursorAt IS NULL OR created_at < @cursorAt OR (created_at = @cursorAt AND id < @cursorId))
+      ORDER BY created_at DESC, id DESC LIMIT @limit
+    `).all({
+      threadId,
+      cursorAt: boundary?.[0] ?? null,
+      cursorId: boundary?.[1] ?? null,
+      limit: limit + 1,
+    }) as MessageRow[]
+    const hasMore = rows.length > limit
+    const pageRows = rows.slice(0, limit)
+    return {
+      items: pageRows.map(messageFromRow).reverse(),
+      nextCursor: hasMore && pageRows.length > 0 ? encodeMessageCursor(pageRows.at(-1)!) : null,
+    }
   }
 
   archiveThread(threadId: string): void {
