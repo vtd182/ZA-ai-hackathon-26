@@ -132,11 +132,11 @@
 
 ### `P0-PRV-001` Provider segments and canonical handoff
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-AGT-003, P0-PER-002
 - **Deliver:** ProviderSegment persistence, HandoffPackage, safe checkpoint guards và cost/privacy confirmation.
 - **Acceptance:** đổi provider giữ nguyên thread/canvas/ProductSpec; switch bị chặn khi stream/write chưa ổn định; không auto-fallback sang paid API.
-- **Progress:** opaque provider segment và per-thread provider selection đã persist; UI chặn switch khi chat đang gửi. Còn thiếu canonical HandoffPackage, write-in-flight guard, explicit paid-provider confirmation và segment capability snapshot.
+- **Evidence:** canonical handoff contains ProductSpec, run checkpoint, recent messages, pending actions and canvas-presence only; no hidden provider state. Segment transaction persists capability snapshot/handoff and preserves thread/canvas/ProductSpec. Core blocks active turn/write and unconfirmed paid API. Production smoke verifies paid confirmation UI/API and round-trip Mock -> OpenAI slot -> Mock without making a paid call.
 
 ### `P0-PRV-002` Codex App Server adapter
 
@@ -204,7 +204,7 @@
 
 ### `P0-UI-002` Lifecycle workspace
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-AGT-002, P0-UI-001
 - **Deliver:** history + idea/chat intake, clarification, option lanes, selection, ProductSpec inspector.
 - **Acceptance:** user hoàn thành decision flow; tối đa 3 câu hỏi; refresh/resume không mất thread state.

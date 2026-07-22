@@ -9,7 +9,7 @@ const api: DesktopApi = {
     create: () => ipcRenderer.invoke('threads:create'),
     get: (threadId) => ipcRenderer.invoke('threads:get', threadId),
     archive: (threadId) => ipcRenderer.invoke('threads:archive', threadId),
-    setProvider: (threadId, profileId) => ipcRenderer.invoke('threads:set-provider', threadId, profileId),
+    setProvider: (threadId, profileId, confirmPaid) => ipcRenderer.invoke('threads:set-provider', threadId, profileId, confirmPaid),
   },
   canvas: {
     save: (threadId, snapshot) => ipcRenderer.invoke('canvas:save', threadId, snapshot),

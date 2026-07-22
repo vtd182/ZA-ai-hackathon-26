@@ -49,8 +49,9 @@ Signature moment:
 - **Completed task:** `P0-AGT-001` phase-specific reasoning contracts and malformed-output guard; real Codex and Mock smoke pass.
 - **Completed task:** `P0-AGT-002` Idea -> Discovery -> `WAITING_FOR_DECISION` orchestration with persisted/reopened reasoning checkpoints.
 - **Completed task:** `P0-AGT-003` normalized provider events/capabilities; partial streams cannot mutate state and real Codex smoke passes.
-- **Current task:** `P0-PRV-001` canonical handoff and safe provider switching is `IN_PROGRESS`.
-- **Current slice:** Persist capability snapshots and canonical handoff packages, block switching during active writes/streams and require confirmation before entering a paid API segment.
+- **Completed task:** `P0-PRV-001` canonical handoff and safe provider switching with paid confirmation and capability snapshots.
+- **Current task:** `P0-UI-002` clarification and decision lifecycle workspace is `IN_PROGRESS`.
+- **Current slice:** Render persisted discovery questions, submit answers into a decision checkpoint, select an option and resume the same thread at Delivery.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -375,6 +376,14 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - OpenAI/Gemini/Claude usage fields normalize into the same token event when available.
 - Mock conformance tests and real Codex production smoke pass through the normalized boundary.
 - Next action: persist capability snapshots and canonical handoff packages for guarded provider switching.
+
+### 2026-07-22 - Safe provider handoff
+
+- Added canonical handoff packages with ProductSpec, app-owned checkpoint, recent messages, pending actions and canvas presence only.
+- Provider segments persist explicit capability snapshots and opaque remote references independently.
+- Core blocks switches during turns or artifact execution; paid API segments require explicit UI/API confirmation.
+- Persistence and production smoke prove thread, canvas and ProductSpec survive Mock -> API slot -> Mock switching without a paid call.
+- Next action: expose resumable discovery questions and decision options in the lifecycle workspace.
 
 ## 10. End-of-session checklist
 

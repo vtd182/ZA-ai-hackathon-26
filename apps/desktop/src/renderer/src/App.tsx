@@ -67,6 +67,7 @@ export function App(): React.JSX.Element {
   const [settingsProfile, setSettingsProfile] = useState<ProviderProfile | null>(null)
   const [figmaSetupOpen, setFigmaSetupOpen] = useState(false)
   const [resetOpen, setResetOpen] = useState(false)
+  const [pendingPaidProvider, setPendingPaidProvider] = useState<ProviderProfile | null>(null)
   const [figmaStatus, setFigmaStatus] = useState<FigmaSetupStatus | null>(null)
   const [selection, setSelection] = useState<CanvasSelectionContext | undefined>()
   const [lifecycleWorkspace, setLifecycleWorkspace] = useState<LifecycleWorkspaceState | null>(null)
@@ -141,11 +142,21 @@ export function App(): React.JSX.Element {
     }
   }
 
-  const switchProvider = async (profileId: string): Promise<void> => {
+  const switchProvider = async (profileId: string, confirmPaid = false): Promise<void> => {
     if (!activeThread) return
-    const detail = await window.pmAgent.threads.setProvider(activeThread.id, profileId)
-    setActiveThread(detail)
-    await refreshThreads()
+    const nextProfile = profiles.find((profile) => profile.id === profileId)
+    if (nextProfile?.costMode === 'api_paid' && !confirmPaid) {
+      setPendingPaidProvider(nextProfile)
+      return
+    }
+    try {
+      const detail = await window.pmAgent.threads.setProvider(activeThread.id, profileId, confirmPaid)
+      setActiveThread(detail)
+      setPendingPaidProvider(null)
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    }
   }
 
   const sendMessage = async (content: string): Promise<void> => {
@@ -408,6 +419,19 @@ export function App(): React.JSX.Element {
             <footer>
               <button className="secondary-button" onClick={() => setResetOpen(false)}>Hủy</button>
               <button className="primary-button confirm-reset-button" disabled={loading} onClick={() => void resetDemo()}>Reset</button>
+            </footer>
+          </section>
+        </div>
+      )}
+
+      {pendingPaidProvider && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setPendingPaidProvider(null)}>
+          <section className="confirm-dialog" role="dialog" aria-modal="true" aria-label="Confirm paid provider" onMouseDown={(event) => event.stopPropagation()}>
+            <header><CircleAlert size={19} /><strong>Chuyển sang {pendingPaidProvider.displayName}?</strong></header>
+            <p>Turn tiếp theo có thể phát sinh API cost và gửi context đã hiển thị tới provider này. Credential vẫn chỉ ở Keychain.</p>
+            <footer>
+              <button className="secondary-button" onClick={() => setPendingPaidProvider(null)}>Hủy</button>
+              <button className="primary-button" onClick={() => void switchProvider(pendingPaidProvider.id, true)}>Xác nhận</button>
             </footer>
           </section>
         </div>

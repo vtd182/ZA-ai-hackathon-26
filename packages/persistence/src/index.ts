@@ -2,11 +2,14 @@ import { randomUUID } from 'node:crypto'
 import Database from 'better-sqlite3'
 import type {
   ChatMessage,
+  HandoffPackage,
+  ProviderCapabilities,
   ProviderProfile,
   ThreadDetail,
   ThreadSummary,
   WorkflowView,
 } from '@pm-agent/domain'
+import { providerCapabilitiesSchema } from '@pm-agent/domain'
 
 export { LifecycleStore } from './lifecycle-store'
 export { FigmaIntegrationStore } from './figma-integration-store'
@@ -181,6 +184,35 @@ export class HistoryStore {
     return this.getThread(threadId)
   }
 
+  switchThreadProvider(
+    threadId: string,
+    profileId: string,
+    capabilities: ProviderCapabilities,
+    handoff: HandoffPackage,
+  ): ThreadDetail {
+    const profile = this.getProfile(profileId)
+    if (handoff.threadId !== threadId || handoff.to.profileId !== profileId || handoff.to.modelId !== profile.modelId) {
+      throw new Error('Provider handoff does not match target profile')
+    }
+    const timestamp = now()
+    const transaction = this.db.transaction(() => {
+      this.db.prepare(`
+        UPDATE provider_segments SET status = 'completed', updated_at = ?
+        WHERE thread_id = ? AND status = 'active'
+      `).run(timestamp, threadId)
+      this.db.prepare(`
+        INSERT INTO provider_segments (
+          id, thread_id, profile_id, model_id, remote_ref, capability_json, handoff_json, status, started_at, updated_at
+        ) VALUES (?, ?, ?, ?, NULL, ?, ?, 'active', ?, ?)
+      `).run(randomUUID(), threadId, profile.id, profile.modelId, JSON.stringify(capabilities), JSON.stringify(handoff), timestamp, timestamp)
+      this.db.prepare(`
+        UPDATE conversation_threads SET provider_id = ?, model_id = ?, updated_at = ? WHERE id = ?
+      `).run(profile.id, profile.modelId, timestamp, threadId)
+    })
+    transaction()
+    return this.getThread(threadId)
+  }
+
   setThreadPhase(threadId: string, phase: WorkflowView): void {
     this.db.prepare('UPDATE conversation_threads SET phase = ?, updated_at = ? WHERE id = ?').run(phase, now(), threadId)
   }
@@ -264,6 +296,18 @@ export class HistoryStore {
     return row?.remote_ref ?? null
   }
 
+  getActiveProviderHandoff(threadId: string): { capabilities: ProviderCapabilities; handoff: HandoffPackage } | null {
+    const row = this.db.prepare(`
+      SELECT capability_json, handoff_json FROM provider_segments
+      WHERE thread_id = ? AND status = 'active' ORDER BY started_at DESC LIMIT 1
+    `).get(threadId) as { capability_json: string | null; handoff_json: string | null } | undefined
+    if (!row?.capability_json || !row.handoff_json) return null
+    return {
+      capabilities: providerCapabilitiesSchema.parse(JSON.parse(row.capability_json)),
+      handoff: JSON.parse(row.handoff_json) as HandoffPackage,
+    }
+  }
+
   saveProviderSegment(threadId: string, profileId: string, modelId: string, remoteRef: string | null): void {
     const timestamp = now()
     const active = this.db.prepare(`
@@ -325,6 +369,8 @@ export class HistoryStore {
         profile_id TEXT NOT NULL,
         model_id TEXT NOT NULL,
         remote_ref TEXT,
+        capability_json TEXT,
+        handoff_json TEXT,
         status TEXT NOT NULL,
         started_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -332,6 +378,9 @@ export class HistoryStore {
       CREATE INDEX IF NOT EXISTS idx_segments_thread_started
         ON provider_segments(thread_id, started_at DESC);
     `)
+    const columns = this.db.prepare('PRAGMA table_info(provider_segments)').all() as Array<{ name: string }>
+    if (!columns.some((column) => column.name === 'capability_json')) this.db.exec('ALTER TABLE provider_segments ADD COLUMN capability_json TEXT')
+    if (!columns.some((column) => column.name === 'handoff_json')) this.db.exec('ALTER TABLE provider_segments ADD COLUMN handoff_json TEXT')
   }
 
   private seedProfiles(): void {

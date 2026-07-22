@@ -2,7 +2,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
-import { acceptCompletedProviderEvents, approveActions, createImpactPreview, executeConnectorAction } from '@pm-agent/agent-core'
+import { acceptCompletedProviderEvents, approveActions, assertProviderSwitchAllowed, createHandoffPackage, createImpactPreview, executeConnectorAction } from '@pm-agent/agent-core'
 import {
   createFigmaArtifactPlan,
   createMockJiraPlan,
@@ -279,7 +279,26 @@ function registerIpc(): void {
   ipcMain.handle('threads:create', () => history.createThread())
   ipcMain.handle('threads:get', (_event, threadId: string) => history.getThread(threadId))
   ipcMain.handle('threads:archive', (_event, threadId: string) => history.archiveThread(threadId))
-  ipcMain.handle('threads:set-provider', (_event, threadId: string, profileId: string) => history.setThreadProvider(threadId, profileId))
+  ipcMain.handle('threads:set-provider', (_event, threadId: string, profileId: string, confirmPaid = false) => {
+    const thread = history.getThread(threadId)
+    if (thread.providerId === profileId) return thread
+    const profile = history.getProfile(profileId)
+    const workspace = workspaceFor(threadId)
+    assertProviderSwitchAllowed({
+      activeTurn: activeRuns.has(threadId),
+      execution: workspace.execution,
+      targetCostMode: profile.costMode,
+      confirmedPaid: confirmPaid,
+    })
+    const handoff = createHandoffPackage({
+      thread,
+      state: workspace.runState,
+      toProfileId: profile.id,
+      toModelId: profile.modelId,
+      createdAt: timestamp(),
+    })
+    return history.switchThreadProvider(threadId, profile.id, providers.get(profile.providerId).capabilities, handoff)
+  })
 
   ipcMain.handle('canvas:save', (_event, threadId: string, snapshot: unknown) => history.saveCanvas(threadId, snapshot))
 
@@ -506,6 +525,31 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       hasSeed: document.body.innerText.includes('REQ-PAYMENT')
     })`) as { hasApi: boolean; hasCanvas: boolean; hasSeed: boolean }
 
+    const providerSwitch = await window.webContents.executeJavaScript(`(async () => {
+      const [beforeThread] = await window.pmAgent.threads.list();
+      const beforeWorkspace = await window.pmAgent.lifecycle.getWorkspace(beforeThread.id);
+      const select = document.querySelector('select[aria-label="Reasoning provider"]');
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'openai-api');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const paidDialogReady = Boolean(document.querySelector('[aria-label="Confirm paid provider"]'));
+      document.querySelector('[aria-label="Confirm paid provider"] .secondary-button')?.click();
+      let paidBlocked = false;
+      try { await window.pmAgent.threads.setProvider(beforeThread.id, 'openai-api'); }
+      catch (error) { paidBlocked = String(error).includes('PAID_PROVIDER_CONFIRMATION_REQUIRED'); }
+      const paid = await window.pmAgent.threads.setProvider(beforeThread.id, 'openai-api', true);
+      const restored = await window.pmAgent.threads.setProvider(beforeThread.id, 'mock-local');
+      const afterWorkspace = await window.pmAgent.lifecycle.getWorkspace(beforeThread.id);
+      return {
+        paidDialogReady,
+        paidBlocked,
+        stableThread: paid.id === beforeThread.id && restored.id === beforeThread.id,
+        stableSpec: beforeWorkspace.runState.productSpec.id === afterWorkspace.runState.productSpec.id
+          && beforeWorkspace.runState.productSpec.version === afterWorkspace.runState.productSpec.version
+      };
+    })()`) as { paidDialogReady: boolean; paidBlocked: boolean; stableThread: boolean; stableSpec: boolean }
+
     if (process.env.PM_AGENT_SMOKE_PROVIDER) {
       await window.webContents.executeJavaScript(`(async () => {
         const [thread] = await window.pmAgent.threads.list();
@@ -656,6 +700,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!, image.toPNG())
     const passed = initial.hasApi && initial.hasCanvas && initial.hasSeed
       && reset.controlReady && reset.deterministic
+      && providerSwitch.paidDialogReady && providerSwitch.paidBlocked && providerSwitch.stableThread && providerSwitch.stableSpec
       && final.hasPreview && !final.pending && !final.hasError
       && approval.committed && approval.specVersion === 2
       && approval.paymentStatus === 'removed' && approval.actionsApproved
@@ -665,7 +710,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && recovery.verified && recovery.preservedTargets
       && figmaSetup.hasSetupDialog && figmaSetup.runtimeReady && figmaSetup.pluginBuilt && figmaSetup.waitingForPlugin
       && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady))
-    console.log(`[smoke] ${JSON.stringify({ passed, reset, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
+    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
     app.exit(passed ? 0 : 1)
   } catch (error) {
     console.error('[smoke] failed', error)

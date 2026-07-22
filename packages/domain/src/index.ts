@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { FigmaSetupStatus } from './figma-setup'
 import type { ApproveChangeOutput, ChangePreview, LifecycleWorkspaceState, PlannedAction } from './lifecycle'
+import type { ProductSpec } from './product-spec'
 
 export * from './design-system'
 export * from './artifact-plan'
@@ -184,13 +185,32 @@ export interface DemoResetOutput {
   workspace: LifecycleWorkspaceState
 }
 
+export interface HandoffPackage {
+  schemaVersion: 1
+  threadId: string
+  from: { profileId: string; modelId: string }
+  to: { profileId: string; modelId: string }
+  productSpec: ProductSpec
+  run: {
+    id: string
+    phase: string
+    status: string
+    specVersion: number
+    checkpointAt: string
+  }
+  recentMessages: ChatMessage[]
+  pendingActions: PlannedAction[]
+  hasCanvasSnapshot: boolean
+  createdAt: string
+}
+
 export interface DesktopApi {
   threads: {
     list(query?: string): Promise<ThreadSummary[]>
     create(): Promise<ThreadDetail>
     get(threadId: string): Promise<ThreadDetail>
     archive(threadId: string): Promise<void>
-    setProvider(threadId: string, profileId: string): Promise<ThreadDetail>
+    setProvider(threadId: string, profileId: string, confirmPaid?: boolean): Promise<ThreadDetail>
   }
   canvas: {
     save(threadId: string, snapshot: unknown): Promise<void>
