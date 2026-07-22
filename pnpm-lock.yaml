@@ -166,6 +166,9 @@ importers:
       '@pm-agent/shared':
         specifier: workspace:*
         version: link:../shared
+      better-sqlite3:
+        specifier: 13.0.1
+        version: 13.0.1
     devDependencies:
       '@pm-agent/fixture-meal-ordering':
         specifier: workspace:*
@@ -173,6 +176,9 @@ importers:
       '@pm-agent/fixture-zalo-design-system':
         specifier: workspace:*
         version: link:../../fixtures/zalo-design-system
+      '@types/better-sqlite3':
+        specifier: 7.6.13
+        version: 7.6.13
       '@types/node':
         specifier: 24.10.0
         version: 24.10.0

@@ -8,6 +8,7 @@ export * from './figma-integration'
 export * from './figma-setup'
 export * from './invariants'
 export * from './lifecycle'
+export * from './mock-artifact'
 export * from './product-spec'
 export * from './state-machine'
 

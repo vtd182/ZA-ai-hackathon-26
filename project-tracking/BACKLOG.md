@@ -104,7 +104,7 @@
 
 ### `P0-AGT-005` Outbox, execution and verification orchestration
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-AGT-004, P0-PER-002
 - **Deliver:** queue, claim, retry, receipt-first recovery, verification status.
 - **Acceptance:** crash/retry simulation không duplicate; verification mismatch thành `VERIFICATION_FAILED`.
@@ -253,17 +253,19 @@
 
 ### `P0-MCK-002` Mock Jira connector
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-MCK-001, P0-PER-001
 - **Deliver:** epic/story create/update/search/read-back, stable IDs, failure injection.
 - **Acceptance:** verify Epic link, Requirement IDs, AC và payload hash; retry không duplicate.
+- **Evidence:** SQLite external store, deterministic Epic/story IDs, failure injection and read-back verification implemented. Common contract suite plus reopen/idempotency and AC-drift tests pass.
 
 ### `P0-MCK-003` Mock Zdoc connector
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-MCK-001, P0-PER-001
 - **Deliver:** PRD preview/create/update/read-back, stable page IDs, failure injection.
 - **Acceptance:** verify title, spec version, requirement sections và traceability metadata.
+- **Evidence:** versioned PRD plan/snapshot, stable page ID, SQLite read-back, requirement/screen/story sections and spec/run traceability checks implemented; common suite and metadata-drift test pass.
 
 ## Epic E6 - Figma Design System Guard
 
