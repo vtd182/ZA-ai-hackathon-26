@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { designSystemManifestSchema } from './design-system'
 
 export const figmaSessionSchema = z.object({
   sessionId: z.string().min(1),
@@ -107,3 +108,54 @@ export const figmaDesignSystemCaptureSchema = z.object({
   }).passthrough()).default([]),
 })
 export type FigmaDesignSystemCapture = z.infer<typeof figmaDesignSystemCaptureSchema>
+
+export const figmaDesignSystemContextSchema = z.object({
+  schemaVersion: z.literal(1),
+  target: figmaTargetBindingSchema,
+  mode: z.enum(['live', 'fixture_fallback']),
+  manifest: designSystemManifestSchema,
+  liveSummary: z.object({
+    sourceRootId: z.string(),
+    sourceRootName: z.string(),
+    componentCount: z.number().int().nonnegative(),
+    componentSetCount: z.number().int().nonnegative(),
+    paintStyleCount: z.number().int().nonnegative(),
+    textStyleCount: z.number().int().nonnegative(),
+    variableCollectionCount: z.number().int().nonnegative(),
+    textNodeCount: z.number().int().nonnegative(),
+    warnings: z.array(z.string()),
+  }),
+  fallbackReason: z.string().nullable(),
+  capturedAt: z.string().datetime(),
+})
+export type FigmaDesignSystemContext = z.infer<typeof figmaDesignSystemContextSchema>
+
+export const figmaDesignSystemContextSummarySchema = z.object({
+  mode: figmaDesignSystemContextSchema.shape.mode,
+  source: designSystemManifestSchema.shape.source,
+  sourceLabel: z.string(),
+  version: z.string(),
+  fingerprint: z.string(),
+  componentCount: z.number().int().nonnegative(),
+  tokenCount: z.number().int().nonnegative(),
+  liveComponentCount: z.number().int().nonnegative(),
+  fallbackReason: z.string().nullable(),
+  capturedAt: z.string().datetime(),
+})
+export type FigmaDesignSystemContextSummary = z.infer<typeof figmaDesignSystemContextSummarySchema>
+
+export function summarizeFigmaDesignSystemContext(context: FigmaDesignSystemContext): FigmaDesignSystemContextSummary {
+  const tokenCount = Object.values(context.manifest.tokens).reduce((total, tokens) => total + tokens.length, 0)
+  return figmaDesignSystemContextSummarySchema.parse({
+    mode: context.mode,
+    source: context.manifest.source,
+    sourceLabel: context.manifest.sourceLabel,
+    version: context.manifest.version,
+    fingerprint: context.manifest.fingerprint,
+    componentCount: context.manifest.components.length,
+    tokenCount,
+    liveComponentCount: context.liveSummary.componentCount,
+    fallbackReason: context.fallbackReason,
+    capturedAt: context.capturedAt,
+  })
+}

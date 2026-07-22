@@ -9,6 +9,7 @@ import type {
 } from '@pm-agent/domain'
 
 export { LifecycleStore } from './lifecycle-store'
+export { FigmaIntegrationStore } from './figma-integration-store'
 
 interface ThreadRow {
   id: string
