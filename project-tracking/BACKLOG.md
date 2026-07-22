@@ -88,11 +88,11 @@
 
 ### `P0-AGT-003` Provider registry and normalized events
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-AGT-001
 - **Deliver:** registry, capability probe, normalized stream events, cancellation và provider conformance kit.
 - **Acceptance:** core/UI không import provider SDK type; malformed/partial stream không mutate canonical state.
-- **Progress:** registry, probes và cancellation đã có; SDK types không leak khỏi reasoning package. Còn thiếu internal `ProviderEvent` stream union, batching và conformance kit.
+- **Evidence:** versioned internal event union normalizes start/delta/result/usage/completed/cancelled/failed without SDK types. Core requires contiguous events, one schema-valid result and terminal completion before acceptance; partial/malformed tests preserve canonical state. Every adapter exposes explicit implemented capabilities, usage normalization exists for API adapters, Mock conformance and real Codex smoke pass. Renderer batching remains tracked under history UI rather than provider correctness.
 
 ### `P0-AGT-004` Approval policy and payload hash
 
@@ -132,7 +132,7 @@
 
 ### `P0-PRV-001` Provider segments and canonical handoff
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-AGT-003, P0-PER-002
 - **Deliver:** ProviderSegment persistence, HandoffPackage, safe checkpoint guards và cost/privacy confirmation.
 - **Acceptance:** đổi provider giữ nguyên thread/canvas/ProductSpec; switch bị chặn khi stream/write chưa ổn định; không auto-fallback sang paid API.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
 import type { RunState } from '@pm-agent/domain'
-import { acceptReasoningProposal } from './reasoning'
+import { acceptCompletedProviderEvents, acceptReasoningProposal } from './reasoning'
 
 const state: RunState = {
   schemaVersion: 1,
@@ -36,5 +36,19 @@ describe('reasoning proposal boundary', () => {
       commands: [],
       phaseData: { artifactTargets: ['figma'], readinessSummary: 'Ready' },
     }, 'decide')).toThrow()
+  })
+
+  it('keeps canonical state unchanged for partial or malformed event streams', () => {
+    const before = structuredClone(state)
+    const at = '2026-07-22T03:01:00.000Z'
+    expect(() => acceptCompletedProviderEvents(state, [
+      { type: 'turn_started', sequence: 0, at },
+      { type: 'text_delta', sequence: 1, at, delta: 'partial' },
+    ], 'discover')).toThrow(/incomplete/)
+    expect(() => acceptCompletedProviderEvents(state, [
+      { type: 'turn_started', sequence: 1, at },
+      { type: 'turn_completed', sequence: 2, at },
+    ], 'discover')).toThrow(/sequence/)
+    expect(state).toEqual(before)
   })
 })

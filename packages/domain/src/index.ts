@@ -100,6 +100,27 @@ export const phaseReasoningResultSchema = z.discriminatedUnion('phase', [
 ])
 export type PhaseReasoningResult = z.infer<typeof phaseReasoningResultSchema>
 
+export const providerCapabilitiesSchema = z.object({
+  structuredOutput: z.boolean(),
+  streaming: z.boolean(),
+  cancellation: z.boolean(),
+  remoteResume: z.boolean(),
+  usage: z.boolean(),
+})
+export type ProviderCapabilities = z.infer<typeof providerCapabilitiesSchema>
+
+const providerEventBase = { sequence: z.number().int().nonnegative(), at: z.string().datetime() }
+export const providerEventSchema = z.discriminatedUnion('type', [
+  z.object({ ...providerEventBase, type: z.literal('turn_started') }),
+  z.object({ ...providerEventBase, type: z.literal('text_delta'), delta: z.string() }),
+  z.object({ ...providerEventBase, type: z.literal('result'), result: phaseReasoningResultSchema }),
+  z.object({ ...providerEventBase, type: z.literal('usage'), inputTokens: z.number().int().nonnegative(), outputTokens: z.number().int().nonnegative() }),
+  z.object({ ...providerEventBase, type: z.literal('turn_completed') }),
+  z.object({ ...providerEventBase, type: z.literal('turn_cancelled') }),
+  z.object({ ...providerEventBase, type: z.literal('turn_failed'), error: z.string().min(1) }),
+])
+export type ProviderEvent = z.infer<typeof providerEventSchema>
+
 export interface CanvasSelectionContext {
   entityId: string
   label: string
@@ -135,6 +156,7 @@ export interface ProviderProbe {
   available: boolean
   label: string
   detail: string
+  capabilities?: ProviderCapabilities
 }
 
 export interface SendChatInput {

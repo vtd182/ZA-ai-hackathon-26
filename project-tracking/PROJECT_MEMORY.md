@@ -48,8 +48,9 @@ Signature moment:
 - **Completed task:** `P0-FND-003` deterministic demo fixtures and reset; three repeated resets produce identical canonical state.
 - **Completed task:** `P0-AGT-001` phase-specific reasoning contracts and malformed-output guard; real Codex and Mock smoke pass.
 - **Completed task:** `P0-AGT-002` Idea -> Discovery -> `WAITING_FOR_DECISION` orchestration with persisted/reopened reasoning checkpoints.
-- **Current task:** `P0-AGT-003` normalized provider events, capabilities and conformance is `IN_PROGRESS`.
-- **Current slice:** Add internal event union and capability probes, normalize adapter completion/cancel/error semantics and prove partial/malformed events cannot mutate canonical state.
+- **Completed task:** `P0-AGT-003` normalized provider events/capabilities; partial streams cannot mutate state and real Codex smoke passes.
+- **Current task:** `P0-PRV-001` canonical handoff and safe provider switching is `IN_PROGRESS`.
+- **Current slice:** Persist capability snapshots and canonical handoff packages, block switching during active writes/streams and require confirmation before entering a paid API segment.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -366,6 +367,14 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Restart test restores both decision state and the exact recommended option; invalid phase/option transitions remain guarded.
 - Seeded signature flow intentionally starts at Delivery so the change-sync demo remains one command away.
 - Next action: normalize provider capabilities/events before wiring phase cards into UI.
+
+### 2026-07-22 - Normalized provider events
+
+- Added provider-owned capability declarations and SDK-free internal start/delta/result/usage/terminal events.
+- Core accepts only contiguous, completed streams with exactly one phase-valid result; partial/cancel/error cannot mutate RunState.
+- OpenAI/Gemini/Claude usage fields normalize into the same token event when available.
+- Mock conformance tests and real Codex production smoke pass through the normalized boundary.
+- Next action: persist capability snapshots and canonical handoff packages for guarded provider switching.
 
 ## 10. End-of-session checklist
 

@@ -11,6 +11,8 @@ import {
   type ChatMessage,
   type ProviderProbe,
   type PhaseReasoningResult,
+  type ProviderCapabilities,
+  type ProviderEvent,
   type WorkflowView,
 } from '@pm-agent/domain'
 
@@ -33,13 +35,39 @@ export interface ProviderRuntimeConfig {
 export interface ProviderResponse {
   result: PhaseReasoningResult
   remoteRef: string | null
+  capabilities: ProviderCapabilities
+  events: ProviderEvent[]
 }
 
 export interface ReasoningProvider {
   readonly id: string
+  readonly capabilities: ProviderCapabilities
   probe(config: ProviderRuntimeConfig): Promise<ProviderProbe>
   reason(request: ReasoningRequest, config: ProviderRuntimeConfig, signal: AbortSignal): Promise<ProviderResponse>
 }
+
+function normalizedResponse(
+  result: PhaseReasoningResult,
+  remoteRef: string | null,
+  capabilities: ProviderCapabilities,
+  usage?: { inputTokens: number; outputTokens: number },
+): ProviderResponse {
+  const at = new Date().toISOString()
+  const events: ProviderEvent[] = [
+    { type: 'turn_started', sequence: 0, at },
+    { type: 'text_delta', sequence: 1, at, delta: result.message },
+    { type: 'result', sequence: 2, at, result },
+  ]
+  if (usage) events.push({ type: 'usage', sequence: events.length, at, ...usage })
+  events.push({ type: 'turn_completed', sequence: events.length, at })
+  return { result, remoteRef, capabilities, events }
+}
+
+const mockCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: false, remoteResume: false, usage: false }
+const codexCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: true, cancellation: true, remoteResume: true, usage: false }
+const openAiCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: true, remoteResume: false, usage: true }
+const geminiCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: false, remoteResume: false, usage: true }
+const anthropicCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: true, remoteResume: false, usage: true }
 
 const systemPolicy = `Bạn là reasoning provider cho PM Lifecycle Agent.
 Mục tiêu: giúp PM biến ý tưởng thành ProductSpec có traceability và thay đổi scope có kiểm soát.
@@ -138,21 +166,23 @@ export function inferLocalCommands(message: string, phase: WorkflowView = 'disco
 
 class MockProvider implements ReasoningProvider {
   readonly id = 'mock'
+  readonly capabilities = mockCapabilities
 
   async probe(): Promise<ProviderProbe> {
-    return { available: true, label: 'Sẵn sàng', detail: 'Deterministic offline provider' }
+    return { available: true, label: 'Sẵn sàng', detail: 'Deterministic offline provider', capabilities: this.capabilities }
   }
 
   async reason(request: ReasoningRequest): Promise<ProviderResponse> {
-    return { result: inferLocalCommands(request.message, request.phase), remoteRef: null }
+    return normalizedResponse(inferLocalCommands(request.message, request.phase), null, this.capabilities)
   }
 }
 
 class OpenAIProvider implements ReasoningProvider {
   readonly id = 'openai'
+  readonly capabilities = openAiCapabilities
 
   async probe(config: ProviderRuntimeConfig): Promise<ProviderProbe> {
-    return credentialProbe(config.apiKey, 'OPENAI_API_KEY', 'OpenAI API key')
+    return credentialProbe(config.apiKey, 'OPENAI_API_KEY', 'OpenAI API key', this.capabilities)
   }
 
   async reason(request: ReasoningRequest, config: ProviderRuntimeConfig, signal: AbortSignal): Promise<ProviderResponse> {
@@ -171,15 +201,18 @@ class OpenAIProvider implements ReasoningProvider {
         },
       },
     }, { signal })
-    return { result: parseProviderText(response.output_text, request.phase), remoteRef: response.id }
+    return normalizedResponse(parseProviderText(response.output_text, request.phase), response.id, this.capabilities, response.usage
+      ? { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens }
+      : undefined)
   }
 }
 
 class GeminiProvider implements ReasoningProvider {
   readonly id = 'gemini'
+  readonly capabilities = geminiCapabilities
 
   async probe(config: ProviderRuntimeConfig): Promise<ProviderProbe> {
-    return credentialProbe(config.apiKey, 'GEMINI_API_KEY', 'Gemini API key')
+    return credentialProbe(config.apiKey, 'GEMINI_API_KEY', 'Gemini API key', this.capabilities)
   }
 
   async reason(request: ReasoningRequest, config: ProviderRuntimeConfig, signal: AbortSignal): Promise<ProviderResponse> {
@@ -194,15 +227,19 @@ class GeminiProvider implements ReasoningProvider {
         responseJsonSchema: reasoningJsonSchemaForPhase(request.phase),
       },
     })
-    return { result: parseProviderText(response.text ?? '', request.phase), remoteRef: null }
+    const usage = response.usageMetadata
+    return normalizedResponse(parseProviderText(response.text ?? '', request.phase), null, this.capabilities, usage
+      ? { inputTokens: usage.promptTokenCount ?? 0, outputTokens: usage.candidatesTokenCount ?? 0 }
+      : undefined)
   }
 }
 
 class AnthropicProvider implements ReasoningProvider {
   readonly id = 'anthropic'
+  readonly capabilities = anthropicCapabilities
 
   async probe(config: ProviderRuntimeConfig): Promise<ProviderProbe> {
-    return credentialProbe(config.apiKey, 'ANTHROPIC_API_KEY', 'Anthropic API key')
+    return credentialProbe(config.apiKey, 'ANTHROPIC_API_KEY', 'Anthropic API key', this.capabilities)
   }
 
   async reason(request: ReasoningRequest, config: ProviderRuntimeConfig, signal: AbortSignal): Promise<ProviderResponse> {
@@ -221,7 +258,10 @@ class AnthropicProvider implements ReasoningProvider {
       .filter((block): block is Anthropic.TextBlock => block.type === 'text')
       .map((block) => block.text)
       .join('')
-    return { result: parseProviderText(text, request.phase), remoteRef: response.id }
+    return normalizedResponse(parseProviderText(text, request.phase), response.id, this.capabilities, {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    })
   }
 }
 
@@ -305,13 +345,14 @@ class CodexRpcClient {
 
 class CodexProvider implements ReasoningProvider {
   readonly id = 'codex'
+  readonly capabilities = codexCapabilities
 
   async probe(): Promise<ProviderProbe> {
     try {
       const { stdout } = await execFileAsync('codex', ['--version'], { timeout: 5_000 })
-      return { available: true, label: 'Sẵn sàng', detail: stdout.trim() }
+      return { available: true, label: 'Sẵn sàng', detail: stdout.trim(), capabilities: this.capabilities }
     } catch {
-      return { available: false, label: 'Không khả dụng', detail: 'Không tìm thấy Codex CLI hoặc phiên đăng nhập.' }
+      return { available: false, label: 'Không khả dụng', detail: 'Không tìm thấy Codex CLI hoặc phiên đăng nhập.', capabilities: this.capabilities }
     }
   }
 
@@ -371,7 +412,7 @@ class CodexProvider implements ReasoningProvider {
         outputSchema: reasoningJsonSchemaForPhase(request.phase),
       })
       await completed
-      return { result: parseProviderText(output, request.phase), remoteRef: threadId }
+      return normalizedResponse(parseProviderText(output, request.phase), threadId, this.capabilities)
     } finally {
       signal.removeEventListener('abort', abort)
       client.stop()
@@ -379,11 +420,11 @@ class CodexProvider implements ReasoningProvider {
   }
 }
 
-function credentialProbe(apiKey: string | undefined, envName: string, label: string): ProviderProbe {
+function credentialProbe(apiKey: string | undefined, envName: string, label: string, capabilities: ProviderCapabilities): ProviderProbe {
   const present = Boolean(apiKey || process.env[envName])
   return present
-    ? { available: true, label: 'Đã cấu hình', detail: `${label} có sẵn trong Keychain hoặc environment.` }
-    : { available: false, label: 'Thiếu API key', detail: `Nhập ${label} trong Settings hoặc đặt ${envName}.` }
+    ? { available: true, label: 'Đã cấu hình', detail: `${label} có sẵn trong Keychain hoặc environment.`, capabilities }
+    : { available: false, label: 'Thiếu API key', detail: `Nhập ${label} trong Settings hoặc đặt ${envName}.`, capabilities }
 }
 
 function requiredCredential(apiKey: string | undefined, envName: string): string {
