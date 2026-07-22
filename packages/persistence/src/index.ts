@@ -8,6 +8,8 @@ import type {
   WorkflowView,
 } from '@pm-agent/domain'
 
+export { LifecycleStore } from './lifecycle-store'
+
 interface ThreadRow {
   id: string
   title: string

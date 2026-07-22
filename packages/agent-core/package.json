@@ -7,7 +7,12 @@
   "scripts": { "typecheck": "tsc --noEmit" },
   "dependencies": {
     "@pm-agent/connectors": "workspace:*",
-    "@pm-agent/domain": "workspace:*"
+    "@pm-agent/domain": "workspace:*",
+    "@pm-agent/shared": "workspace:*"
   },
-  "devDependencies": { "typescript": "7.0.2" }
+  "devDependencies": {
+    "@pm-agent/fixture-meal-ordering": "workspace:*",
+    "@types/node": "24.10.0",
+    "typescript": "7.0.2"
+  }
 }

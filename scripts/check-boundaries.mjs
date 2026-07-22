@@ -17,7 +17,7 @@ function sourceFiles(directory) {
   for (const entry of readdirSync(directory)) {
     const path = join(directory, entry)
     if (statSync(path).isDirectory()) output.push(...sourceFiles(path))
-    else if (/\.(?:ts|tsx)$/.test(entry)) output.push(path)
+    else if (/\.(?:ts|tsx)$/.test(entry) && !/\.test\.(?:ts|tsx)$/.test(entry)) output.push(path)
   }
   return output
 }
@@ -41,4 +41,3 @@ if (errors.length > 0) {
   process.exit(1)
 }
 console.log('Package boundaries OK')
-

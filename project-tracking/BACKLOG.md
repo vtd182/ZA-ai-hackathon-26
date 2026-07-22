@@ -46,24 +46,27 @@
 
 ### `P0-DOM-002` Workflow state machine
 
-- **Status:** IN_PROGRESS
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-DOM-001
 - **Deliver:** lifecycle/change states, transition table, guards, domain events.
 - **Acceptance:** test mọi happy transition và ít nhất 5 invalid transitions; write state không thể tới trước approval.
+- **Evidence:** full lifecycle và 5 invalid transitions pass trong `packages/agent-core/src/impact.test.ts`.
 
 ### `P0-DOM-003` ProductSpec invariant validator
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-DOM-001
 - **Deliver:** unique IDs, valid refs, AC ownership, traceability, artifact mapping constraints.
 - **Acceptance:** dangling relationship và unmapped must-have requirement được báo cụ thể.
+- **Evidence:** schema reject dangling refs; invariant test báo `UNMAPPED_MUST_HAVE` theo entity ID.
 
 ### `P0-DOM-004` Deterministic impact graph
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-DOM-003
 - **Deliver:** graph index, traversal, impact set, before/after diff.
 - **Acceptance:** remove-payment fixture chỉ trả đúng payment requirement/screen/story/dependency và affected edges.
+- **Evidence:** exact five-entity impact set, valid spec v2 và 3 target plans được regression-test.
 
 ## Epic E2 - Agent orchestration
 
@@ -90,10 +93,11 @@
 
 ### `P0-AGT-004` Approval policy and payload hash
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-DOM-002
 - **Deliver:** preview, approve/reject, action policy, payload hash invalidation.
 - **Acceptance:** action thay payload sau approval quay lại `pending_approval`; unapproved write bị chặn.
+- **Evidence:** SHA-256 payload mutation test invalidates approval; SQLite atomic commit rejects missing/mismatched approval.
 
 ### `P0-AGT-005` Outbox, execution and verification orchestration
 

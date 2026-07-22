@@ -113,7 +113,16 @@ importers:
       '@pm-agent/domain':
         specifier: workspace:*
         version: link:../domain
+      '@pm-agent/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
+      '@pm-agent/fixture-meal-ordering':
+        specifier: workspace:*
+        version: link:../../fixtures/meal-ordering
+      '@types/node':
+        specifier: 24.10.0
+        version: 24.10.0
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -157,6 +166,12 @@ importers:
         specifier: 13.0.1
         version: 13.0.1
     devDependencies:
+      '@pm-agent/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+      '@pm-agent/fixture-meal-ordering':
+        specifier: workspace:*
+        version: link:../../fixtures/meal-ordering
       '@types/better-sqlite3':
         specifier: 7.6.13
         version: 7.6.13

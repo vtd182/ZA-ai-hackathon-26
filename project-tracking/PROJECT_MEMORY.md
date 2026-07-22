@@ -35,9 +35,9 @@ Signature moment:
 - **Date:** 2026-07-22
 - **Milestone:** First runnable desktop vertical slice complete.
 - **Completed task:** `P0-FND-001` Bootstrap workspace.
-- **Completed tasks:** `P0-FND-001`, `P0-FND-002`, `P0-FND-003`, `P0-DOM-001`.
-- **Current task:** `P0-DOM-002` workflow state machine, followed by invariant/impact/approval orchestration.
-- **Current slice:** Turn the canonical ProductSpec into the verified `Bỏ payment khỏi MVP` preview and approval flow, with one Git commit per rollback boundary.
+- **Completed tasks:** Foundation/fixtures/domain schemas, workflow state machine, ProductSpec invariants, deterministic impact graph and immutable approval policy.
+- **Current task:** Wire the signature change preview/approval into typed IPC, chat and ProductSpec canvas projection.
+- **Current slice:** Make `Bỏ payment khỏi MVP` produce a persisted before/after preview in the running app before any connector write.
 - **Last known repository state:** Có product spec, `project-tracking/`, root `AGENTS.md` và MCP Figma tại `mcp-tool/`; chưa có Git repository hoặc PM Lifecycle app code.
 - **Known blockers:** Chưa có sanitized/allowed Zalo Design System source; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 
