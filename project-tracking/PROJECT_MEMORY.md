@@ -217,10 +217,21 @@ Signature moment:
 - **Found:** 2026-07-22, manual new-chat verification during `P0-QA-001`.
 - **Symptom:** Clicking `Cuộc hội thoại mới` appeared to reuse the previous canvas instead of opening a blank workspace.
 - **Trigger:** Create a thread and open its freshly initialized `IDEA_INTAKE` workspace before sending the first idea.
-- **Root cause:** The new thread correctly had `canvasSnapshot = null`, but `workspaceFor()` initialized every run with the meal-ordering ProductSpec and the renderer projected that fixture immediately.
-- **Fix:** Suppress canonical ProductSpec projection while a non-demo thread remains in `IDEA_INTAKE`; projection begins after the first validated transition to Discovery. The seeded demo thread remains unchanged.
+- **Root cause:** The new thread correctly had `canvasSnapshot = null`, but the UI set `activeThread` before awaiting its workspace. One render could therefore mount the new keyed canvas with the previous thread's ProductSpec; later hiding projection in `IDEA_INTAKE` did not remove the already-created shapes, which canvas autosave then persisted.
+- **Fix:** Keep the old workspace hidden behind loading, fetch the new ThreadDetail and lifecycle workspace first, then switch both states together and clear selection/command batches. Canonical projection also remains suppressed until the first validated Discovery transition. The seeded demo thread is unchanged.
 - **Regression test:** `./run.sh smoke-lifecycle` now requires a null snapshot and zero canonical tldraw shapes before the first message, then completes clarification, decision, resume and verified change sync.
 - **Caveat:** This is a projection rule, not an empty fake ProductSpec; Agent Core still owns a schema-valid run state from thread creation.
+
+### BUG-010 - Renderer HMR outran the Electron preload
+
+- **Status:** FIXED
+- **Found:** 2026-07-22, manual canonical-shape delete after adding `canvas.proposeCommand`.
+- **Symptom:** Delete showed `window.pmAgent.canvas.proposeCommand is not a function` and the canonical shape remained.
+- **Trigger:** Keep an Electron dev process open while renderer code hot-reloads after the preload API contract changes.
+- **Root cause:** Renderer HMR can update React code without replacing the already-loaded context-isolated preload object.
+- **Fix:** Guard the capability at runtime and show an explicit full-restart instruction instead of a raw TypeError; production builds and fresh dev starts load the matching preload.
+- **Regression test:** Workspace typecheck locks the shared `DesktopApi`; production `smoke-lifecycle` builds and loads main/preload/renderer together and passes.
+- **Caveat:** Any preload or IPC contract edit requires fully quitting and restarting Electron; renderer HMR alone is insufficient.
 
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 

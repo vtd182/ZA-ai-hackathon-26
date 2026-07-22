@@ -129,10 +129,21 @@ export function App(): React.JSX.Element {
   }, [refreshThreads, search])
 
   const createThread = async (): Promise<void> => {
-    const detail = await window.pmAgent.threads.create()
-    setActiveThread(detail)
-    setLifecycleWorkspace(await window.pmAgent.lifecycle.getWorkspace(detail.id))
-    await refreshThreads()
+    setLoading(true)
+    setError(null)
+    try {
+      const detail = await window.pmAgent.threads.create()
+      const workspace = await window.pmAgent.lifecycle.getWorkspace(detail.id)
+      setActiveThread(detail)
+      setLifecycleWorkspace(workspace)
+      setSelection(undefined)
+      setCommandBatch({ id: 0, commands: [] })
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setLoading(false)
+    }
   }
 
   const archiveThread = async (threadId: string): Promise<void> => {
@@ -297,6 +308,10 @@ export function App(): React.JSX.Element {
 
   const proposeCanvasCommand = useCallback(async (command: CanvasGestureCommand): Promise<void> => {
     if (!activeThread || approving) return
+    if (typeof window.pmAgent.canvas.proposeCommand !== 'function') {
+      setError('Electron runtime đang dùng preload cũ. Hãy thoát hẳn ứng dụng rồi chạy lại ./run.sh reset.')
+      return
+    }
     setApproving(true)
     setError(null)
     try {

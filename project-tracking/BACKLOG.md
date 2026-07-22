@@ -361,7 +361,7 @@
 - **Deliver:** coverage cho invariants, transitions, impact, approval, idempotency, connector parity.
 - **Acceptance:** critical test matrix gồm provider/history/canvas/connector trong `TEST_AND_DEMO_PLAN.md` pass.
 - **Current slice:** reconcile the documented critical matrix against the 84-test suite and dedicated production smoke modes; add or record evidence for any uncovered P0 contract.
-- **Progress:** lifecycle production smoke now also proves a newly created `IDEA_INTAKE` thread has a null snapshot and zero canonical canvas shapes before the first message.
+- **Progress:** lifecycle production smoke now also proves a newly created `IDEA_INTAKE` thread switches ThreadDetail/workspace atomically, has a null snapshot and contains zero canonical canvas shapes before the first message.
 
 ### `P0-QA-002` Desktop E2E happy path
 
