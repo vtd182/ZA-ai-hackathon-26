@@ -20,6 +20,7 @@ export class FigmaIntegrationStore {
   constructor(filename: string) {
     this.db = new Database(filename)
     this.db.pragma('journal_mode = WAL')
+    this.db.pragma('foreign_keys = ON')
     this.migrate()
   }
 

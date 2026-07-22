@@ -24,7 +24,8 @@ describe('FigmaIntegrationStore', () => {
   it('persists exactly one active allowlisted target and its normalized context', () => {
     const directory = mkdtempSync(join(tmpdir(), 'pm-agent-figma-store-'))
     directories.push(directory)
-    const store = new FigmaIntegrationStore(join(directory, 'test.sqlite'))
+    const databasePath = join(directory, 'test.sqlite')
+    const store = new FigmaIntegrationStore(databasePath)
     const first = target('a', 'session-a')
     const second = target('b', 'session-b')
     store.saveActiveTarget(first)
@@ -61,9 +62,11 @@ describe('FigmaIntegrationStore', () => {
       capturedAt: '2026-07-22T13:00:00.000Z',
     }
     store.saveContext(context)
-
-    expect(store.getActiveTarget()).toEqual(second)
-    expect(store.getContext(second.targetHash)).toEqual(context)
     store.close()
+
+    const reopened = new FigmaIntegrationStore(databasePath)
+    expect(reopened.getActiveTarget()).toEqual(second)
+    expect(reopened.getContext(second.targetHash)).toEqual(context)
+    reopened.close()
   })
 })
