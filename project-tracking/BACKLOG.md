@@ -245,14 +245,15 @@
 
 ### `P0-MCK-001` Connector contract test kit
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-DOM-001
 - **Deliver:** reusable test suite cho preflight, execute, read-back, verify, idempotency, unavailable.
 - **Acceptance:** mọi connector adapter chạy cùng suite tối thiểu.
+- **Evidence:** reusable generic suite covers typed availability, zero-mutation preflight, approval policy, idempotent retry, independent read-back/verify and retryable unavailable behavior; Mock Figma passes all cases and the same fixture API is ready for Jira/Zdoc.
 
 ### `P0-MCK-002` Mock Jira connector
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-MCK-001, P0-PER-001
 - **Deliver:** epic/story create/update/search/read-back, stable IDs, failure injection.
 - **Acceptance:** verify Epic link, Requirement IDs, AC và payload hash; retry không duplicate.

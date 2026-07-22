@@ -16,6 +16,7 @@
     "@pm-agent/fixture-meal-ordering": "workspace:*",
     "@pm-agent/fixture-zalo-design-system": "workspace:*",
     "@types/node": "24.10.0",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
   }
 }

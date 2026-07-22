@@ -41,8 +41,9 @@ Signature moment:
 - **Completed task:** `P0-FIG-002` deterministic semantic recipes for four meal-ordering screens, with lifecycle metadata and no provider-controlled pixel placement.
 - **Completed task:** `P0-FIG-003` added read-only MCP strict preflight with exact target, manifest, role/token resolution and immutable plan hash; live adapter test passes against the connected Figma session.
 - **Completed tasks:** `P0-FIG-004/005/006` approved/idempotent Figma apply, independent plugin-data read-back, strict postflight audit and offline parity connector.
-- **Current task:** `P0-MCK-001` reusable connector conformance kit is `IN_PROGRESS`.
-- **Current slice:** Lock the common connector behavior before adding SQLite-backed Mock Jira and Mock Zdoc.
+- **Completed task:** `P0-MCK-001` reusable connector conformance kit now locks availability, preflight, approval, idempotency, read-back, verification and unavailable semantics.
+- **Current task:** `P0-MCK-002` SQLite-backed Mock Jira connector is `IN_PROGRESS`.
+- **Current slice:** Build stable Epic/story snapshots with requirement/AC traceability and failure injection, then run the common suite unchanged.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
