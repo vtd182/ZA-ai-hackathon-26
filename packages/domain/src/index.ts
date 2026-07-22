@@ -1,5 +1,9 @@
 import { z } from 'zod'
 
+export * from './design-system'
+export * from './lifecycle'
+export * from './product-spec'
+
 export const workflowViews = ['discover', 'decide', 'deliver', 'change'] as const
 export type WorkflowView = (typeof workflowViews)[number]
 

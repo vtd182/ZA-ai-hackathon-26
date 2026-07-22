@@ -20,30 +20,33 @@
 
 ### `P0-FND-002` Package boundaries and lint rules
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-FND-001
 - **Deliver:** packages `domain`, `agent-core`, `reasoning`, `connectors`, `canvas`, `persistence`, `shared`.
 - **Acceptance:** import boundaries được document/enforce; `domain` test được không cần Electron/DOM.
+- **Evidence:** `scripts/check-boundaries.mjs` chạy trong `./run.sh typecheck`; 10 workspace projects typecheck độc lập.
 
 ### `P0-FND-003` Synthetic demo fixtures
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-FND-001
 - **Deliver:** meal-ordering idea, discovery sources, 3 questions/options, mock Jira/Zdoc data, design-system fixture.
 - **Acceptance:** fixture deterministic, versioned, không có production URL/PII/secret; có script reset.
+- **Evidence:** meal-ordering + synthetic Zalo-like DS fixtures parse tại module boundary; deterministic payment impact path có regression test.
 
 ## Epic E1 - Domain and workflow
 
 ### `P0-DOM-001` Versioned domain schemas
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-FND-002
 - **Deliver:** Zod schemas cho ProductSpec, RunState, ProductIdea, findings, decisions, actions, receipts, mappings.
 - **Acceptance:** valid fixture parses; invalid reference/duplicate ID/unsupported version bị reject với typed error.
+- **Evidence:** `packages/domain/src/product-spec.test.ts` và fixture test pass trong `./run.sh test` (10 tests total).
 
 ### `P0-DOM-002` Workflow state machine
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS
 - **Depends on:** P0-DOM-001
 - **Deliver:** lifecycle/change states, transition table, guards, domain events.
 - **Acceptance:** test mọi happy transition và ít nhất 5 invalid transitions; write state không thể tới trước approval.

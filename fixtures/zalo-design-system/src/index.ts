@@ -1,0 +1,35 @@
+import { designSystemManifestSchema } from '@pm-agent/domain'
+
+export const syntheticZaloDesignSystem = designSystemManifestSchema.parse({
+  schemaVersion: 1,
+  id: 'ZA-DS-FIXTURE',
+  version: '1.0.0-fixture',
+  source: 'fixture',
+  sourceLabel: 'Synthetic Zalo-like Design System for hackathon demo',
+  capturedAt: '2026-07-22T00:00:00.000Z',
+  fingerprint: 'fixture-za-ds-1',
+  components: [
+    { key: 'fixture/app-header', name: 'App Header', semanticRole: 'app-header', variants: { theme: ['light'] }, deprecated: false },
+    { key: 'fixture/menu-card', name: 'Menu Card', semanticRole: 'menu-card', variants: { state: ['default', 'selected', 'disabled'] }, deprecated: false },
+    { key: 'fixture/order-summary', name: 'Order Summary', semanticRole: 'order-summary', variants: { density: ['comfortable'] }, deprecated: false },
+    { key: 'fixture/payment-method', name: 'Payment Method', semanticRole: 'payment-method', variants: { state: ['default', 'error'] }, deprecated: false },
+    { key: 'fixture/primary-button', name: 'Primary Button', semanticRole: 'primary-button', variants: { state: ['default', 'pressed', 'disabled'] }, deprecated: false },
+    { key: 'fixture/secondary-button', name: 'Secondary Button', semanticRole: 'secondary-button', variants: { state: ['default', 'pressed'] }, deprecated: false },
+    { key: 'fixture/pickup-code', name: 'Pickup Code', semanticRole: 'pickup-code', variants: { size: ['large'] }, deprecated: false },
+    { key: 'fixture/status-message', name: 'Status Message', semanticRole: 'status-message', variants: { tone: ['success', 'info'] }, deprecated: false },
+    { key: 'fixture/error-message', name: 'Error Message', semanticRole: 'error-message', variants: { tone: ['critical'] }, deprecated: false },
+  ],
+  tokens: {
+    color: [
+      { name: 'color/brand/primary', value: '#0068FF' },
+      { name: 'color/text/primary', value: '#141415' },
+      { name: 'color/surface/default', value: '#FFFFFF' },
+      { name: 'color/status/error', value: '#D92727' },
+    ],
+    typography: [{ name: 'type/body/medium', value: '14/20 500' }, { name: 'type/title/semibold', value: '18/24 600' }],
+    spacing: [{ name: 'space/2', value: '8' }, { name: 'space/3', value: '12' }, { name: 'space/4', value: '16' }, { name: 'space/6', value: '24' }],
+    radius: [{ name: 'radius/control', value: '6' }, { name: 'radius/container', value: '8' }],
+  },
+  forbiddenRawStyles: true,
+})
+

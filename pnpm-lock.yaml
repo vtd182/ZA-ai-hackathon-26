@@ -85,6 +85,59 @@ importers:
         specifier: 7.3.6
         version: 7.3.6(@types/node@24.10.0)
 
+  fixtures/meal-ordering:
+    dependencies:
+      '@pm-agent/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+    devDependencies:
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  fixtures/zalo-design-system:
+    dependencies:
+      '@pm-agent/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+    devDependencies:
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/agent-core:
+    dependencies:
+      '@pm-agent/connectors':
+        specifier: workspace:*
+        version: link:../connectors
+      '@pm-agent/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/canvas:
+    dependencies:
+      '@pm-agent/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/connectors:
+    dependencies:
+      '@pm-agent/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
   packages/domain:
     dependencies:
       zod:
@@ -128,6 +181,12 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+    devDependencies:
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  packages/shared:
     devDependencies:
       typescript:
         specifier: 7.0.2

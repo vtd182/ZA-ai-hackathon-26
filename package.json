@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "pnpm --filter @pm-agent/desktop dev",
     "build": "pnpm -r --if-present build",
-    "typecheck": "pnpm -r --if-present typecheck",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "typecheck": "pnpm check:boundaries && pnpm -r --if-present typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3"
@@ -19,4 +20,3 @@
     "vitest": "4.1.10"
   }
 }
-

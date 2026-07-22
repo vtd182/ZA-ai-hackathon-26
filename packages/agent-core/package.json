@@ -1,0 +1,13 @@
+{
+  "name": "@pm-agent/agent-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@pm-agent/connectors": "workspace:*",
+    "@pm-agent/domain": "workspace:*"
+  },
+  "devDependencies": { "typescript": "7.0.2" }
+}
