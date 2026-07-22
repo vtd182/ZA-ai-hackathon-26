@@ -32,7 +32,7 @@ Signature moment:
 
 ## 3. Current status
 
-- **Date:** 2026-07-22
+- **Date:** 2026-07-23
 - **Milestone:** M2 guarded artifact execution and demo readiness.
 - **Completed task:** `P0-FND-001` Bootstrap workspace.
 - **Completed tasks:** Foundation/fixtures/domain schemas, workflow state machine, ProductSpec invariants, deterministic impact graph and immutable approval policy.
@@ -232,6 +232,17 @@ Signature moment:
 - **Fix:** Guard the capability at runtime and show an explicit full-restart instruction instead of a raw TypeError; production builds and fresh dev starts load the matching preload.
 - **Regression test:** Workspace typecheck locks the shared `DesktopApi`; production `smoke-lifecycle` builds and loads main/preload/renderer together and passes.
 - **Caveat:** Any preload or IPC contract edit requires fully quitting and restarting Electron; renderer HMR alone is insufficient.
+
+### BUG-011 - Completed decision checkpoint remained actionable
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, manual lifecycle flow after selecting an MVP option.
+- **Symptom:** Decision cards remained visible after the run entered Delivery; clicking one again surfaced `DELIVERY/ACTIVE -> SELECT_OPTION` as an invalid transition.
+- **Trigger:** Select a decision option, wait for Delivery, then click an option from the stale panel again.
+- **Root cause:** `workspaceFor()` exposed the latest persisted reasoning checkpoint without checking whether its phase/status still matched the canonical RunState. Persistence history was incorrectly treated as active UI state.
+- **Fix:** Expose discovery/decision reasoning only for their exact active state, hide the panel after transition, and make a duplicate selection arriving in Delivery return the current workspace idempotently.
+- **Regression test:** `./run.sh smoke-lifecycle` now requires `delivered=true` and `optionsCleared=true` before resuming the demo thread.
+- **Caveat:** Historical reasoning checkpoints remain queryable for audit/resume; UI actionability must always be derived from RunState.
 
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 

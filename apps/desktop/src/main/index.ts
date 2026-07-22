@@ -111,7 +111,16 @@ function workspaceFor(threadId: string): LifecycleWorkspaceState {
     ? createImpactPreview(runState.productSpec, runState.pendingIntent, runState.id, runState.lastCheckpointAt)
     : null
   const execution = outbox.listRun(runState.id).length > 0 ? outbox.summary(runState.id) : null
-  const reasoning = lifecycle.getLatestReasoningCheckpoint(runState.id)?.result ?? null
+  const latestReasoning = lifecycle.getLatestReasoningCheckpoint(runState.id)?.result ?? null
+  const reasoning = latestReasoning?.phase === 'discover'
+    && runState.phase === 'DISCOVERY'
+    && runState.status === 'ACTIVE'
+    ? latestReasoning
+    : latestReasoning?.phase === 'decide'
+      && runState.phase === 'DECISION'
+      && runState.status === 'WAITING_FOR_DECISION'
+      ? latestReasoning
+      : null
   return { runState, preview, execution, reasoning }
 }
 
@@ -477,10 +486,16 @@ function registerIpc(): void {
   })
   ipcMain.handle('lifecycle:select-decision', (_event, threadId: string, optionId: string) => {
     const workspace = workspaceFor(threadId)
-    if (workspace.reasoning?.phase !== 'decide') throw new Error('Decision checkpoint chưa sẵn sàng')
-    const option = workspace.reasoning.phaseData.options.find((item) => item.id === optionId)
+    if (workspace.runState.phase === 'DELIVERY' && workspace.runState.status === 'ACTIVE') return workspace
+    const decision = lifecycle.getLatestReasoningCheckpoint(workspace.runState.id)?.result
+    if (workspace.runState.phase !== 'DECISION'
+      || workspace.runState.status !== 'WAITING_FOR_DECISION'
+      || decision?.phase !== 'decide') {
+      throw new Error('Decision không còn ở trạng thái chờ lựa chọn')
+    }
+    const option = decision.phaseData.options.find((item) => item.id === optionId)
     if (!option) throw new Error('Phương án không tồn tại')
-    const next = selectDecisionOption(workspace.runState, workspace.reasoning, optionId, timestamp())
+    const next = selectDecisionOption(workspace.runState, decision, optionId, timestamp())
     lifecycle.saveRunState(next)
     history.setThreadPhase(threadId, 'deliver')
     history.addMessage(threadId, 'assistant', `Đã chọn ${option.title}. ProductSpec được giữ làm nguồn sự thật cho Delivery.`)
@@ -723,6 +738,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       questions: 0,
       options: 0,
       delivered: false,
+      optionsCleared: false,
       resumed: false,
     }
     if (lifecycleFlow.required) {
@@ -775,6 +791,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
         })()`) as boolean
         if (lifecycleFlow.delivered) break
       }
+      lifecycleFlow.optionsCleared = await window.webContents.executeJavaScript(`!document.querySelector('.decision-options')`) as boolean
       await window.webContents.executeJavaScript(`document.querySelector('[data-thread-id=${JSON.stringify(DEMO_THREAD_ID)}] .thread-main')?.click()`)
       await wait(350)
       lifecycleFlow.resumed = await window.webContents.executeJavaScript(`document.querySelector('[data-thread-id=${JSON.stringify(DEMO_THREAD_ID)}]')?.classList.contains('active')`) as boolean
@@ -1091,7 +1108,8 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && reset.controlReady && reset.deterministic
       && providerSwitch.paidDialogReady && providerSwitch.paidBlocked && providerSwitch.stableThread && providerSwitch.stableSpec
       && (!lifecycleFlow.required || (lifecycleFlow.blankCanvas && lifecycleFlow.questions > 0 && lifecycleFlow.questions <= 3
-        && lifecycleFlow.options >= 2 && lifecycleFlow.options <= 3 && lifecycleFlow.delivered && lifecycleFlow.resumed))
+        && lifecycleFlow.options >= 2 && lifecycleFlow.options <= 3 && lifecycleFlow.delivered
+        && lifecycleFlow.optionsCleared && lifecycleFlow.resumed))
       && (!rejection.required || (rejection.rejected && rejection.preservedVersion && rejection.noExecution && rejection.previewedAgain))
       && (!canvasGesture.required || (canvasGesture.targetFound && canvasGesture.dragPresentationOnly && canvasGesture.undoPresentationOnly
         && canvasGesture.shapePreserved && canvasGesture.specUnchanged
