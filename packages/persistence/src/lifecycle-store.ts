@@ -216,6 +216,19 @@ export class LifecycleStore {
       INSERT OR IGNORE INTO product_spec_versions (thread_id, version, schema_version, spec_json, created_at)
       VALUES (?, ?, ?, ?, ?)
     `).run(threadId, spec.version, spec.schemaVersion, JSON.stringify(spec), createdAt)
+    const upsertMapping = this.db.prepare(`
+      INSERT INTO persisted_artifact_mappings (
+        thread_id, mapping_id, schema_version, target, spec_version, mapping_json, updated_at
+      ) VALUES (?, ?, 1, ?, ?, ?, ?)
+      ON CONFLICT(thread_id, mapping_id) DO UPDATE SET
+        target = excluded.target,
+        spec_version = excluded.spec_version,
+        mapping_json = excluded.mapping_json,
+        updated_at = excluded.updated_at
+    `)
+    for (const mapping of spec.artifactMappings) {
+      upsertMapping.run(threadId, mapping.id, mapping.target, spec.version, JSON.stringify(mapping), createdAt)
+    }
   }
 
   private upsertAction(actionInput: PlannedAction): void {

@@ -114,19 +114,19 @@
 
 ### `P0-PER-001` SQLite repositories and migrations
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-DOM-001
 - **Deliver:** schema/migration cho projects, threads, turns, messages, provider segments/events, canvas snapshots/patches, runs, spec versions, actions, approvals, receipts và mappings.
 - **Acceptance:** migration chạy trên clean DB; repository round-trip giữ nguyên schema version.
-- **Progress:** đã có clean-create schema cho threads/messages/segments/canvas, runs/spec versions/actions/approvals/checkpoints và Figma cache. Còn thiếu versioned migration ledger, receipts/outbox/artifact mappings, turns/events và round-trip coverage đầy đủ.
+- **Evidence:** idempotent `schema_migrations` ledger owns turns, message parts, normalized provider events, canvas documents/checkpoints/patches and persisted artifact mappings; existing stores own runs/spec/actions/approvals/outbox/receipts/verifications/Figma cache. Clean/reopen round-trip tests preserve schema version and production clean-profile smoke passes.
 
 ### `P0-PER-002` Transaction and checkpoint service
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-PER-001, P0-DOM-002
 - **Deliver:** atomic domain commit, approval+outbox commit, checkpoint summary.
 - **Acceptance:** injected failure không tạo half-committed ProductSpec/action; restart load đúng phase.
-- **Progress:** preview và approved ProductSpec/action/approval/checkpoint commit bằng SQLite transaction; restart cache/checkpoint đã có test. Còn thiếu approval+outbox atomic commit, failure injection và checkpoint summary/handoff.
+- **Evidence:** preview, approval/rejection, ProductSpec version, actions, approvals and outbox use SQLite transactions; duplicate approval injection proves full rollback. Restart restores RunState/reasoning/receipt verification; canonical handoff carries checkpoint summary.
 
 ## Epic E4 - Provider, history, desktop UX and canvas
 
@@ -156,7 +156,7 @@
 
 ### `P0-HIS-001` Thread, turn and message repositories
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-PER-001
 - **Deliver:** thread CRUD/archive, paginated messages, normalized parts/events, FTS5 search và indexes.
 - **Acceptance:** 500-message fixture query theo page; app không load full transcript vào renderer.

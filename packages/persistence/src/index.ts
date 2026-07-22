@@ -5,15 +5,18 @@ import type {
   HandoffPackage,
   ProviderCapabilities,
   ProviderProfile,
+  ProviderEvent,
   ThreadDetail,
   ThreadSummary,
   WorkflowView,
 } from '@pm-agent/domain'
 import { providerCapabilitiesSchema } from '@pm-agent/domain'
+import { applyCoreMigrations } from './migrations'
 
 export { LifecycleStore } from './lifecycle-store'
 export { FigmaIntegrationStore } from './figma-integration-store'
 export { OutboxStore } from './outbox-store'
+export { CORE_MIGRATION_IDS } from './migrations'
 
 interface ThreadRow {
   id: string
@@ -43,6 +46,17 @@ interface ProfileRow {
   model_id: string
   cost_mode: ProviderProfile['costMode']
   enabled: number
+}
+
+export interface PersistedTurn {
+  id: string
+  threadId: string
+  schemaVersion: 1
+  status: 'running' | 'completed' | 'failed' | 'cancelled'
+  inputText: string
+  startedAt: string
+  completedAt: string | null
+  events: ProviderEvent[]
 }
 
 const defaultProfiles: Omit<ProviderProfile, 'hasCredential'>[] = [
@@ -100,6 +114,7 @@ export class HistoryStore {
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('foreign_keys = ON')
     this.migrate()
+    applyCoreMigrations(this.db)
     this.seedProfiles()
     this.seedDemoThread()
   }
@@ -219,7 +234,27 @@ export class HistoryStore {
 
   saveCanvas(threadId: string, snapshot: unknown): void {
     const payload = JSON.stringify(snapshot)
-    this.db.prepare('UPDATE conversation_threads SET canvas_snapshot = ?, updated_at = ? WHERE id = ?').run(payload, now(), threadId)
+    const timestamp = now()
+    const documentId = `canvas:${threadId}`
+    this.db.transaction(() => {
+      this.db.prepare('UPDATE conversation_threads SET canvas_snapshot = ?, updated_at = ? WHERE id = ?').run(payload, timestamp, threadId)
+      this.db.prepare(`
+        INSERT INTO canvas_documents (id, thread_id, schema_version, created_at, updated_at)
+        VALUES (?, ?, 1, ?, ?)
+        ON CONFLICT(thread_id) DO UPDATE SET updated_at = excluded.updated_at
+      `).run(documentId, threadId, timestamp, timestamp)
+      this.db.prepare('INSERT INTO canvas_checkpoints (document_id, schema_version, snapshot_json, created_at) VALUES (?, 1, ?, ?)')
+        .run(documentId, payload, timestamp)
+    })()
+  }
+
+  getLatestCanvasCheckpoint(threadId: string): unknown | null {
+    const row = this.db.prepare(`
+      SELECT c.snapshot_json FROM canvas_checkpoints c
+      JOIN canvas_documents d ON d.id = c.document_id
+      WHERE d.thread_id = ? ORDER BY c.id DESC LIMIT 1
+    `).get(threadId) as { snapshot_json: string } | undefined
+    return row ? JSON.parse(row.snapshot_json) : null
   }
 
   addMessage(threadId: string, role: ChatMessage['role'], content: string): ChatMessage {
@@ -227,6 +262,10 @@ export class HistoryStore {
     const transaction = this.db.transaction(() => {
       this.db.prepare('INSERT INTO messages (id, thread_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)')
         .run(message.id, message.threadId, message.role, message.content, message.createdAt)
+      this.db.prepare(`
+        INSERT INTO message_parts (id, message_id, schema_version, part_type, content_json, created_at)
+        VALUES (?, ?, 1, 'text', ?, ?)
+      `).run(`part:${message.id}:text`, message.id, JSON.stringify({ text: content }), message.createdAt)
       const title = role === 'user'
         ? content.trim().replace(/\s+/g, ' ').slice(0, 54) || 'Ý tưởng chưa đặt tên'
         : null
@@ -239,6 +278,48 @@ export class HistoryStore {
     })
     transaction()
     return message
+  }
+
+  startTurn(threadId: string, inputText: string, startedAt = now()): string {
+    const id = randomUUID()
+    this.db.prepare(`
+      INSERT INTO conversation_turns (id, thread_id, schema_version, status, input_text, started_at, completed_at)
+      VALUES (?, ?, 1, 'running', ?, ?, NULL)
+    `).run(id, threadId, inputText, startedAt)
+    return id
+  }
+
+  completeTurn(turnId: string, status: Exclude<PersistedTurn['status'], 'running'>, events: ProviderEvent[], completedAt = now()): void {
+    this.db.transaction(() => {
+      const result = this.db.prepare('UPDATE conversation_turns SET status = ?, completed_at = ? WHERE id = ? AND status = ?')
+        .run(status, completedAt, turnId, 'running')
+      if (result.changes !== 1) throw new Error(`Turn is not running: ${turnId}`)
+      const insert = this.db.prepare(`
+        INSERT INTO provider_events (turn_id, sequence, schema_version, event_type, event_json, created_at)
+        VALUES (?, ?, 1, ?, ?, ?)
+      `)
+      for (const event of events) insert.run(turnId, event.sequence, event.type, JSON.stringify(event), event.at)
+    })()
+  }
+
+  getTurn(turnId: string): PersistedTurn | null {
+    const row = this.db.prepare(`
+      SELECT id, thread_id, schema_version, status, input_text, started_at, completed_at FROM conversation_turns WHERE id = ?
+    `).get(turnId) as {
+      id: string; thread_id: string; schema_version: number; status: PersistedTurn['status']; input_text: string; started_at: string; completed_at: string | null
+    } | undefined
+    if (!row) return null
+    const events = this.db.prepare('SELECT event_json FROM provider_events WHERE turn_id = ? ORDER BY sequence').all(turnId) as Array<{ event_json: string }>
+    return {
+      id: row.id,
+      threadId: row.thread_id,
+      schemaVersion: 1,
+      status: row.status,
+      inputText: row.input_text,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      events: events.map((event) => JSON.parse(event.event_json) as ProviderEvent),
+    }
   }
 
   recentMessages(threadId: string, limit = 16): ChatMessage[] {
@@ -428,6 +509,10 @@ export class HistoryStore {
     const insertMessage = this.db.prepare('INSERT INTO messages (id, thread_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)')
     for (const message of DEMO_MESSAGES) {
       insertMessage.run(message.id, DEMO_THREAD_ID, message.role, message.content, message.createdAt)
+      this.db.prepare(`
+        INSERT INTO message_parts (id, message_id, schema_version, part_type, content_json, created_at)
+        VALUES (?, ?, 1, 'text', ?, ?)
+      `).run(`part:${message.id}:text`, message.id, JSON.stringify({ text: message.content }), message.createdAt)
     }
   }
 }

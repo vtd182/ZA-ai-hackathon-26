@@ -387,7 +387,9 @@ function registerIpc(): void {
     const profile = history.getProfile(thread.providerId)
     const answerText = questions.map((question) => `${question.prompt}: ${answers[question.id]}`).join('\n')
     history.addMessage(threadId, 'user', answerText)
+    const turnId = history.startTurn(threadId, answerText)
     const controller = new AbortController()
+    let turnFinished = false
     activeRuns.set(threadId, controller)
     try {
       const apiKey = secrets.get(profile.id)
@@ -404,7 +406,17 @@ function registerIpc(): void {
       history.setThreadPhase(threadId, 'decide')
       history.addMessage(threadId, 'assistant', proposal.result.message)
       history.saveProviderSegment(threadId, profile.id, profile.modelId, response.remoteRef)
+      history.completeTurn(turnId, 'completed', response.events)
+      turnFinished = true
       return workspaceFor(threadId)
+    } catch (error) {
+      if (!turnFinished) {
+        const at = timestamp()
+        history.completeTurn(turnId, controller.signal.aborted ? 'cancelled' : 'failed', controller.signal.aborted
+          ? [{ type: 'turn_cancelled', sequence: 0, at }]
+          : [{ type: 'turn_failed', sequence: 0, at, error: 'Provider turn failed' }])
+      }
+      throw error
     } finally {
       activeRuns.delete(threadId)
     }
@@ -462,7 +474,9 @@ function registerIpc(): void {
     const thread = history.getThread(input.threadId)
     const profile = history.getProfile(thread.providerId)
     const userMessage = history.addMessage(input.threadId, 'user', input.content.trim())
+    const turnId = history.startTurn(input.threadId, input.content.trim())
     const controller = new AbortController()
+    let turnFinished = false
     activeRuns.set(input.threadId, controller)
     try {
       const apiKey = secrets.get(profile.id)
@@ -522,7 +536,17 @@ function registerIpc(): void {
       const switchCommand = commands.find((command) => command.type === 'switch_view')
       if (switchCommand?.type === 'switch_view') history.setThreadPhase(input.threadId, switchCommand.view)
       history.saveProviderSegment(input.threadId, profile.id, profile.modelId, response.remoteRef)
+      history.completeTurn(turnId, 'completed', response.events)
+      turnFinished = true
       return { userMessage, assistantMessage, commands, ...(changePreview ? { changePreview } : {}) }
+    } catch (error) {
+      if (!turnFinished) {
+        const at = timestamp()
+        history.completeTurn(turnId, controller.signal.aborted ? 'cancelled' : 'failed', controller.signal.aborted
+          ? [{ type: 'turn_cancelled', sequence: 0, at }]
+          : [{ type: 'turn_failed', sequence: 0, at, error: 'Provider turn failed' }])
+      }
+      throw error
     } finally {
       activeRuns.delete(input.threadId)
     }

@@ -52,8 +52,9 @@ Signature moment:
 - **Completed task:** `P0-PRV-001` canonical handoff and safe provider switching with paid confirmation and capability snapshots.
 - **Completed task:** `P0-UI-002` clarification/decision workspace and ProductSpec inspector; lifecycle UI smoke passes with persisted resume.
 - **Completed tasks:** `P0-UI-003`, `P0-UI-004` and `P0-CHG-002`; approve/reject/partial-retry UI paths all have production smoke evidence.
-- **Current task:** `P0-PER-001` migration ledger and complete local schema is `IN_PROGRESS`.
-- **Current slice:** Add versioned migration ownership plus turns/provider-events/canvas checkpoints/artifact mappings tables and clean/upgrade round-trip tests.
+- **Completed tasks:** `P0-PER-001/002` migration ledger, full local schema and atomic checkpoint transactions; clean-profile smoke passes.
+- **Current task:** `P0-HIS-001` paginated/FTS history repository is `IN_PROGRESS`.
+- **Current slice:** Add cursor message pages, FTS5 search/index sync and a 500-message query budget test, then keep renderer hydration bounded.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -402,6 +403,14 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - `./run.sh smoke-reject` rejects through UI, proves no execution, then previews again and completes v2 verified sync.
 - Change Impact and partial retry panels now satisfy their per-target status acceptance with reviewed screenshots.
 - Next action: consolidate SQLite migration ownership and add missing history/event/mapping tables.
+
+### 2026-07-22 - Versioned local persistence
+
+- Added an idempotent migration ledger for turns, message parts, normalized provider events, canvas documents/checkpoints/patches and artifact mappings.
+- Chat completion persists SDK-free events; failures/cancellation persist only sanitized terminal events.
+- Canvas saves now create checkpoints while retaining the legacy snapshot column for upgrade compatibility.
+- Clean/reopen tests and production smoke pass; atomic approval/outbox and canonical checkpoint handoff complete the transaction service acceptance.
+- Next action: add cursor pagination, FTS5 search and 500-message performance coverage.
 
 ## 10. End-of-session checklist
 
