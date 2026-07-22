@@ -12,6 +12,7 @@ import {
 } from 'tldraw'
 import type {
   CanvasSelectionContext,
+  CanvasGestureCommand,
   ChangePreview,
   ProductSpec,
   ProviderCommand,
@@ -27,6 +28,12 @@ interface CanvasWorkspaceProps {
   changePreview?: ChangePreview
   changeEntityIds: string[]
   onSelectionChange(selection?: CanvasSelectionContext): void
+  onGestureProposal(command: CanvasGestureCommand): void
+}
+
+interface CanonicalShapeRef {
+  type: 'entity' | 'edge'
+  entityId: string
 }
 
 const views: Array<{ id: WorkflowView; label: string }> = [
@@ -38,6 +45,7 @@ const views: Array<{ id: WorkflowView; label: string }> = [
 
 const tldrawAssetUrls = getAssetUrlsByImport()
 const legacySeedIds = ['idea', 'finding', 'minimal', 'balanced', 'ambitious', 'req-payment', 'screen-payment', 'wallet-story', 'wallet-sdk']
+const canonicalEntityKinds = new Set(['idea', 'goal', 'finding', 'requirement', 'screen', 'story', 'dependency', 'decision'])
 
 function shapeLabel(shape: { meta: Record<string, unknown> }): string {
   return typeof shape.meta.label === 'string' ? shape.meta.label : ''
@@ -154,6 +162,14 @@ function reconcileProductSpec(editor: Editor, spec: ProductSpec): void {
   }
 }
 
+function canonicalShapeRefs(spec: ProductSpec): Map<string, CanonicalShapeRef> {
+  const graph = projectProductSpecGraph(spec)
+  return new Map([
+    ...graph.entities.map((entity): [string, CanonicalShapeRef] => [createShapeId(entity.entityId.toLowerCase()), { type: 'entity', entityId: entity.entityId }]),
+    ...graph.edges.map((edge): [string, CanonicalShapeRef] => [createShapeId(`edge-${edge.relationshipId.toLowerCase()}`), { type: 'edge', entityId: edge.relationshipId }]),
+  ])
+}
+
 export function CanvasWorkspace({
   threadId,
   snapshot,
@@ -163,15 +179,23 @@ export function CanvasWorkspace({
   changePreview,
   changeEntityIds,
   onSelectionChange,
+  onGestureProposal,
 }: CanvasWorkspaceProps): React.JSX.Element {
   const editorRef = useRef<Editor | null>(null)
+  const gestureProposalRef = useRef(onGestureProposal)
+  const canonicalShapeRefsRef = useRef<Map<string, CanonicalShapeRef>>(new Map())
   const cleanupListeners = useRef<(() => void) | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastCommandBatch = useRef(0)
+  const lastGestureProposal = useRef<{ entityId: string; at: number } | null>(null)
   const [view, setView] = useState<WorkflowView>(initialView)
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
   const [editorEpoch, setEditorEpoch] = useState(0)
   const changeKey = changeEntityIds.join('|')
+
+  useEffect(() => {
+    gestureProposalRef.current = onGestureProposal
+  }, [onGestureProposal])
 
   const scheduleSave = useCallback(() => {
     setSaveState('saving')
@@ -186,8 +210,11 @@ export function CanvasWorkspace({
   const handleMount = useCallback((editor: Editor) => {
     editorRef.current = editor
     setEditorEpoch((value) => value + 1)
-    removeLegacySeed(editor)
-    if (productSpec) reconcileProductSpec(editor, productSpec)
+    if (productSpec) canonicalShapeRefsRef.current = canonicalShapeRefs(productSpec)
+    editor.run(() => {
+      removeLegacySeed(editor)
+      if (productSpec) reconcileProductSpec(editor, productSpec)
+    }, { history: 'ignore' })
     const stopDocumentListener = editor.store.listen(scheduleSave, { scope: 'document' })
     const stopSelectionListener = editor.store.listen(() => {
       const selected = editor.getSelectedShapes()[0]
@@ -198,17 +225,36 @@ export function CanvasWorkspace({
       const entityId = typeof selected.meta.entityId === 'string' ? selected.meta.entityId : selected.id
       onSelectionChange({ entityId, label: shapeLabel(selected) || selected.type })
     }, { scope: 'session' })
+    const stopCanonicalDelete = editor.sideEffects.registerBeforeDeleteHandler('shape', (shape) => {
+      const canonicalRef = canonicalShapeRefsRef.current.get(shape.id)
+      const shapeType = shape.meta.shapeType
+      const isEntity = canonicalRef?.type === 'entity'
+        || shapeType === 'pm_entity'
+        || canonicalEntityKinds.has(String(shape.meta.entityKind ?? ''))
+      if (!isEntity) return
+      const entityId = canonicalRef?.type === 'entity' ? canonicalRef.entityId : shape.meta.entityId
+      if (isEntity && typeof entityId === 'string') {
+        const previous = lastGestureProposal.current
+        if (!previous || previous.entityId !== entityId || Date.now() - previous.at > 750) {
+          lastGestureProposal.current = { entityId, at: Date.now() }
+          gestureProposalRef.current({ schemaVersion: 1, type: 'remove_entity', entityId })
+        }
+      }
+      return false
+    })
     editor.zoomToFit({ animation: { duration: 180 } })
     cleanupListeners.current = () => {
       stopDocumentListener()
       stopSelectionListener()
+      stopCanonicalDelete()
     }
   }, [onSelectionChange, productSpec, scheduleSave])
 
   useEffect(() => {
     const editor = editorRef.current
     if (!editor || !productSpec) return
-    reconcileProductSpec(editor, productSpec)
+    canonicalShapeRefsRef.current = canonicalShapeRefs(productSpec)
+    editor.run(() => reconcileProductSpec(editor, productSpec), { history: 'ignore' })
   }, [productSpec])
 
   useEffect(() => {
@@ -217,24 +263,26 @@ export function CanvasWorkspace({
     const affected = new Set(changeEntityIds)
     const visibleShapeIds: TLShape['id'][] = []
     const selectedBefore = editor.getSelectedShapeIds()[0]
-    for (const shape of editor.getCurrentPageShapes()) {
-      const entityId = String(shape.meta.entityId ?? '')
-      const shapeView = shape.meta.view
-      const status = shape.meta.status
-      const isEdge = shape.meta.shapeType === 'pm_traceability_edge'
-      const sourceEntityId = String(shape.meta.sourceEntityId ?? '')
-      const targetEntityId = String(shape.meta.targetEntityId ?? '')
-      const visible = view === 'change'
-        ? isEdge
-          ? affected.has(sourceEntityId) && affected.has(targetEntityId)
-          : affected.has(entityId) || shapeView === 'change'
-        : isEdge
-          ? shape.meta.sourceView === view && shape.meta.targetView === view
-          : shapeView === view
-      const opacity = !visible ? 0 : status === 'removed' ? 0.18 : changePreview && affected.has(entityId) ? 0.5 : 1
-      editor.updateShape({ id: shape.id, type: shape.type, opacity })
-      if (visible) visibleShapeIds.push(shape.id)
-    }
+    editor.run(() => {
+      for (const shape of editor.getCurrentPageShapes()) {
+        const entityId = String(shape.meta.entityId ?? '')
+        const shapeView = shape.meta.view
+        const status = shape.meta.status
+        const isEdge = shape.meta.shapeType === 'pm_traceability_edge'
+        const sourceEntityId = String(shape.meta.sourceEntityId ?? '')
+        const targetEntityId = String(shape.meta.targetEntityId ?? '')
+        const visible = view === 'change'
+          ? isEdge
+            ? affected.has(sourceEntityId) && affected.has(targetEntityId)
+            : affected.has(entityId) || shapeView === 'change'
+          : isEdge
+            ? shape.meta.sourceView === view && shape.meta.targetView === view
+            : shapeView === view
+        const opacity = !visible ? 0 : status === 'removed' ? 0.18 : changePreview && affected.has(entityId) ? 0.5 : 1
+        editor.updateShape({ id: shape.id, type: shape.type, opacity })
+        if (visible) visibleShapeIds.push(shape.id)
+      }
+    }, { history: 'ignore' })
     if (visibleShapeIds.length > 0) {
       editor.select(...visibleShapeIds)
       editor.zoomToSelection({ animation: { duration: 180 } })

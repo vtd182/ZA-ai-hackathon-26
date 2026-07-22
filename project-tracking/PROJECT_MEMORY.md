@@ -57,8 +57,9 @@ Signature moment:
 - **Completed task:** `P0-HIS-002` full offline restart and stale opaque provider ref replacement.
 - **Completed task:** `P0-HIS-004` one stable CanvasDocument per thread with A/B restart/checkpoint evidence.
 - **Completed task:** `P0-CAN-001` versioned entity/edge projection contract, deterministic four-view layout and semantic traceability arrows.
-- **Current task:** `P0-CAN-002` ProductSpec projection and guarded canvas domain commands is `IN_PROGRESS`.
-- **Current slice:** Canvas delete emits a validated proposal, canonical projection restores immediately and ProductSpec changes only through immutable preview/approval.
+- **Completed tasks:** `P0-CAN-002` and `P0-HIS-005` guarded bidirectional canvas commands with an explicit business/presentation undo boundary.
+- **Current task:** `P0-CHG-001` structured ambiguity handling is `IN_PROGRESS`.
+- **Current slice:** Ambiguous targets must enter an explicit needs-input state and create no preview, pending action or ProductSpec mutation.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -198,6 +199,17 @@ Signature moment:
 - **Regression test:** `packages/persistence/src/outbox-store.test.ts` reopens receipt-backed work and completes verification without duplicate execution.
 - **Caveat:** Persistence code must not use SQLite datetime formatting for domain timestamps.
 
+### BUG-008 - Canvas undo crossed the projection hydration boundary
+
+- **Status:** FIXED
+- **Found:** 2026-07-22, `P0-CAN-002` drag/undo/delete production smoke.
+- **Symptom:** After dragging and undoing a canonical card, Delete could restore/remove a legacy snapshot shape without emitting the guarded domain proposal.
+- **Trigger:** Hydrate/reconcile ProductSpec shapes, drag one shape, press undo, then Delete.
+- **Root cause:** ProductSpec reconciliation and view-opacity updates were recorded in tldraw's user undo history; metadata-only delete guards were also vulnerable to older snapshots.
+- **Fix:** Run projection reconciliation/filtering with `history: 'ignore'` and guard canonical entities through a stable shape-ID-to-ProductSpec map.
+- **Regression test:** `./run.sh smoke-canvas` requires drag-only presentation state, position undo, blocked canonical deletion, unchanged ProductSpec v1 and a validated approval preview.
+- **Caveat:** Renderer-owned projection updates must stay outside tldraw user history; domain undo remains a separate future workflow command.
+
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 
 ```md
@@ -254,11 +266,12 @@ App commands đã chạy thành công:
 ./run.sh setup       # verified 2026-07-22; installs/builds app, Go runtime and Figma plugin bundle
 ./run.sh reset       # verified by shared reset path 2026-07-22; resets then opens dev app
 ./run.sh typecheck   # verified 2026-07-22
-./run.sh test        # verified 2026-07-22; 56 tests pass, 1 optional live test skipped
+./run.sh test        # verified 2026-07-22; 80 tests pass, 1 optional live test skipped
 ./run.sh build       # verified 2026-07-22
 ./run.sh smoke       # verified 2026-07-22; Mock provider + canvas
 ./run.sh smoke-recovery  # verified 2026-07-22; injected Jira failure + target-only UI retry
 ./run.sh smoke-reset # verified 2026-07-22; UI reset + three deterministic seeds + full flow
+./run.sh smoke-canvas # verified 2026-07-22; drag/undo/delete boundary + invalid command + full flow
 PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke  # verified 2026-07-22
 PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke  # verified 2026-07-22; live allowlist + bounded DS capture + cache + UI
 ```
@@ -423,6 +436,15 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Full offline restart restores phase/ProductSpec/messages/canvas/provider ref and safely replaces a stale opaque ref.
 - Explicit CanvasDocument ownership test proves two threads keep two isolated documents while saves create checkpoints only.
 - Next action: add typed canvas entity/edge projections and deterministic traceability arrows.
+
+### 2026-07-22 - Guarded bidirectional canvas commands
+
+- Added versioned entity/traceability-edge projection contracts with renderer-owned deterministic layout.
+- Canonical tldraw Delete now emits a typed command to Agent Core, keeps ProductSpec unchanged and opens the same immutable impact/approval flow as chat.
+- Drag and tldraw undo remain presentation-only; projection reconciliation is excluded from user undo history.
+- Invalid canvas payloads and unsupported entity kinds are rejected before lifecycle state changes.
+- `./run.sh smoke-canvas`, 80 unit/contract tests and workspace typecheck pass.
+- Next action: implement explicit ambiguity handling for change requests that do not resolve to one target.
 
 ## 10. End-of-session checklist
 

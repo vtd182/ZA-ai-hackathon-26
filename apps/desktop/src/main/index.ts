@@ -2,7 +2,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
-import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, createHandoffPackage, createImpactPreview, executeConnectorAction, rejectActions, selectDecisionOption } from '@pm-agent/agent-core'
+import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, changeIntentFromCanvasCommand, createHandoffPackage, createImpactPreview, executeConnectorAction, rejectActions, selectDecisionOption } from '@pm-agent/agent-core'
 import {
   createFigmaArtifactPlan,
   createMockJiraPlan,
@@ -19,6 +19,7 @@ import {
 } from '@pm-agent/connectors'
 import type {
   ChangeIntent,
+  CanvasGestureCommand,
   ConfigureProviderInput,
   DesktopApi,
   LifecycleWorkspaceState,
@@ -120,6 +121,23 @@ function moveToDeliveryForChange(state: RunState, at: string): RunState {
   if (next.phase === 'DISCOVERY' && next.status === 'ACTIVE') next = transitionRunState(next, 'REQUEST_DECISION', at)
   if (next.phase === 'DECISION' && next.status === 'WAITING_FOR_DECISION') next = transitionRunState(next, 'SELECT_OPTION', at)
   return next
+}
+
+function stageChangePreview(threadId: string, intent: ChangeIntent, at: string): { workspace: LifecycleWorkspaceState; created: boolean } {
+  const workspace = workspaceFor(threadId)
+  if (workspace.preview) {
+    if (workspace.preview.intent.operation === intent.operation && workspace.preview.intent.targetEntityId === intent.targetEntityId) {
+      return { workspace, created: false }
+    }
+    throw new Error('Một change plan khác đang chờ quyết định')
+  }
+  const deliveryState = moveToDeliveryForChange(workspace.runState, at)
+  const preview = createImpactPreview(deliveryState.productSpec, intent, deliveryState.id, at)
+  let nextState = transitionRunState(deliveryState, 'REQUEST_CHANGE', at)
+  nextState = transitionRunState({ ...nextState, pendingIntent: intent, pendingActions: preview.actions }, 'PREVIEW_READY', at)
+  lifecycle.savePreview(nextState)
+  history.setThreadPhase(threadId, 'change')
+  return { workspace: workspaceFor(threadId), created: true }
 }
 
 function resetDemoWorkspace(): { fixtureVersion: 1; thread: ReturnType<HistoryStore['resetDemoWorkspace']>; workspace: LifecycleWorkspaceState } {
@@ -317,6 +335,19 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('canvas:save', (_event, threadId: string, snapshot: unknown) => history.saveCanvas(threadId, snapshot))
+  ipcMain.handle('canvas:propose-command', (_event, threadId: string, command: CanvasGestureCommand) => {
+    const current = workspaceFor(threadId)
+    const intent = changeIntentFromCanvasCommand(current.runState.productSpec, command)
+    const staged = stageChangePreview(threadId, intent, timestamp())
+    const message = staged.created
+      ? `Canvas đề xuất loại ${intent.targetEntityId}. ProductSpec chưa thay đổi; hãy kiểm tra impact và duyệt change plan.`
+      : `Change plan cho ${intent.targetEntityId} vẫn đang chờ duyệt; không tạo proposal trùng.`
+    if (staged.created) {
+      history.addMessage(threadId, 'user', `[Canvas] Đề xuất loại ${intent.targetEntityId} khỏi ProductSpec`)
+      history.addMessage(threadId, 'assistant', message)
+    }
+    return { ...staged.workspace, message }
+  })
 
   ipcMain.handle('lifecycle:get-workspace', (_event, threadId: string) => workspaceFor(threadId))
   ipcMain.handle('lifecycle:approve-change', async (_event, threadId: string) => {
@@ -512,14 +543,9 @@ function registerIpc(): void {
             targetEntityId: 'REQ-PAYMENT',
             reason: input.content.trim(),
           }
-          const deliveryState = moveToDeliveryForChange(workspace.runState, checkpointAt)
-          const preview = createImpactPreview(deliveryState.productSpec, intent, deliveryState.id, checkpointAt)
-          let nextState = transitionRunState(deliveryState, 'REQUEST_CHANGE', checkpointAt)
-          nextState = transitionRunState({ ...nextState, pendingIntent: intent, pendingActions: preview.actions }, 'PREVIEW_READY', checkpointAt)
-          lifecycle.savePreview(nextState)
-          history.setThreadPhase(input.threadId, 'change')
-          changePreview = preview
-          responseMessage = `Đã phân tích ${preview.affectedEntityIds.length} entity bị ảnh hưởng. Chưa có artifact nào được ghi; hãy kiểm tra before/after và duyệt change plan.`
+          const staged = stageChangePreview(input.threadId, intent, checkpointAt)
+          changePreview = staged.workspace.preview ?? undefined
+          responseMessage = `Đã phân tích ${changePreview?.affectedEntityIds.length ?? 0} entity bị ảnh hưởng. Chưa có artifact nào được ghi; hãy kiểm tra before/after và duyệt change plan.`
           commands = [...commands, { type: 'switch_view', view: 'change' }]
         } else if (payment?.status === 'removed') {
           responseMessage = `REQ-PAYMENT đã bị loại khỏi ProductSpec v${workspace.runState.productSpec.version}; không tạo action trùng.`
@@ -707,6 +733,98 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       lifecycleFlow.resumed = await window.webContents.executeJavaScript(`document.querySelector('[data-thread-id=${JSON.stringify(DEMO_THREAD_ID)}]')?.classList.contains('active')`) as boolean
     }
 
+    const canvasGesture = {
+      required: process.env.PM_AGENT_SMOKE_CANVAS === '1',
+      targetFound: false,
+      dragPresentationOnly: false,
+      undoPresentationOnly: false,
+      shapePreserved: false,
+      specUnchanged: false,
+      previewReady: false,
+      historyRecorded: false,
+      invalidRejected: false,
+    }
+    if (canvasGesture.required) {
+      const target = await window.webContents.executeJavaScript(`(async () => {
+        const deliver = [...document.querySelectorAll('.view-tab')].find((item) => item.textContent?.trim() === 'Deliver');
+        deliver?.click();
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        const shape = [...document.querySelectorAll('.tl-shape')].find((item) => item.textContent?.includes('REQ-PAYMENT'));
+        if (!shape) return null;
+        const rect = shape.getBoundingClientRect();
+        return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+      })()`) as { x: number; y: number } | null
+      canvasGesture.targetFound = Boolean(target)
+      if (target) {
+        const dragTarget = { x: target.x + 48, y: target.y + 24 }
+        window.webContents.sendInputEvent({ type: 'mouseDown', x: target.x, y: target.y, button: 'left', clickCount: 1 })
+        window.webContents.sendInputEvent({ type: 'mouseMove', x: dragTarget.x, y: dragTarget.y, button: 'left' })
+        window.webContents.sendInputEvent({ type: 'mouseUp', x: dragTarget.x, y: dragTarget.y, button: 'left', clickCount: 1 })
+        await wait(250)
+        canvasGesture.dragPresentationOnly = await window.webContents.executeJavaScript(`(async () => {
+          const [thread] = await window.pmAgent.threads.list();
+          const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
+          const shape = [...document.querySelectorAll('.tl-shape')].find((item) => item.textContent?.includes('REQ-PAYMENT'));
+          const rect = shape?.getBoundingClientRect();
+          const moved = rect && Math.hypot(rect.left + rect.width / 2 - ${target.x}, rect.top + rect.height / 2 - ${target.y}) > 10;
+          return Boolean(moved && workspace.runState.productSpec.version === 1 && workspace.preview === null);
+        })()`) as boolean
+        window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'z', modifiers: ['meta'] })
+        window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'z', modifiers: ['meta'] })
+        await wait(250)
+        const restoredTarget = await window.webContents.executeJavaScript(`(async () => {
+          const [thread] = await window.pmAgent.threads.list();
+          const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
+          const shape = [...document.querySelectorAll('.tl-shape')].find((item) => item.textContent?.includes('REQ-PAYMENT'));
+          if (!shape) return null;
+          const rect = shape.getBoundingClientRect();
+          const current = { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+          return { ...current, unchanged: workspace.runState.productSpec.version === 1 && workspace.preview === null };
+        })()`) as { x: number; y: number; unchanged: boolean } | null
+        canvasGesture.undoPresentationOnly = Boolean(restoredTarget?.unchanged
+          && Math.hypot(restoredTarget.x - target.x, restoredTarget.y - target.y) <= 5)
+        const deleteTarget = restoredTarget ?? target
+        window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
+        window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+        window.webContents.sendInputEvent({ type: 'mouseMove', x: deleteTarget.x, y: deleteTarget.y })
+        await wait(50)
+        window.webContents.sendInputEvent({ type: 'mouseDown', x: deleteTarget.x, y: deleteTarget.y, button: 'left', clickCount: 1 })
+        window.webContents.sendInputEvent({ type: 'mouseUp', x: deleteTarget.x, y: deleteTarget.y, button: 'left', clickCount: 1 })
+        await wait(100)
+        window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Delete' })
+        window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Delete' })
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          await wait(250)
+          const state = await window.webContents.executeJavaScript(`(async () => {
+            const [summary] = await window.pmAgent.threads.list();
+            const thread = await window.pmAgent.threads.get(summary.id);
+            const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
+            return {
+              shapePreserved: [...document.querySelectorAll('.tl-shape')].some((item) => item.textContent?.includes('REQ-PAYMENT')),
+              specUnchanged: workspace.runState.productSpec.version === 1
+                && workspace.runState.productSpec.requirements.find((item) => item.id === 'REQ-PAYMENT')?.status === 'in_scope',
+              previewReady: workspace.runState.status === 'WAITING_FOR_APPROVAL'
+                && workspace.preview?.intent.targetEntityId === 'REQ-PAYMENT',
+              historyRecorded: thread.messages.some((message) => message.content.includes('[Canvas]'))
+            };
+          })()`) as Pick<typeof canvasGesture, 'shapePreserved' | 'specUnchanged' | 'previewReady' | 'historyRecorded'>
+          Object.assign(canvasGesture, state)
+          if (canvasGesture.shapePreserved && canvasGesture.specUnchanged && canvasGesture.previewReady && canvasGesture.historyRecorded) break
+        }
+      }
+      canvasGesture.invalidRejected = await window.webContents.executeJavaScript(`(async () => {
+        const [thread] = await window.pmAgent.threads.list();
+        try {
+          await window.pmAgent.canvas.proposeCommand(thread.id, { schemaVersion: 1, type: 'remove_entity', entityId: 'SCREEN-CHECKOUT' });
+          return false;
+        } catch (error) {
+          return String(error).includes('only supports requirement');
+        }
+      })()`) as boolean
+      const canvasImage = await window.webContents.capturePage()
+      writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!.replace(/\.png$/, '-canvas-command.png'), canvasImage.toPNG())
+    }
+
     if (process.env.PM_AGENT_SMOKE_PROVIDER) {
       await window.webContents.executeJavaScript(`(async () => {
         const [thread] = await window.pmAgent.threads.list();
@@ -890,6 +1008,9 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && providerSwitch.paidDialogReady && providerSwitch.paidBlocked && providerSwitch.stableThread && providerSwitch.stableSpec
       && (!lifecycleFlow.required || (lifecycleFlow.questions > 0 && lifecycleFlow.questions <= 3 && lifecycleFlow.options >= 2 && lifecycleFlow.options <= 3 && lifecycleFlow.delivered && lifecycleFlow.resumed))
       && (!rejection.required || (rejection.rejected && rejection.preservedVersion && rejection.noExecution && rejection.previewedAgain))
+      && (!canvasGesture.required || (canvasGesture.targetFound && canvasGesture.dragPresentationOnly && canvasGesture.undoPresentationOnly
+        && canvasGesture.shapePreserved && canvasGesture.specUnchanged
+        && canvasGesture.previewReady && canvasGesture.historyRecorded && canvasGesture.invalidRejected))
       && final.hasPreview && !final.pending && !final.hasError
       && approval.committed && approval.specVersion === 2
       && approval.paymentStatus === 'removed' && approval.actionsApproved
@@ -899,7 +1020,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && recovery.verified && recovery.preservedTargets
       && figmaSetup.hasSetupDialog && figmaSetup.runtimeReady && figmaSetup.pluginBuilt && figmaSetup.waitingForPlugin
       && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady))
-    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, lifecycleFlow, rejection, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
+    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, lifecycleFlow, rejection, canvasGesture, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
     app.exit(passed ? 0 : 1)
   } catch (error) {
     console.error('[smoke] failed', error)

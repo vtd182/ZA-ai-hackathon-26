@@ -188,11 +188,11 @@
 
 ### `P0-HIS-005` Chat-canvas bidirectional commands
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-HIS-004, P0-CAN-002, P0-AGT-002
 - **Deliver:** CanvasSelectionContext, chat domain commands, canvas gestures -> command preview, business/presentation undo boundary.
 - **Acceptance:** chat có thể focus/remove entity; canvas delete/drag không mutate ProductSpec trước preview/approval.
-- **Progress:** chat focus/remove/switch/add proposals and selection context work; canvas persistence is presentation-only. Còn thiếu guarded gesture-to-domain-command preview and business/presentation undo boundary.
+- **Evidence:** chat focus/remove/switch/add and selection context share the canonical ProductSpec projection. `./run.sh smoke-canvas` performs a real tldraw drag/undo/delete sequence: drag and undo remain presentation-only, delete keeps the entity and creates a guarded impact preview, and ProductSpec stays v1 until approval.
 
 ### `P0-UI-001` Typed IPC and app shell
 
@@ -220,11 +220,11 @@
 
 ### `P0-CAN-002` ProductSpec projection and domain commands
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-CAN-001, P0-DOM-003
 - **Deliver:** projection renderer, selection sync, commands for option/change.
 - **Acceptance:** canvas edit không sửa business state trực tiếp; command invalid bị reject.
-- **Current slice:** add a typed canvas gesture proposal, validate it at the Agent Core boundary, restore canonical projection immediately and require the existing immutable preview/approval flow before ProductSpec mutation.
+- **Evidence:** versioned `CanvasGestureCommand` crosses typed preload IPC and is validated again by Agent Core against canonical ProductSpec. Canonical delete is intercepted, deduplicated and staged through the same immutable preview flow as chat; invalid/non-requirement and already-removed targets are rejected by unit and production smoke tests.
 
 ### `P0-UI-003` Artifact preview and approval
 
@@ -330,10 +330,11 @@
 
 ### `P0-CHG-001` Change intent and impact preview
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-DOM-004, P0-UI-004
 - **Deliver:** structured change request, ambiguity handling, immutable impact set and diff.
 - **Acceptance:** preview không mutate state; ambiguous target chuyển `NEEDS_USER_INPUT`.
+- **Current slice:** add explicit ambiguity state/response and prove ambiguous chat/canvas targets queue no preview, action or ProductSpec mutation.
 
 ### `P0-CHG-002` Approved ProductSpec version update
 

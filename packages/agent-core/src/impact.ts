@@ -1,9 +1,22 @@
 import { createHash } from 'node:crypto'
-import type { ChangeIntent, ChangePreview, EntityKind, PlannedAction, ProductSpec } from '@pm-agent/domain'
-import { parseProductSpec } from '@pm-agent/domain'
+import type { CanvasGestureCommand, ChangeIntent, ChangePreview, EntityKind, PlannedAction, ProductSpec } from '@pm-agent/domain'
+import { canvasGestureCommandSchema, parseProductSpec } from '@pm-agent/domain'
 import { stableStringify, type JsonValue } from '@pm-agent/shared'
 
 export type ImpactPreview = ChangePreview
+
+export function changeIntentFromCanvasCommand(spec: ProductSpec, input: unknown): ChangeIntent {
+  const command: CanvasGestureCommand = canvasGestureCommandSchema.parse(input)
+  const requirement = spec.requirements.find((item) => item.id === command.entityId)
+  if (!requirement) throw new Error(`Canvas remove only supports requirement entities: ${command.entityId}`)
+  if (requirement.status !== 'in_scope') throw new Error(`Canvas entity is not removable in its current state: ${command.entityId}`)
+  return {
+    id: `CHANGE-CANVAS-REMOVE-${command.entityId}-V${spec.version}`,
+    operation: 'remove',
+    targetEntityId: command.entityId,
+    reason: `Canvas delete proposal for ${command.entityId}`,
+  }
+}
 
 export function hashActionPayload(payload: Record<string, unknown>): string {
   return createHash('sha256').update(stableStringify(payload as JsonValue)).digest('hex')

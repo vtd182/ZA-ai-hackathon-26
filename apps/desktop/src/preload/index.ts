@@ -14,6 +14,7 @@ const api: DesktopApi = {
   },
   canvas: {
     save: (threadId, snapshot) => ipcRenderer.invoke('canvas:save', threadId, snapshot),
+    proposeCommand: (threadId, command) => ipcRenderer.invoke('canvas:propose-command', threadId, command),
   },
   lifecycle: {
     getWorkspace: (threadId) => ipcRenderer.invoke('lifecycle:get-workspace', threadId),

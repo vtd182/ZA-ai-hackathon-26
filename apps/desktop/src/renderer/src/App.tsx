@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import type {
   CanvasSelectionContext,
+  CanvasGestureCommand,
   ChangePreview,
   ChatMessage,
   FigmaSetupStatus,
@@ -294,6 +295,23 @@ export function App(): React.JSX.Element {
     }
   }
 
+  const proposeCanvasCommand = useCallback(async (command: CanvasGestureCommand): Promise<void> => {
+    if (!activeThread || approving) return
+    setApproving(true)
+    setError(null)
+    try {
+      const workspace = await window.pmAgent.canvas.proposeCommand(activeThread.id, command)
+      setLifecycleWorkspace(workspace)
+      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      setCommandBatch({ id: Date.now(), commands: [{ type: 'switch_view', view: 'change' }] })
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setApproving(false)
+    }
+  }, [activeThread, approving, refreshThreads])
+
   const activeProfile = profiles.find((profile) => profile.id === activeThread?.providerId)
 
   const resetDemo = async (): Promise<void> => {
@@ -422,6 +440,7 @@ export function App(): React.JSX.Element {
                   ?? lifecycleWorkspace?.runState.pendingActions.flatMap((action) => action.entityIds)
                   ?? []}
                 onSelectionChange={setSelection}
+                onGestureProposal={(command) => void proposeCanvasCommand(command)}
               />
             </Suspense>
           ) : (

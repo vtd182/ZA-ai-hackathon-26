@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { FigmaSetupStatus } from './figma-setup'
-import type { ApproveChangeOutput, ChangePreview, LifecycleWorkspaceState, PlannedAction } from './lifecycle'
+import type { ApproveChangeOutput, CanvasCommandOutput, CanvasGestureCommand, ChangePreview, LifecycleWorkspaceState, PlannedAction } from './lifecycle'
 import type { ProductSpec } from './product-spec'
 
 export * from './design-system'
@@ -221,6 +221,7 @@ export interface DesktopApi {
   }
   canvas: {
     save(threadId: string, snapshot: unknown): Promise<void>
+    proposeCommand(threadId: string, command: CanvasGestureCommand): Promise<CanvasCommandOutput>
   }
   lifecycle: {
     getWorkspace(threadId: string): Promise<LifecycleWorkspaceState>

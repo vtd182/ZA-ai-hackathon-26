@@ -22,6 +22,13 @@ export const changeIntentSchema = z.object({
 })
 export type ChangeIntent = z.infer<typeof changeIntentSchema>
 
+export const canvasGestureCommandSchema = z.object({
+  schemaVersion: z.literal(1),
+  type: z.literal('remove_entity'),
+  entityId: z.string().regex(/^[A-Z][A-Z0-9-]*$/, 'Canvas command must use a stable entity ID'),
+})
+export type CanvasGestureCommand = z.infer<typeof canvasGestureCommandSchema>
+
 export const plannedActionStatusSchema = z.enum([
   'draft',
   'pending_approval',
@@ -110,5 +117,9 @@ export interface LifecycleWorkspaceState {
 }
 
 export interface ApproveChangeOutput extends LifecycleWorkspaceState {
+  message: string
+}
+
+export interface CanvasCommandOutput extends LifecycleWorkspaceState {
   message: string
 }

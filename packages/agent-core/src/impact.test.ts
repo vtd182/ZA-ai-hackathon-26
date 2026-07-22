@@ -8,7 +8,7 @@ import {
   type WorkflowEvent,
 } from '@pm-agent/domain'
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
-import { approvalMatchesAction, approveActions, createImpactPreview, invalidateChangedActions, rejectActions } from './index'
+import { approvalMatchesAction, approveActions, changeIntentFromCanvasCommand, createImpactPreview, invalidateChangedActions, rejectActions } from './index'
 
 const timestamp = '2026-07-22T01:00:00.000Z'
 const intent: ChangeIntent = {
@@ -33,6 +33,33 @@ function initialRun(): RunState {
 }
 
 describe('deterministic change impact', () => {
+  it('validates a canvas delete proposal without mutating ProductSpec', () => {
+    const before = structuredClone(mealOrderingProductSpec)
+    expect(changeIntentFromCanvasCommand(mealOrderingProductSpec, {
+      schemaVersion: 1,
+      type: 'remove_entity',
+      entityId: 'REQ-PAYMENT',
+    })).toMatchObject({ operation: 'remove', targetEntityId: 'REQ-PAYMENT' })
+    expect(mealOrderingProductSpec).toEqual(before)
+  })
+
+  it.each([
+    { schemaVersion: 1, type: 'remove_entity', entityId: 'SCREEN-CHECKOUT' },
+    { schemaVersion: 1, type: 'remove_entity', entityId: 'REQ-UNKNOWN' },
+    { schemaVersion: 1, type: 'remove_entity', entityId: 'invalid id' },
+  ])('rejects invalid canvas command %#', (command) => {
+    expect(() => changeIntentFromCanvasCommand(mealOrderingProductSpec, command)).toThrow()
+  })
+
+  it('rejects a canvas delete proposal for an already removed requirement', () => {
+    const removed = createImpactPreview(mealOrderingProductSpec, intent, 'RUN-TEST', timestamp).after
+    expect(() => changeIntentFromCanvasCommand(removed, {
+      schemaVersion: 1,
+      type: 'remove_entity',
+      entityId: 'REQ-PAYMENT',
+    })).toThrow(/not removable/)
+  })
+
   it('returns only the payment impact path and a valid next spec', () => {
     const preview = createImpactPreview(mealOrderingProductSpec, intent, 'RUN-TEST', timestamp)
 
