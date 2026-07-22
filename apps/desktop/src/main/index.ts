@@ -2,7 +2,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
-import { acceptCompletedProviderEvents, approveActions, assertProviderSwitchAllowed, createHandoffPackage, createImpactPreview, executeConnectorAction } from '@pm-agent/agent-core'
+import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, createHandoffPackage, createImpactPreview, executeConnectorAction, selectDecisionOption } from '@pm-agent/agent-core'
 import {
   createFigmaArtifactPlan,
   createMockJiraPlan,
@@ -41,7 +41,7 @@ import {
 } from '@pm-agent/domain'
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
 import { syntheticZaloDesignSystem } from '@pm-agent/fixture-zalo-design-system'
-import { DEMO_FIXTURE_VERSION, FigmaIntegrationStore, HistoryStore, LifecycleStore, OutboxStore } from '@pm-agent/persistence'
+import { DEMO_FIXTURE_VERSION, DEMO_THREAD_ID, FigmaIntegrationStore, HistoryStore, LifecycleStore, OutboxStore } from '@pm-agent/persistence'
 import { ProviderRegistry } from '@pm-agent/reasoning'
 import { SecretStore } from './secret-store'
 
@@ -98,13 +98,28 @@ function workspaceFor(threadId: string): LifecycleWorkspaceState {
   let runState = lifecycle.getRunState(threadId)
   if (!runState) {
     const createdAt = timestamp()
-    runState = lifecycle.initializeRun(threadId, `run:${threadId}`, mealOrderingProductSpec, createdAt)
+    runState = lifecycle.initializeRun(
+      threadId,
+      `run:${threadId}`,
+      mealOrderingProductSpec,
+      createdAt,
+      threadId === DEMO_THREAD_ID ? 'DELIVERY' : 'IDEA_INTAKE',
+    )
   }
   const preview = runState.status === 'WAITING_FOR_APPROVAL' && runState.pendingIntent
     ? createImpactPreview(runState.productSpec, runState.pendingIntent, runState.id, runState.lastCheckpointAt)
     : null
   const execution = outbox.listRun(runState.id).length > 0 ? outbox.summary(runState.id) : null
-  return { runState, preview, execution }
+  const reasoning = lifecycle.getLatestReasoningCheckpoint(runState.id)?.result ?? null
+  return { runState, preview, execution, reasoning }
+}
+
+function moveToDeliveryForChange(state: RunState, at: string): RunState {
+  let next = state
+  if (next.phase === 'IDEA_INTAKE' && next.status === 'ACTIVE') next = transitionRunState(next, 'START_DISCOVERY', at)
+  if (next.phase === 'DISCOVERY' && next.status === 'ACTIVE') next = transitionRunState(next, 'REQUEST_DECISION', at)
+  if (next.phase === 'DECISION' && next.status === 'WAITING_FOR_DECISION') next = transitionRunState(next, 'SELECT_OPTION', at)
+  return next
 }
 
 function resetDemoWorkspace(): { fixtureVersion: 1; thread: ReturnType<HistoryStore['resetDemoWorkspace']>; workspace: LifecycleWorkspaceState } {
@@ -340,6 +355,53 @@ function registerIpc(): void {
     history.addMessage(threadId, 'assistant', message)
     return { ...workspace, message }
   })
+  ipcMain.handle('lifecycle:advance-decision', async (_event, threadId: string, answers: Record<string, string>) => {
+    if (activeRuns.has(threadId)) throw new Error('Thread này đang có một turn chạy')
+    const workspace = workspaceFor(threadId)
+    if (workspace.runState.phase !== 'DISCOVERY' || workspace.runState.status !== 'ACTIVE' || workspace.reasoning?.phase !== 'discover') {
+      throw new Error('Discovery checkpoint chưa sẵn sàng')
+    }
+    const questions = workspace.reasoning.phaseData.questions
+    if (questions.length === 0 || questions.some((question) => !question.options.includes(answers[question.id] ?? ''))) {
+      throw new Error('Hãy chọn một câu trả lời hợp lệ cho từng clarification')
+    }
+    const thread = history.getThread(threadId)
+    const profile = history.getProfile(thread.providerId)
+    const answerText = questions.map((question) => `${question.prompt}: ${answers[question.id]}`).join('\n')
+    history.addMessage(threadId, 'user', answerText)
+    const controller = new AbortController()
+    activeRuns.set(threadId, controller)
+    try {
+      const apiKey = secrets.get(profile.id)
+      const response = await providers.get(profile.providerId).reason({
+        threadId,
+        phase: 'decide',
+        message: answerText,
+        recentMessages: history.recentMessages(threadId),
+        remoteRef: history.getActiveRemoteRef(threadId, profile.id),
+      }, { modelId: profile.modelId, ...(apiKey ? { apiKey } : {}) }, controller.signal)
+      const proposal = acceptCompletedProviderEvents(workspace.runState, response.events, 'decide')
+      const advanced = advanceReasoningPhase(workspace.runState, proposal.result, timestamp())
+      lifecycle.saveReasoningCheckpoint(advanced.state, advanced.checkpoint)
+      history.setThreadPhase(threadId, 'decide')
+      history.addMessage(threadId, 'assistant', proposal.result.message)
+      history.saveProviderSegment(threadId, profile.id, profile.modelId, response.remoteRef)
+      return workspaceFor(threadId)
+    } finally {
+      activeRuns.delete(threadId)
+    }
+  })
+  ipcMain.handle('lifecycle:select-decision', (_event, threadId: string, optionId: string) => {
+    const workspace = workspaceFor(threadId)
+    if (workspace.reasoning?.phase !== 'decide') throw new Error('Decision checkpoint chưa sẵn sàng')
+    const option = workspace.reasoning.phaseData.options.find((item) => item.id === optionId)
+    if (!option) throw new Error('Phương án không tồn tại')
+    const next = selectDecisionOption(workspace.runState, workspace.reasoning, optionId, timestamp())
+    lifecycle.saveRunState(next)
+    history.setThreadPhase(threadId, 'deliver')
+    history.addMessage(threadId, 'assistant', `Đã chọn ${option.title}. ProductSpec được giữ làm nguồn sự thật cho Delivery.`)
+    return workspaceFor(threadId)
+  })
 
   ipcMain.handle('figma:status', () => figmaStatus())
   ipcMain.handle('figma:start', async () => {
@@ -417,8 +479,9 @@ function registerIpc(): void {
             targetEntityId: 'REQ-PAYMENT',
             reason: input.content.trim(),
           }
-          const preview = createImpactPreview(workspace.runState.productSpec, intent, workspace.runState.id, checkpointAt)
-          let nextState = transitionRunState(workspace.runState, 'REQUEST_CHANGE', checkpointAt)
+          const deliveryState = moveToDeliveryForChange(workspace.runState, checkpointAt)
+          const preview = createImpactPreview(deliveryState.productSpec, intent, deliveryState.id, checkpointAt)
+          let nextState = transitionRunState(deliveryState, 'REQUEST_CHANGE', checkpointAt)
           nextState = transitionRunState({ ...nextState, pendingIntent: intent, pendingActions: preview.actions }, 'PREVIEW_READY', checkpointAt)
           lifecycle.savePreview(nextState)
           history.setThreadPhase(input.threadId, 'change')
@@ -428,6 +491,13 @@ function registerIpc(): void {
         } else if (payment?.status === 'removed') {
           responseMessage = `REQ-PAYMENT đã bị loại khỏi ProductSpec v${workspace.runState.productSpec.version}; không tạo action trùng.`
           commands = [{ type: 'focus_card', query: 'REQ-PAYMENT' }, { type: 'switch_view', view: 'change' }]
+        }
+      } else {
+        const workspace = workspaceFor(input.threadId)
+        if (workspace.runState.phase === 'IDEA_INTAKE' && proposal.result.phase === 'discover') {
+          const advanced = advanceReasoningPhase(workspace.runState, proposal.result, timestamp())
+          lifecycle.saveReasoningCheckpoint(advanced.state, advanced.checkpoint)
+          responseMessage = 'Mình đã chuẩn hóa ý tưởng. Hãy khóa ba clarification bên dưới để tạo phương án.'
         }
       }
       const assistantMessage = history.addMessage(input.threadId, 'assistant', responseMessage)
@@ -549,6 +619,50 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
           && beforeWorkspace.runState.productSpec.version === afterWorkspace.runState.productSpec.version
       };
     })()`) as { paidDialogReady: boolean; paidBlocked: boolean; stableThread: boolean; stableSpec: boolean }
+
+    const lifecycleFlow = { required: process.env.PM_AGENT_SMOKE_LIFECYCLE === '1', questions: 0, options: 0, delivered: false, resumed: false }
+    if (lifecycleFlow.required) {
+      await window.webContents.executeJavaScript(`document.querySelector('.new-thread-button')?.click()`)
+      await wait(300)
+      await window.webContents.executeJavaScript(`(() => {
+        const input = document.querySelector('.composer textarea');
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(input, 'Mini App hỗ trợ nhân viên đặt bữa trưa tại văn phòng');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        setTimeout(() => document.querySelector('.send-button')?.click(), 30);
+      })()`)
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        await wait(250)
+        lifecycleFlow.questions = await window.webContents.executeJavaScript(`document.querySelectorAll('.clarification-list fieldset').length`) as number
+        if (lifecycleFlow.questions > 0) break
+      }
+      const clarificationImage = await window.webContents.capturePage()
+      writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!.replace(/\.png$/, '-clarification.png'), clarificationImage.toPNG())
+      await window.webContents.executeJavaScript(`(() => {
+        document.querySelectorAll('.clarification-list fieldset').forEach((fieldset) => fieldset.querySelector('button')?.click());
+        setTimeout(() => document.querySelector('.phase-continue-button')?.click(), 30);
+      })()`)
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        await wait(250)
+        lifecycleFlow.options = await window.webContents.executeJavaScript(`document.querySelectorAll('.decision-options > button').length`) as number
+        if (lifecycleFlow.options >= 2) break
+      }
+      const decisionImage = await window.webContents.capturePage()
+      writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!.replace(/\.png$/, '-decision.png'), decisionImage.toPNG())
+      await window.webContents.executeJavaScript(`document.querySelector('.decision-options > button')?.click()`)
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await wait(250)
+        lifecycleFlow.delivered = await window.webContents.executeJavaScript(`(async () => {
+          const thread = (await window.pmAgent.threads.list()).find((item) => item.id !== ${JSON.stringify(DEMO_THREAD_ID)});
+          const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
+          return thread.phase === 'deliver' && workspace.runState.phase === 'DELIVERY' && workspace.runState.status === 'ACTIVE';
+        })()`) as boolean
+        if (lifecycleFlow.delivered) break
+      }
+      await window.webContents.executeJavaScript(`document.querySelector('[data-thread-id=${JSON.stringify(DEMO_THREAD_ID)}] .thread-main')?.click()`)
+      await wait(350)
+      lifecycleFlow.resumed = await window.webContents.executeJavaScript(`document.querySelector('[data-thread-id=${JSON.stringify(DEMO_THREAD_ID)}]')?.classList.contains('active')`) as boolean
+    }
 
     if (process.env.PM_AGENT_SMOKE_PROVIDER) {
       await window.webContents.executeJavaScript(`(async () => {
@@ -701,6 +815,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     const passed = initial.hasApi && initial.hasCanvas && initial.hasSeed
       && reset.controlReady && reset.deterministic
       && providerSwitch.paidDialogReady && providerSwitch.paidBlocked && providerSwitch.stableThread && providerSwitch.stableSpec
+      && (!lifecycleFlow.required || (lifecycleFlow.questions > 0 && lifecycleFlow.questions <= 3 && lifecycleFlow.options >= 2 && lifecycleFlow.options <= 3 && lifecycleFlow.delivered && lifecycleFlow.resumed))
       && final.hasPreview && !final.pending && !final.hasError
       && approval.committed && approval.specVersion === 2
       && approval.paymentStatus === 'removed' && approval.actionsApproved
@@ -710,7 +825,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && recovery.verified && recovery.preservedTargets
       && figmaSetup.hasSetupDialog && figmaSetup.runtimeReady && figmaSetup.pluginBuilt && figmaSetup.waitingForPlugin
       && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady))
-    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
+    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, lifecycleFlow, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
     app.exit(passed ? 0 : 1)
   } catch (error) {
     console.error('[smoke] failed', error)

@@ -17,6 +17,7 @@ describe('mock provider command inference', () => {
     const second = inferLocalCommands('Đề xuất phương án', 'decide')
     expect(first).toEqual(second)
     expect(first).toMatchObject({ phase: 'decide', phaseData: { recommendedOptionId: 'OPT-LEAN' } })
+    expect(first.message).toContain('hai phương án MVP')
   })
 
   it('limits discovery to three structured questions', () => {

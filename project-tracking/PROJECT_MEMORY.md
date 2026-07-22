@@ -50,8 +50,9 @@ Signature moment:
 - **Completed task:** `P0-AGT-002` Idea -> Discovery -> `WAITING_FOR_DECISION` orchestration with persisted/reopened reasoning checkpoints.
 - **Completed task:** `P0-AGT-003` normalized provider events/capabilities; partial streams cannot mutate state and real Codex smoke passes.
 - **Completed task:** `P0-PRV-001` canonical handoff and safe provider switching with paid confirmation and capability snapshots.
-- **Current task:** `P0-UI-002` clarification and decision lifecycle workspace is `IN_PROGRESS`.
-- **Current slice:** Render persisted discovery questions, submit answers into a decision checkpoint, select an option and resume the same thread at Delivery.
+- **Completed task:** `P0-UI-002` clarification/decision workspace and ProductSpec inspector; lifecycle UI smoke passes with persisted resume.
+- **Current task:** `P0-UI-003` complete artifact approval controls is `IN_PROGRESS`.
+- **Current slice:** Add reject/cancel with immutable audit record, keep ProductSpec v1 on rejection and cover both approval decisions in UI/state tests.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -384,6 +385,14 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Core blocks switches during turns or artifact execution; paid API segments require explicit UI/API confirmation.
 - Persistence and production smoke prove thread, canvas and ProductSpec survive Mock -> API slot -> Mock switching without a paid call.
 - Next action: expose resumable discovery questions and decision options in the lifecycle workspace.
+
+### 2026-07-22 - Lifecycle decision workspace
+
+- Thread-first Idea Intake now renders three structured clarification questions and persists chosen answers as chat evidence.
+- The same provider produces 2-3 decision options with an explicit recommendation; selecting one advances canonical state to Delivery.
+- Added a compact ProductSpec inspector with version/status/counts and selected entity context.
+- Lifecycle smoke drives the full UI, switches away/back, saves clarification/decision screenshots and then confirms the signature change flow still passes.
+- Next action: add explicit reject/cancel to the artifact approval panel.
 
 ## 10. End-of-session checklist
 

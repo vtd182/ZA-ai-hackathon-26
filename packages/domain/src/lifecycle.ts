@@ -106,6 +106,7 @@ export interface LifecycleWorkspaceState {
   runState: RunState
   preview: ChangePreview | null
   execution: ExecutionSummary | null
+  reasoning: import('./index').PhaseReasoningResult | null
 }
 
 export interface ApproveChangeOutput extends LifecycleWorkspaceState {

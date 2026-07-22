@@ -18,6 +18,8 @@ const api: DesktopApi = {
     getWorkspace: (threadId) => ipcRenderer.invoke('lifecycle:get-workspace', threadId),
     approveChange: (threadId) => ipcRenderer.invoke('lifecycle:approve-change', threadId),
     retryAction: (threadId, target) => ipcRenderer.invoke('lifecycle:retry-action', threadId, target),
+    advanceDecision: (threadId, answers) => ipcRenderer.invoke('lifecycle:advance-decision', threadId, answers),
+    selectDecision: (threadId, optionId) => ipcRenderer.invoke('lifecycle:select-decision', threadId, optionId),
   },
   figma: {
     status: () => ipcRenderer.invoke('figma:status'),

@@ -158,9 +158,15 @@ export function inferLocalCommands(message: string, phase: WorkflowView = 'disco
     commands.push({ type: 'focus_card', query })
   }
 
+  const phaseMessage: Record<WorkflowView, string> = {
+    discover: 'Mình đã ghi nhận. Hãy khóa target user, outcome và constraint để tiếp tục.',
+    decide: 'Mình đã tổng hợp hai phương án MVP. Hãy chọn một hướng để chuyển sang Delivery.',
+    deliver: 'ProductSpec đã sẵn sàng lập artifact plan có approval và read-back verification.',
+    change: 'Mình cần target entity và operation cụ thể trước khi tạo impact preview.',
+  }
   const messageText = commands.length > 0
     ? 'Mình đã tạo đề xuất trên canvas. Thay đổi business scope vẫn cần được review trước khi đồng bộ artifact.'
-    : 'Mình đã ghi nhận. Hãy bổ sung target user, mục tiêu đo lường hoặc constraint quan trọng để tiếp tục discovery.'
+    : phaseMessage[phase]
   return { schemaVersion: 1, phase, message: messageText, commands, phaseData: phaseData(phase, normalized) } as PhaseReasoningResult
 }
 

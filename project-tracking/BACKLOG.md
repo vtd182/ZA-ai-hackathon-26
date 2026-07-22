@@ -204,11 +204,11 @@
 
 ### `P0-UI-002` Lifecycle workspace
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-AGT-002, P0-UI-001
 - **Deliver:** history + idea/chat intake, clarification, option lanes, selection, ProductSpec inspector.
 - **Acceptance:** user hoàn thành decision flow; tối đa 3 câu hỏi; refresh/resume không mất thread state.
-- **Progress:** three-panel history/canvas/chat workspace and ProductSpec projection are runnable; clarification questions, option lanes and decision selection are not implemented.
+- **Evidence:** new threads run Idea intake into a persisted panel of exactly three clarification questions, then 2-3 decision options with recommendation and selectable Delivery transition. ProductSpec inspector exposes version/status/entity counts and canvas selection. `./run.sh smoke-lifecycle` drives the UI, switches away/back to prove resume and saves clarification/decision screenshots; SQLite reopen test covers process restart.
 
 ### `P0-CAN-001` Canvas shapes and deterministic layout
 
@@ -228,7 +228,7 @@
 
 ### `P0-UI-003` Artifact preview and approval
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-AGT-004, P0-CAN-002
 - **Deliver:** grouped actions, diff/summary, approve/reject, target labels (`Figma`, `Mock Jira`, `Mock Zdoc`).
 - **Acceptance:** payload và target rõ ràng; approval status cập nhật theo state machine.

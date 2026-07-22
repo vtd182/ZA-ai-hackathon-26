@@ -34,6 +34,7 @@ import type {
   ThreadDetail,
   ThreadSummary,
   PlannedAction,
+  PhaseReasoningResult,
 } from '@pm-agent/domain'
 
 const CanvasWorkspace = lazy(async () => {
@@ -232,6 +233,40 @@ export function App(): React.JSX.Element {
     }
   }
 
+  const advanceDecision = async (answers: Record<string, string>): Promise<void> => {
+    if (!activeThread || sending) return
+    setSending(true)
+    setError(null)
+    try {
+      const workspace = await window.pmAgent.lifecycle.advanceDecision(activeThread.id, answers)
+      setLifecycleWorkspace(workspace)
+      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      setCommandBatch({ id: Date.now(), commands: [{ type: 'switch_view', view: 'decide' }] })
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const selectDecision = async (optionId: string): Promise<void> => {
+    if (!activeThread || sending) return
+    setSending(true)
+    setError(null)
+    try {
+      const workspace = await window.pmAgent.lifecycle.selectDecision(activeThread.id, optionId)
+      setLifecycleWorkspace(workspace)
+      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      setCommandBatch({ id: Date.now(), commands: [{ type: 'switch_view', view: 'deliver' }] })
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setSending(false)
+    }
+  }
+
   const activeProfile = profiles.find((profile) => profile.id === activeThread?.providerId)
 
   const resetDemo = async (): Promise<void> => {
@@ -279,7 +314,7 @@ export function App(): React.JSX.Element {
         </label>
         <div className="thread-list">
           {threads.map((thread) => (
-            <div className={thread.id === activeThread?.id ? 'thread-row active' : 'thread-row'} key={thread.id}>
+            <div data-thread-id={thread.id} className={thread.id === activeThread?.id ? 'thread-row active' : 'thread-row'} key={thread.id}>
               <button className="thread-main" onClick={() => void openThread(thread.id)}>
                 <strong>{thread.title}</strong>
                 <span>{thread.lastMessage ?? 'Canvas trống'}</span>
@@ -379,11 +414,15 @@ export function App(): React.JSX.Element {
         approving={approving}
         preview={lifecycleWorkspace?.preview ?? undefined}
         execution={lifecycleWorkspace?.execution ?? undefined}
+        reasoning={lifecycleWorkspace?.reasoning ?? undefined}
+        productSpec={lifecycleWorkspace?.runState.productSpec}
         disabled={!activeThread}
         onSend={sendMessage}
         onStop={stopMessage}
         onApprove={approveChange}
         onRetry={retryAction}
+        onAdvanceDecision={advanceDecision}
+        onSelectDecision={selectDecision}
       />
 
       {settingsProfile && (
@@ -552,11 +591,15 @@ function ChatPanel({
   approving,
   preview,
   execution,
+  reasoning,
+  productSpec,
   disabled,
   onSend,
   onStop,
   onApprove,
   onRetry,
+  onAdvanceDecision,
+  onSelectDecision,
 }: {
   messages: ChatMessage[]
   selection?: CanvasSelectionContext
@@ -564,11 +607,15 @@ function ChatPanel({
   approving: boolean
   preview?: ChangePreview
   execution?: ExecutionSummary
+  reasoning?: PhaseReasoningResult
+  productSpec?: import('@pm-agent/domain').ProductSpec
   disabled: boolean
   onSend(content: string): Promise<void>
   onStop(): Promise<void>
   onApprove(): Promise<void>
   onRetry(target: PlannedAction['target']): Promise<void>
+  onAdvanceDecision(answers: Record<string, string>): Promise<void>
+  onSelectDecision(optionId: string): Promise<void>
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const canSend = !disabled && !sending && draft.trim().length > 0
@@ -592,6 +639,7 @@ function ChatPanel({
           <strong>{selection.label.replace('\n', ' · ')}</strong>
         </div>
       )}
+      {productSpec && <ProductSpecInspector productSpec={productSpec} selection={selection} />}
       <div className="message-list">
         {messages.map((message) => (
           <article className={`message ${message.role}`} key={message.id}>
@@ -608,6 +656,14 @@ function ChatPanel({
       </div>
       {preview && <ChangePreviewPanel preview={preview} approving={approving} onApprove={onApprove} />}
       {execution && <ExecutionPanel execution={execution} busy={approving} onRetry={onRetry} />}
+      {reasoning && (reasoning.phase === 'discover' || reasoning.phase === 'decide') && (
+        <PhaseReasoningPanel
+          reasoning={reasoning}
+          busy={sending}
+          onAdvance={onAdvanceDecision}
+          onSelect={onSelectDecision}
+        />
+      )}
       <div className="composer">
         <textarea
           value={draft}
@@ -628,6 +684,87 @@ function ChatPanel({
         )}
       </div>
     </aside>
+  )
+}
+
+function ProductSpecInspector({
+  productSpec,
+  selection,
+}: {
+  productSpec: import('@pm-agent/domain').ProductSpec
+  selection?: CanvasSelectionContext
+}): React.JSX.Element {
+  const selected = selection?.entityId
+    ? [productSpec.idea, ...productSpec.goals, ...productSpec.findings, ...productSpec.requirements, ...productSpec.screens, ...productSpec.stories, ...productSpec.dependencies, ...productSpec.decisions]
+      .find((entity) => entity.id === selection.entityId)
+    : undefined
+  return (
+    <section className="spec-inspector" aria-label="ProductSpec inspector">
+      <header><strong>ProductSpec v{productSpec.version}</strong><span>{productSpec.status}</span></header>
+      <div className="spec-metrics">
+        <span><b>{productSpec.requirements.filter((item) => item.status !== 'removed').length}</b> Req</span>
+        <span><b>{productSpec.screens.length}</b> Screen</span>
+        <span><b>{productSpec.stories.length}</b> Story</span>
+      </div>
+      {selected && <p><strong>{selected.id}</strong><span>{selected.title}</span></p>}
+    </section>
+  )
+}
+
+function PhaseReasoningPanel({
+  reasoning,
+  busy,
+  onAdvance,
+  onSelect,
+}: {
+  reasoning: Extract<PhaseReasoningResult, { phase: 'discover' | 'decide' }>
+  busy: boolean
+  onAdvance(answers: Record<string, string>): Promise<void>
+  onSelect(optionId: string): Promise<void>
+}): React.JSX.Element {
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  useEffect(() => setAnswers({}), [reasoning.phase])
+  if (reasoning.phase === 'decide') {
+    return (
+      <section className="phase-reasoning-panel" aria-label="Decision options">
+        <header><strong>Phương án MVP</strong><span>Chọn một hướng để vào Delivery</span></header>
+        <div className="decision-options">
+          {reasoning.phaseData.options.map((option) => (
+            <button key={option.id} disabled={busy} onClick={() => void onSelect(option.id)}>
+              <span>{option.id === reasoning.phaseData.recommendedOptionId ? 'Đề xuất' : 'Phương án'}</span>
+              <strong>{option.title}</strong>
+              <small>{option.tradeoff}</small>
+            </button>
+          ))}
+        </div>
+      </section>
+    )
+  }
+  const complete = reasoning.phaseData.questions.every((question) => Boolean(answers[question.id]))
+  return (
+    <section className="phase-reasoning-panel" aria-label="Clarification questions">
+      <header><strong>Clarification</strong><span>{reasoning.phaseData.questions.length}/3 câu hỏi</span></header>
+      <div className="clarification-list">
+        {reasoning.phaseData.questions.map((question) => (
+          <fieldset key={question.id}>
+            <legend>{question.prompt}</legend>
+            <div className="segmented-options">
+              {question.options.map((option) => (
+                <button
+                  type="button"
+                  className={answers[question.id] === option ? 'selected' : ''}
+                  key={option}
+                  onClick={() => setAnswers((current) => ({ ...current, [question.id]: option }))}
+                >{option}</button>
+              ))}
+            </div>
+          </fieldset>
+        ))}
+      </div>
+      <button className="primary-button phase-continue-button" disabled={!complete || busy} onClick={() => void onAdvance(answers)}>
+        {busy ? <LoaderCircle className="spin" size={15} /> : <ChevronRight size={15} />} Tạo phương án
+      </button>
+    </section>
   )
 }
 
