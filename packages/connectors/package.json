@@ -4,8 +4,14 @@
   "private": true,
   "type": "module",
   "exports": "./src/index.ts",
-  "scripts": { "typecheck": "tsc --noEmit" },
-  "dependencies": { "@pm-agent/domain": "workspace:*" },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.25.2",
+    "@pm-agent/domain": "workspace:*",
+    "@pm-agent/shared": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "24.10.0",
     "typescript": "7.0.2"

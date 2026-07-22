@@ -35,3 +35,4 @@ export interface ArtifactConnector<TPlan, TSnapshot> {
 }
 
 export * from './figma-runtime'
+export * from './figma-mcp'
