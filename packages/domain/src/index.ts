@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { ApproveChangeOutput, ChangePreview, LifecycleWorkspaceState } from './lifecycle'
 
 export * from './design-system'
 export * from './invariants'
@@ -83,6 +84,7 @@ export interface SendChatOutput {
   userMessage: ChatMessage
   assistantMessage: ChatMessage
   commands: ProviderCommand[]
+  changePreview?: ChangePreview
 }
 
 export interface ConfigureProviderInput {
@@ -101,6 +103,10 @@ export interface DesktopApi {
   }
   canvas: {
     save(threadId: string, snapshot: unknown): Promise<void>
+  }
+  lifecycle: {
+    getWorkspace(threadId: string): Promise<LifecycleWorkspaceState>
+    approveChange(threadId: string): Promise<ApproveChangeOutput>
   }
   providers: {
     list(): Promise<ProviderProfile[]>

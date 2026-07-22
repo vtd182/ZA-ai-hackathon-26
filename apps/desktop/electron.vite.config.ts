@@ -2,7 +2,15 @@ import { resolve } from 'node:path'
 import react from '@vitejs/plugin-react'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 
-const workspacePackages = ['@pm-agent/domain', '@pm-agent/persistence', '@pm-agent/reasoning']
+const workspacePackages = [
+  '@pm-agent/agent-core',
+  '@pm-agent/canvas',
+  '@pm-agent/domain',
+  '@pm-agent/fixture-meal-ordering',
+  '@pm-agent/persistence',
+  '@pm-agent/reasoning',
+  '@pm-agent/shared',
+]
 
 export default defineConfig({
   main: {

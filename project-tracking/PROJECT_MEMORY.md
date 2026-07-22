@@ -36,8 +36,9 @@ Signature moment:
 - **Milestone:** First runnable desktop vertical slice complete.
 - **Completed task:** `P0-FND-001` Bootstrap workspace.
 - **Completed tasks:** Foundation/fixtures/domain schemas, workflow state machine, ProductSpec invariants, deterministic impact graph and immutable approval policy.
-- **Current task:** Wire the signature change preview/approval into typed IPC, chat and ProductSpec canvas projection.
-- **Current slice:** Make `Bỏ payment khỏi MVP` produce a persisted before/after preview in the running app before any connector write.
+- **Completed tasks:** Foundation/domain workflow plus typed signature change preview, approval and persisted ProductSpec v2 projection.
+- **Current task:** `P0-FIG-000` resolve plugin serializer baseline, then prepare the Figma MCP/plugin import gate and installation guidance.
+- **Current slice:** Make the repository self-check and guide a fresh judge/user from one startup command to importing the local Figma plugin, without executing Figma writes yet.
 - **Last known repository state:** Có product spec, `project-tracking/`, root `AGENTS.md` và MCP Figma tại `mcp-tool/`; chưa có Git repository hoặc PM Lifecycle app code.
 - **Known blockers:** Chưa có sanitized/allowed Zalo Design System source; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 

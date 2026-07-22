@@ -6,5 +6,8 @@
   "exports": "./src/index.ts",
   "scripts": { "typecheck": "tsc --noEmit" },
   "dependencies": { "@pm-agent/domain": "workspace:*" },
-  "devDependencies": { "typescript": "7.0.2" }
+  "devDependencies": {
+    "@pm-agent/fixture-meal-ordering": "workspace:*",
+    "typescript": "7.0.2"
+  }
 }

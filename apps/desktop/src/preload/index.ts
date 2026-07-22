@@ -14,6 +14,10 @@ const api: DesktopApi = {
   canvas: {
     save: (threadId, snapshot) => ipcRenderer.invoke('canvas:save', threadId, snapshot),
   },
+  lifecycle: {
+    getWorkspace: (threadId) => ipcRenderer.invoke('lifecycle:get-workspace', threadId),
+    approveChange: (threadId) => ipcRenderer.invoke('lifecycle:approve-change', threadId),
+  },
   providers: {
     list: () => ipcRenderer.invoke('providers:list'),
     configure: (input: ConfigureProviderInput) => ipcRenderer.invoke('providers:configure', input),

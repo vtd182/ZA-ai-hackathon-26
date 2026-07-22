@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAssetUrlsByImport } from '@tldraw/assets/imports.vite'
+import { projectProductSpec } from '@pm-agent/canvas'
 import {
   Tldraw,
   createShapeId,
   getSnapshot,
   toRichText,
   type Editor,
+  type TLShape,
   type TLStoreSnapshot,
 } from 'tldraw'
 import type {
   CanvasSelectionContext,
+  ChangePreview,
+  ProductSpec,
   ProviderCommand,
   WorkflowView,
 } from '@pm-agent/domain'
@@ -19,6 +23,9 @@ interface CanvasWorkspaceProps {
   snapshot: unknown | null
   initialView: WorkflowView
   commandBatch: { id: number; commands: ProviderCommand[] }
+  productSpec?: ProductSpec
+  changePreview?: ChangePreview
+  changeEntityIds: string[]
   onSelectionChange(selection?: CanvasSelectionContext): void
 }
 
@@ -30,36 +37,7 @@ const views: Array<{ id: WorkflowView; label: string }> = [
 ]
 
 const tldrawAssetUrls = getAssetUrlsByImport()
-
-type NoteColor = 'yellow' | 'green' | 'blue' | 'violet' | 'orange' | 'red'
-
-const seedCards: Array<{ id: string; label: string; view: WorkflowView; x: number; y: number; color: NoteColor }> = [
-  { id: 'idea', label: 'Idea\nĐặt suất ăn trước tại pantry', view: 'discover', x: 80, y: 110, color: 'yellow' },
-  { id: 'finding', label: 'Evidence\nGiảm thời gian xếp hàng giờ trưa', view: 'discover', x: 330, y: 110, color: 'green' },
-  { id: 'minimal', label: 'Minimal\nĐặt món + mã nhận suất', view: 'decide', x: 80, y: 400, color: 'blue' },
-  { id: 'balanced', label: 'Balanced\nĐặt món + ví nội bộ', view: 'decide', x: 330, y: 400, color: 'violet' },
-  { id: 'ambitious', label: 'Ambitious\nGợi ý món + nhóm đặt chung', view: 'decide', x: 580, y: 400, color: 'orange' },
-  { id: 'req-payment', label: 'REQ-PAYMENT\nThanh toán bằng ví nội bộ', view: 'deliver', x: 830, y: 110, color: 'violet' },
-  { id: 'screen-payment', label: 'Payment Screen\nDesign System guarded', view: 'deliver', x: 830, y: 400, color: 'blue' },
-  { id: 'wallet-story', label: 'Wallet Story\nMock Jira', view: 'deliver', x: 1080, y: 400, color: 'green' },
-  { id: 'wallet-sdk', label: 'Dependency\nWallet SDK', view: 'change', x: 1080, y: 110, color: 'red' },
-]
-
-function seedCanvas(editor: Editor): void {
-  editor.createShapes(seedCards.map((card) => ({
-    id: createShapeId(card.id),
-    type: 'note' as const,
-    x: card.x,
-    y: card.y,
-    props: {
-      color: card.color,
-      size: 'm',
-      richText: toRichText(card.label),
-    },
-    meta: { entityId: card.id, label: card.label, view: card.view, status: 'active' },
-  })))
-  editor.zoomToFit({ animation: { duration: 0 } })
-}
+const legacySeedIds = ['idea', 'finding', 'minimal', 'balanced', 'ambitious', 'req-payment', 'screen-payment', 'wallet-story', 'wallet-sdk']
 
 function shapeLabel(shape: { meta: Record<string, unknown> }): string {
   return typeof shape.meta.label === 'string' ? shape.meta.label : ''
@@ -69,20 +47,67 @@ function normalizeSearch(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
 
-function findShape(editor: Editor, query: string) {
+function findShape(editor: Editor, query: string): TLShape | undefined {
   const shapes = editor.getCurrentPageShapes()
   const normalizedQuery = normalizeSearch(query)
   const exact = shapes.find((shape) => normalizeSearch(shapeLabel(shape)).includes(normalizedQuery))
   if (exact) return exact
-
   const tokens = normalizedQuery.split(/[^a-z0-9]+/).filter((token) => token.length > 1)
   return shapes
-    .map((shape) => ({
-      shape,
-      score: tokens.filter((token) => normalizeSearch(shapeLabel(shape)).includes(token)).length,
-    }))
+    .map((shape) => ({ shape, score: tokens.filter((token) => normalizeSearch(shapeLabel(shape)).includes(token)).length }))
     .sort((left, right) => right.score - left.score)
     .find((candidate) => candidate.score > 0)?.shape
+}
+
+function removeLegacySeed(editor: Editor): void {
+  const legacy = editor.getCurrentPageShapes().filter((shape) => legacySeedIds.includes(String(shape.meta.entityId ?? '')))
+  if (legacy.length > 0) editor.deleteShapes(legacy.map((shape) => shape.id))
+}
+
+function reconcileProductSpec(editor: Editor, spec: ProductSpec): void {
+  const projections = projectProductSpec(spec)
+  const canonicalIds = new Set(projections.map((projection) => projection.entityId))
+  const currentShapes = editor.getCurrentPageShapes()
+  const byEntityId = new Map(currentShapes.map((shape) => [String(shape.meta.entityId ?? ''), shape]))
+
+  for (const projection of projections) {
+    const shapeId = createShapeId(projection.entityId.toLowerCase())
+    const existing = byEntityId.get(projection.entityId) ?? editor.getShape(shapeId)
+    const meta = {
+      entityId: projection.entityId,
+      entityKind: projection.kind,
+      label: projection.label,
+      view: projection.view,
+      status: projection.state,
+    }
+    if (existing?.type === 'note') {
+      editor.updateShape({
+        id: existing.id,
+        type: 'note',
+        x: projection.x,
+        y: projection.y,
+        opacity: projection.state === 'removed' ? 0.18 : 1,
+        props: { color: projection.tone, size: 'm', richText: toRichText(projection.label) },
+        meta,
+      })
+    } else if (!existing) {
+      editor.createShape({
+        id: shapeId,
+        type: 'note',
+        x: projection.x,
+        y: projection.y,
+        opacity: projection.state === 'removed' ? 0.18 : 1,
+        props: { color: projection.tone, size: 'm', richText: toRichText(projection.label) },
+        meta,
+      })
+    }
+  }
+
+  for (const shape of currentShapes) {
+    const entityId = typeof shape.meta.entityId === 'string' ? shape.meta.entityId : null
+    if (!entityId || typeof shape.meta.entityKind !== 'string' || canonicalIds.has(entityId)) continue
+    editor.updateShape({ id: shape.id, type: shape.type, opacity: 0.18, meta: { ...shape.meta, status: 'removed' } })
+  }
 }
 
 export function CanvasWorkspace({
@@ -90,6 +115,9 @@ export function CanvasWorkspace({
   snapshot,
   initialView,
   commandBatch,
+  productSpec,
+  changePreview,
+  changeEntityIds,
   onSelectionChange,
 }: CanvasWorkspaceProps): React.JSX.Element {
   const editorRef = useRef<Editor | null>(null)
@@ -98,6 +126,7 @@ export function CanvasWorkspace({
   const lastCommandBatch = useRef(0)
   const [view, setView] = useState<WorkflowView>(initialView)
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
+  const changeKey = changeEntityIds.join('|')
 
   const scheduleSave = useCallback(() => {
     setSaveState('saving')
@@ -111,7 +140,8 @@ export function CanvasWorkspace({
 
   const handleMount = useCallback((editor: Editor) => {
     editorRef.current = editor
-    if (editor.getCurrentPageShapes().length === 0) seedCanvas(editor)
+    removeLegacySeed(editor)
+    if (productSpec) reconcileProductSpec(editor, productSpec)
     const stopDocumentListener = editor.store.listen(scheduleSave, { scope: 'document' })
     const stopSelectionListener = editor.store.listen(() => {
       const selected = editor.getSelectedShapes()[0]
@@ -127,7 +157,46 @@ export function CanvasWorkspace({
       stopDocumentListener()
       stopSelectionListener()
     }
-  }, [onSelectionChange, scheduleSave])
+  }, [onSelectionChange, productSpec, scheduleSave])
+
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor || !productSpec) return
+    reconcileProductSpec(editor, productSpec)
+  }, [productSpec])
+
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    const affected = new Set(changeEntityIds)
+    const visibleShapeIds: TLShape['id'][] = []
+    const selectedBefore = editor.getSelectedShapeIds()[0]
+    for (const shape of editor.getCurrentPageShapes()) {
+      const entityId = String(shape.meta.entityId ?? '')
+      const shapeView = shape.meta.view
+      const status = shape.meta.status
+      const visible = view === 'change'
+        ? affected.has(entityId) || shapeView === 'change'
+        : shapeView === view
+      const opacity = !visible ? 0 : status === 'removed' ? 0.18 : changePreview && affected.has(entityId) ? 0.5 : 1
+      editor.updateShape({ id: shape.id, type: shape.type, opacity })
+      if (visible) visibleShapeIds.push(shape.id)
+    }
+    if (visibleShapeIds.length > 0) {
+      editor.select(...visibleShapeIds)
+      editor.zoomToSelection({ animation: { duration: 180 } })
+      if (selectedBefore && visibleShapeIds.includes(selectedBefore)) editor.select(selectedBefore)
+      else editor.selectNone()
+    }
+  }, [changeKey, changePreview, productSpec?.version, view])
+
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor || !changePreview) return
+    setView('change')
+    const target = findShape(editor, changePreview.intent.targetEntityId)
+    if (target) editor.select(target.id)
+  }, [changePreview])
 
   useEffect(() => {
     const editor = editorRef.current
@@ -144,24 +213,17 @@ export function CanvasWorkspace({
           id: createShapeId(entityId),
           type: 'note',
           x: 140 + (editor.getCurrentPageShapes().length % 4) * 250,
-          y: 720,
+          y: 820,
           props: { color: 'yellow', size: 'm', richText: toRichText(command.label) },
           meta: { entityId, label: command.label, view: command.view ?? view, status: 'proposed' },
         })
         continue
       }
-      const query = command.query.toLowerCase()
-      const shape = findShape(editor, query)
+      const shape = findShape(editor, command.query)
       if (!shape) continue
       editor.select(shape.id)
-      editor.zoomToSelection({ animation: { duration: 220 } })
       if (command.type === 'remove_card') {
-        editor.updateShape({
-          id: shape.id,
-          type: shape.type,
-          opacity: 0.28,
-          meta: { ...shape.meta, status: 'pending_remove' },
-        })
+        editor.updateShape({ id: shape.id, type: shape.type, opacity: 0.5, meta: { ...shape.meta, status: 'pending_remove' } })
       }
     }
   }, [commandBatch, view])

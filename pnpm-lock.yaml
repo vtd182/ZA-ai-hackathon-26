@@ -32,9 +32,18 @@ importers:
       '@google/genai':
         specifier: 2.13.0
         version: 2.13.0
+      '@pm-agent/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
+      '@pm-agent/canvas':
+        specifier: workspace:*
+        version: link:../../packages/canvas
       '@pm-agent/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@pm-agent/fixture-meal-ordering':
+        specifier: workspace:*
+        version: link:../../fixtures/meal-ordering
       '@pm-agent/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence
@@ -133,6 +142,9 @@ importers:
         specifier: workspace:*
         version: link:../domain
     devDependencies:
+      '@pm-agent/fixture-meal-ordering':
+        specifier: workspace:*
+        version: link:../../fixtures/meal-ordering
       typescript:
         specifier: 7.0.2
         version: 7.0.2

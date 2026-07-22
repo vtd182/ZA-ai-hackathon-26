@@ -1,13 +1,18 @@
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
+import { approveActions, createImpactPreview } from '@pm-agent/agent-core'
 import type {
+  ChangeIntent,
   ConfigureProviderInput,
   DesktopApi,
+  LifecycleWorkspaceState,
   ProviderProfile,
   SendChatInput,
 } from '@pm-agent/domain'
-import { HistoryStore } from '@pm-agent/persistence'
+import { transitionRunState } from '@pm-agent/domain'
+import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
+import { HistoryStore, LifecycleStore } from '@pm-agent/persistence'
 import { ProviderRegistry } from '@pm-agent/reasoning'
 import { SecretStore } from './secret-store'
 
@@ -15,6 +20,7 @@ const { app, BrowserWindow, ipcMain, shell } = electron
 
 let mainWindow: BrowserWindowType | null = null
 let history: HistoryStore
+let lifecycle: LifecycleStore
 let secrets: SecretStore
 const providers = new ProviderRegistry()
 const activeRuns = new Map<string, AbortController>()
@@ -25,6 +31,27 @@ const providerEnv: Record<string, string> = {
   openai: 'OPENAI_API_KEY',
   gemini: 'GEMINI_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
+}
+
+function timestamp(): string {
+  return new Date().toISOString()
+}
+
+function workspaceFor(threadId: string): LifecycleWorkspaceState {
+  let runState = lifecycle.getRunState(threadId)
+  if (!runState) {
+    const createdAt = timestamp()
+    runState = lifecycle.initializeRun(threadId, `run:${threadId}`, mealOrderingProductSpec, createdAt)
+  }
+  const preview = runState.status === 'WAITING_FOR_APPROVAL' && runState.pendingIntent
+    ? createImpactPreview(runState.productSpec, runState.pendingIntent, runState.id, runState.lastCheckpointAt)
+    : null
+  return { runState, preview }
+}
+
+function isPaymentRemoval(query: string): boolean {
+  const normalized = query.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  return normalized.includes('payment') || normalized.includes('thanh toan') || normalized.includes('vi noi bo')
 }
 
 function exposeProfile(profile: Omit<ProviderProfile, 'hasCredential'>): ProviderProfile {
@@ -44,6 +71,33 @@ function registerIpc(): void {
   ipcMain.handle('threads:set-provider', (_event, threadId: string, profileId: string) => history.setThreadProvider(threadId, profileId))
 
   ipcMain.handle('canvas:save', (_event, threadId: string, snapshot: unknown) => history.saveCanvas(threadId, snapshot))
+
+  ipcMain.handle('lifecycle:get-workspace', (_event, threadId: string) => workspaceFor(threadId))
+  ipcMain.handle('lifecycle:approve-change', (_event, threadId: string) => {
+    const workspace = workspaceFor(threadId)
+    const { runState } = workspace
+    if (runState.status !== 'WAITING_FOR_APPROVAL' || !runState.pendingIntent) {
+      throw new Error('Không có change plan đang chờ duyệt')
+    }
+    const preview = createImpactPreview(runState.productSpec, runState.pendingIntent, runState.id, runState.lastCheckpointAt)
+    const currentHashes = runState.pendingActions.map((action) => action.payloadHash).join(':')
+    const previewHashes = preview.actions.map((action) => action.payloadHash).join(':')
+    if (currentHashes !== previewHashes) throw new Error('Change plan đã thay đổi và cần preview lại')
+
+    const decidedAt = timestamp()
+    const approved = approveActions(runState.pendingActions, decidedAt)
+    const approvedState = transitionRunState({
+      ...runState,
+      productSpec: preview.after,
+      pendingIntent: null,
+      pendingActions: approved.actions,
+    }, 'APPROVE', decidedAt)
+    lifecycle.commitApprovedChange(approvedState, approved.approvals)
+    history.setThreadPhase(threadId, 'change')
+    const message = `Đã duyệt ProductSpec v${preview.after.version}. Ba artifact actions đã khóa payload; chưa ghi ra ngoài cho tới khi connector sẵn sàng.`
+    history.addMessage(threadId, 'assistant', message)
+    return { runState: approvedState, preview: null, message }
+  })
 
   ipcMain.handle('providers:list', () => history.listProfiles().map(exposeProfile))
   ipcMain.handle('providers:configure', (_event, input: ConfigureProviderInput) => {
@@ -80,11 +134,43 @@ function registerIpc(): void {
         modelId: profile.modelId,
         ...(apiKey ? { apiKey } : {}),
       }, controller.signal)
-      const assistantMessage = history.addMessage(input.threadId, 'assistant', response.result.message)
-      const switchCommand = response.result.commands.find((command) => command.type === 'switch_view')
+      const paymentRemoval = response.result.commands.find((command) => command.type === 'remove_card' && isPaymentRemoval(command.query))
+      let changePreview
+      let responseMessage = response.result.message
+      let commands = response.result.commands
+      if (paymentRemoval) {
+        const workspace = workspaceFor(input.threadId)
+        const payment = workspace.runState.productSpec.requirements.find((requirement) => requirement.id === 'REQ-PAYMENT')
+        if (workspace.preview) {
+          changePreview = workspace.preview
+          responseMessage = 'Change plan hiện tại vẫn đang chờ duyệt; payload và before/after chưa thay đổi.'
+          commands = [{ type: 'focus_card', query: 'REQ-PAYMENT' }, { type: 'switch_view', view: 'change' }]
+        } else if (payment?.status === 'in_scope') {
+          const checkpointAt = timestamp()
+          const intent: ChangeIntent = {
+            id: `CHANGE-REMOVE-PAYMENT-V${workspace.runState.productSpec.version}`,
+            operation: 'remove',
+            targetEntityId: 'REQ-PAYMENT',
+            reason: input.content.trim(),
+          }
+          const preview = createImpactPreview(workspace.runState.productSpec, intent, workspace.runState.id, checkpointAt)
+          let nextState = transitionRunState(workspace.runState, 'REQUEST_CHANGE', checkpointAt)
+          nextState = transitionRunState({ ...nextState, pendingIntent: intent, pendingActions: preview.actions }, 'PREVIEW_READY', checkpointAt)
+          lifecycle.savePreview(nextState)
+          history.setThreadPhase(input.threadId, 'change')
+          changePreview = preview
+          responseMessage = `Đã phân tích ${preview.affectedEntityIds.length} entity bị ảnh hưởng. Chưa có artifact nào được ghi; hãy kiểm tra before/after và duyệt change plan.`
+          commands = [...commands, { type: 'switch_view', view: 'change' }]
+        } else if (payment?.status === 'removed') {
+          responseMessage = `REQ-PAYMENT đã bị loại khỏi ProductSpec v${workspace.runState.productSpec.version}; không tạo action trùng.`
+          commands = [{ type: 'focus_card', query: 'REQ-PAYMENT' }, { type: 'switch_view', view: 'change' }]
+        }
+      }
+      const assistantMessage = history.addMessage(input.threadId, 'assistant', responseMessage)
+      const switchCommand = commands.find((command) => command.type === 'switch_view')
       if (switchCommand?.type === 'switch_view') history.setThreadPhase(input.threadId, switchCommand.view)
       history.saveProviderSegment(input.threadId, profile.id, profile.modelId, response.remoteRef)
-      return { userMessage, assistantMessage, commands: response.result.commands }
+      return { userMessage, assistantMessage, commands, ...(changePreview ? { changePreview } : {}) }
     } finally {
       activeRuns.delete(input.threadId)
     }
@@ -130,7 +216,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     const wait = (milliseconds: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, milliseconds))
     await wait(2_500)
     const initial = await window.webContents.executeJavaScript(`({
-      hasApi: Boolean(window.pmAgent?.threads && window.pmAgent?.chat),
+      hasApi: Boolean(window.pmAgent?.threads && window.pmAgent?.chat && window.pmAgent?.lifecycle),
       hasCanvas: Boolean(document.querySelector('.tl-container')),
       hasSeed: document.body.innerText.includes('REQ-PAYMENT')
     })`) as { hasApi: boolean; hasCanvas: boolean; hasSeed: boolean }
@@ -150,22 +236,44 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       input.dispatchEvent(new Event('change', { bubbles: true }));
       setTimeout(() => document.querySelector('.send-button')?.click(), 50);
     })()`)
-    let final = { hasAssistantOutcome: false, hasError: false, messageCount: 0, pending: true }
+    let final = { hasPreview: false, hasError: false, messageCount: 0, pending: true }
     for (let attempt = 0; attempt < 120; attempt += 1) {
       await wait(500)
       final = await window.webContents.executeJavaScript(`({
-        hasAssistantOutcome: document.body.innerText.includes('đề xuất trên canvas'),
+        hasPreview: Boolean(document.querySelector('.change-preview') && document.querySelector('.approve-button')),
         hasError: Boolean(document.querySelector('.error-banner')),
         messageCount: document.querySelectorAll('.message').length,
         pending: Boolean(document.querySelector('.message.pending'))
       })`) as typeof final
-      if (final.hasError || (!final.pending && final.messageCount >= 4)) break
+      if (final.hasError || (!final.pending && final.hasPreview)) break
+    }
+    const previewImage = await window.webContents.capturePage()
+    writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!.replace(/\.png$/, '-preview.png'), previewImage.toPNG())
+    if (final.hasPreview) {
+      await window.webContents.executeJavaScript(`document.querySelector('.approve-button')?.click()`)
+    }
+    let approval = { committed: false, specVersion: 0, paymentStatus: '', actionsApproved: false }
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      await wait(250)
+      approval = await window.webContents.executeJavaScript(`(async () => {
+        const [thread] = await window.pmAgent.threads.list();
+        const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
+        return {
+          committed: document.body.innerText.includes('Đã duyệt ProductSpec v2'),
+          specVersion: workspace.runState.productSpec.version,
+          paymentStatus: workspace.runState.productSpec.requirements.find((item) => item.id === 'REQ-PAYMENT')?.status ?? '',
+          actionsApproved: workspace.runState.pendingActions.every((action) => action.status === 'approved')
+        };
+      })()`) as typeof approval
+      if (approval.committed && approval.specVersion === 2) break
     }
     const image = await window.webContents.capturePage()
     writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!, image.toPNG())
     const passed = initial.hasApi && initial.hasCanvas && initial.hasSeed
-      && final.messageCount >= 4 && !final.pending && !final.hasError
-    console.log(`[smoke] ${JSON.stringify({ passed, ...initial, ...final, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
+      && final.hasPreview && !final.pending && !final.hasError
+      && approval.committed && approval.specVersion === 2
+      && approval.paymentStatus === 'removed' && approval.actionsApproved
+    console.log(`[smoke] ${JSON.stringify({ passed, ...initial, ...final, ...approval, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
     app.exit(passed ? 0 : 1)
   } catch (error) {
     console.error('[smoke] failed', error)
@@ -174,7 +282,9 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
 }
 
 app.whenReady().then(() => {
-  history = new HistoryStore(join(app.getPath('userData'), 'pm-lifecycle-agent.sqlite'))
+  const databasePath = join(app.getPath('userData'), 'pm-lifecycle-agent.sqlite')
+  history = new HistoryStore(databasePath)
+  lifecycle = new LifecycleStore(databasePath)
   secrets = new SecretStore(join(app.getPath('userData'), 'provider-secrets.json'))
   registerIpc()
   createWindow()
@@ -189,5 +299,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   activeRuns.forEach((controller) => controller.abort())
+  lifecycle?.close()
   history?.close()
 })

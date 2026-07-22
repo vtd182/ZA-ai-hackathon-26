@@ -84,3 +84,28 @@ export const runStateSchema = z.object({
 })
 export type RunState = z.infer<typeof runStateSchema>
 
+export const impactChangeSchema = z.object({
+  entityId: z.string().min(1),
+  kind: z.enum(['idea', 'goal', 'finding', 'requirement', 'screen', 'story', 'dependency', 'decision']),
+  change: z.enum(['removed', 'updated', 'affected']),
+})
+export type ImpactChange = z.infer<typeof impactChangeSchema>
+
+export const changePreviewSchema = z.object({
+  intent: changeIntentSchema,
+  before: productSpecSchema,
+  after: productSpecSchema,
+  affectedEntityIds: z.array(z.string().min(1)),
+  changes: z.array(impactChangeSchema),
+  actions: z.array(plannedActionSchema),
+})
+export type ChangePreview = z.infer<typeof changePreviewSchema>
+
+export interface LifecycleWorkspaceState {
+  runState: RunState
+  preview: ChangePreview | null
+}
+
+export interface ApproveChangeOutput extends LifecycleWorkspaceState {
+  message: string
+}

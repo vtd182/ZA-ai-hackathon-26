@@ -6,17 +6,21 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleAlert,
+  GitCompareArrows,
   LoaderCircle,
   Plus,
   Search,
   Send,
   Settings,
+  ShieldCheck,
   Square,
   X,
 } from 'lucide-react'
 import type {
   CanvasSelectionContext,
+  ChangePreview,
   ChatMessage,
+  LifecycleWorkspaceState,
   ProviderCommand,
   ProviderProbe,
   ProviderProfile,
@@ -50,9 +54,11 @@ export function App(): React.JSX.Element {
   const [historyOpen, setHistoryOpen] = useState(true)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [approving, setApproving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [settingsProfile, setSettingsProfile] = useState<ProviderProfile | null>(null)
   const [selection, setSelection] = useState<CanvasSelectionContext | undefined>()
+  const [lifecycleWorkspace, setLifecycleWorkspace] = useState<LifecycleWorkspaceState | null>(null)
   const [commandBatch, setCommandBatch] = useState<{ id: number; commands: ProviderCommand[] }>({ id: 0, commands: [] })
 
   const refreshThreads = useCallback(async (query = search) => {
@@ -65,8 +71,12 @@ export function App(): React.JSX.Element {
     setLoading(true)
     setError(null)
     try {
-      const detail = await window.pmAgent.threads.get(threadId)
+      const [detail, workspace] = await Promise.all([
+        window.pmAgent.threads.get(threadId),
+        window.pmAgent.lifecycle.getWorkspace(threadId),
+      ])
       setActiveThread(detail)
+      setLifecycleWorkspace(workspace)
       setSelection(undefined)
       setCommandBatch({ id: 0, commands: [] })
     } catch (nextError) {
@@ -98,6 +108,7 @@ export function App(): React.JSX.Element {
   const createThread = async (): Promise<void> => {
     const detail = await window.pmAgent.threads.create()
     setActiveThread(detail)
+    setLifecycleWorkspace(await window.pmAgent.lifecycle.getWorkspace(detail.id))
     await refreshThreads()
   }
 
@@ -135,8 +146,12 @@ export function App(): React.JSX.Element {
         content: content.trim(),
         ...(selection ? { selection } : {}),
       })
-      const detail = await window.pmAgent.threads.get(activeThread.id)
+      const [detail, workspace] = await Promise.all([
+        window.pmAgent.threads.get(activeThread.id),
+        window.pmAgent.lifecycle.getWorkspace(activeThread.id),
+      ])
       setActiveThread(detail)
+      setLifecycleWorkspace(workspace)
       setCommandBatch({ id: Date.now(), commands: result.commands })
       await refreshThreads()
     } catch (nextError) {
@@ -151,6 +166,23 @@ export function App(): React.JSX.Element {
   const stopMessage = async (): Promise<void> => {
     if (!activeThread) return
     await window.pmAgent.chat.cancel(activeThread.id)
+  }
+
+  const approveChange = async (): Promise<void> => {
+    if (!activeThread || approving) return
+    setApproving(true)
+    setError(null)
+    try {
+      const result = await window.pmAgent.lifecycle.approveChange(activeThread.id)
+      setLifecycleWorkspace({ runState: result.runState, preview: result.preview })
+      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      setCommandBatch({ id: Date.now(), commands: [{ type: 'switch_view', view: 'change' }] })
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setApproving(false)
+    }
   }
 
   const activeProfile = profiles.find((profile) => profile.id === activeThread?.providerId)
@@ -244,6 +276,11 @@ export function App(): React.JSX.Element {
                 snapshot={activeThread.canvasSnapshot}
                 initialView={activeThread.phase}
                 commandBatch={commandBatch}
+                productSpec={lifecycleWorkspace?.runState.productSpec}
+                changePreview={lifecycleWorkspace?.preview ?? undefined}
+                changeEntityIds={lifecycleWorkspace?.preview?.affectedEntityIds
+                  ?? lifecycleWorkspace?.runState.pendingActions.flatMap((action) => action.entityIds)
+                  ?? []}
                 onSelectionChange={setSelection}
               />
             </Suspense>
@@ -261,9 +298,12 @@ export function App(): React.JSX.Element {
         messages={activeThread?.messages ?? []}
         selection={selection}
         sending={sending}
+        approving={approving}
+        preview={lifecycleWorkspace?.preview ?? undefined}
         disabled={!activeThread}
         onSend={sendMessage}
         onStop={stopMessage}
+        onApprove={approveChange}
       />
 
       {settingsProfile && (
@@ -286,16 +326,22 @@ function ChatPanel({
   messages,
   selection,
   sending,
+  approving,
+  preview,
   disabled,
   onSend,
   onStop,
+  onApprove,
 }: {
   messages: ChatMessage[]
   selection?: CanvasSelectionContext
   sending: boolean
+  approving: boolean
+  preview?: ChangePreview
   disabled: boolean
   onSend(content: string): Promise<void>
   onStop(): Promise<void>
+  onApprove(): Promise<void>
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const canSend = !disabled && !sending && draft.trim().length > 0
@@ -333,6 +379,7 @@ function ChatPanel({
           </article>
         )}
       </div>
+      {preview && <ChangePreviewPanel preview={preview} approving={approving} onApprove={onApprove} />}
       <div className="composer">
         <textarea
           value={draft}
@@ -353,6 +400,43 @@ function ChatPanel({
         )}
       </div>
     </aside>
+  )
+}
+
+function ChangePreviewPanel({
+  preview,
+  approving,
+  onApprove,
+}: {
+  preview: ChangePreview
+  approving: boolean
+  onApprove(): Promise<void>
+}): React.JSX.Element {
+  return (
+    <section className="change-preview" aria-label="Change impact approval">
+      <header>
+        <div className="change-preview-title">
+          <GitCompareArrows size={17} />
+          <div><strong>Change impact</strong><span>ProductSpec v{preview.before.version} → v{preview.after.version}</span></div>
+        </div>
+        <span className="impact-count">{preview.affectedEntityIds.length}</span>
+      </header>
+      <div className="impact-list">
+        {preview.changes.map((change) => (
+          <div className="impact-row" key={change.entityId}>
+            <span>{change.entityId}</span>
+            <small>{change.change === 'removed' ? 'Loại khỏi MVP' : 'Cập nhật mapping'}</small>
+          </div>
+        ))}
+      </div>
+      <div className="artifact-targets">
+        {preview.actions.map((action) => <span key={action.id}>{action.target === 'jira' || action.target === 'zdoc' ? 'Mock ' : ''}{action.target}</span>)}
+      </div>
+      <button className="approve-button" disabled={approving} onClick={() => void onApprove()}>
+        {approving ? <LoaderCircle className="spin" size={16} /> : <ShieldCheck size={16} />}
+        {approving ? 'Đang commit' : 'Duyệt change plan'}
+      </button>
+    </section>
   )
 }
 

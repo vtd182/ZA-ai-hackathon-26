@@ -182,10 +182,11 @@
 
 ### `P0-UI-001` Typed IPC and app shell
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-FND-001
 - **Deliver:** main/preload/renderer contract, navigation, status bar, error boundary.
 - **Acceptance:** context isolation bật; renderer không truy cập arbitrary Node API.
+- **Evidence:** lifecycle APIs đi qua typed preload; production smoke xác nhận API/canvas với sandbox + context isolation.
 
 ### `P0-UI-002` Lifecycle workspace
 
@@ -210,10 +211,11 @@
 
 ### `P0-UI-003` Artifact preview and approval
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-AGT-004, P0-CAN-002
 - **Deliver:** grouped actions, diff/summary, approve/reject, target labels (`Figma`, `Mock Jira`, `Mock Zdoc`).
 - **Acceptance:** payload và target rõ ràng; approval status cập nhật theo state machine.
+- **Evidence:** Change Impact panel hiển thị ProductSpec v1→v2, exact entity changes, Figma/Mock Jira/Mock Zdoc và immutable approval commit.
 
 ### `P0-UI-004` Change Impact view
 
@@ -249,7 +251,7 @@
 
 ### `P0-FIG-000` Resolve baseline serializer contract drift
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS
 - **Depends on:** none
 - **Deliver:** decide/document rich paint object contract versus legacy hex-string contract; align serializer consumers and tests.
 - **Acceptance:** all plugin tests pass; gradients/images/solid opacity behavior has explicit tests; no DS read regression.

@@ -1,22 +1,9 @@
 import { createHash } from 'node:crypto'
-import type { ChangeIntent, EntityKind, PlannedAction, ProductSpec } from '@pm-agent/domain'
+import type { ChangeIntent, ChangePreview, EntityKind, PlannedAction, ProductSpec } from '@pm-agent/domain'
 import { parseProductSpec } from '@pm-agent/domain'
 import { stableStringify, type JsonValue } from '@pm-agent/shared'
 
-export interface ImpactChange {
-  entityId: string
-  kind: EntityKind
-  change: 'removed' | 'updated' | 'affected'
-}
-
-export interface ImpactPreview {
-  intent: ChangeIntent
-  before: ProductSpec
-  after: ProductSpec
-  affectedEntityIds: string[]
-  changes: ImpactChange[]
-  actions: PlannedAction[]
-}
+export type ImpactPreview = ChangePreview
 
 export function hashActionPayload(payload: Record<string, unknown>): string {
   return createHash('sha256').update(stableStringify(payload as JsonValue)).digest('hex')
@@ -35,7 +22,7 @@ function kindById(spec: ProductSpec): Map<string, EntityKind> {
   ])
 }
 
-function paymentRemoval(spec: ProductSpec, targetId: string, updatedAt: string): { after: ProductSpec; changes: ImpactChange[] } {
+function paymentRemoval(spec: ProductSpec, targetId: string, updatedAt: string): { after: ProductSpec; changes: ChangePreview['changes'] } {
   const target = spec.requirements.find((requirement) => requirement.id === targetId)
   if (!target) throw new Error(`Change target is not a requirement: ${targetId}`)
 
@@ -72,7 +59,7 @@ function paymentRemoval(spec: ProductSpec, targetId: string, updatedAt: string):
     updatedAt,
   })
 
-  const changes = [...relatedIds].sort().map((entityId): ImpactChange => {
+  const changes = [...relatedIds].sort().map((entityId): ChangePreview['changes'][number] => {
     const kind = kinds.get(entityId)
     if (!kind) throw new Error(`Impact graph resolved unknown entity: ${entityId}`)
     return { entityId, kind, change: removedIds.has(entityId) ? 'removed' : 'updated' }
@@ -130,4 +117,3 @@ export function createImpactPreview(spec: ProductSpec, intent: ChangeIntent, run
 
   return { intent, before: spec, after, affectedEntityIds, changes, actions }
 }
-

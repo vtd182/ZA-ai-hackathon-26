@@ -12,7 +12,10 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.112.5",
     "@google/genai": "2.13.0",
+    "@pm-agent/agent-core": "workspace:*",
+    "@pm-agent/canvas": "workspace:*",
     "@pm-agent/domain": "workspace:*",
+    "@pm-agent/fixture-meal-ordering": "workspace:*",
     "@pm-agent/persistence": "workspace:*",
     "@pm-agent/reasoning": "workspace:*",
     "@tldraw/assets": "5.2.5",
