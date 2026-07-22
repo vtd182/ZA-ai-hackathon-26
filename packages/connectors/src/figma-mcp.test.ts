@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
+import { syntheticZaloDesignSystem } from '@pm-agent/fixture-zalo-design-system'
+import { createFigmaArtifactPlan, preflightFigmaArtifactPlan } from './figma-artifact-plan'
 import type { FigmaJsonToolTransport } from './figma-mcp'
 import { FigmaMcpAdapter, FigmaMcpError } from './figma-mcp'
 
@@ -88,5 +91,25 @@ describe('FigmaMcpAdapter', () => {
       'capture_design_system_context',
     ])
     expect(transport.calls.at(-1)?.args).toEqual({ sessionId, sourcePageId: '0:1' })
+  })
+
+  it('validates the exact target before calling typed read-only MCP preflight', async () => {
+    const bootstrap = new FakeTransport({ get_runtime_health: health, get_pages: pages })
+    const bootstrapAdapter = new FigmaMcpAdapter({ binaryPath: '/unused' }, bootstrap)
+    const target = await bootstrapAdapter.pinTarget(sessionId, '0:1', '2026-07-22T12:00:00.000Z')
+    const plan = createFigmaArtifactPlan(mealOrderingProductSpec, target, syntheticZaloDesignSystem, {
+      runId: 'RUN-TEST', threadId: 'THREAD-TEST', actionId: 'ACTION-FIGMA', idempotencyKey: 'figma:RUN-TEST:v1',
+    })
+    const preflight = preflightFigmaArtifactPlan(plan, syntheticZaloDesignSystem, target)
+    const transport = new FakeTransport({
+      get_runtime_health: health,
+      get_pages: pages,
+      plan_design_system_screens: preflight,
+    })
+    const adapter = new FigmaMcpAdapter({ binaryPath: '/unused' }, transport)
+
+    await expect(adapter.preflightArtifactPlan(plan, syntheticZaloDesignSystem, target)).resolves.toEqual(preflight)
+    expect(transport.calls.map((call) => call.name)).toEqual(['get_runtime_health', 'get_pages', 'plan_design_system_screens'])
+    expect(transport.calls.at(-1)?.args).toMatchObject({ sessionId, artifactPlan: plan, allowedTarget: target })
   })
 })

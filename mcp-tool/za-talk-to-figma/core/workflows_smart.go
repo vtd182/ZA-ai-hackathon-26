@@ -29,6 +29,7 @@ type smartNodeInspection struct {
 
 func registerSmartTools(s *server.MCPServer, runtime *Runtime) {
 	registerDesignSystemTools(s, runtime)
+	registerLifecycleArtifactTools(s)
 
 	s.AddTool(mcp.NewTool("inspect_selection_safely",
 		mcp.WithDescription("Inspect the current selection using context-safe reads, fallback-aware execution, and structured reports. Prefer this over calling get_selection + get_node manually on large files."),

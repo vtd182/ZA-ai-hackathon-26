@@ -4,11 +4,15 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import {
   figmaDesignSystemCaptureSchema,
   figmaPagesSchema,
+  figmaPreflightResultSchema,
   figmaRuntimeErrorEnvelopeSchema,
   figmaRuntimeHealthSchema,
   figmaTargetBindingSchema,
   type FigmaDesignSystemCapture,
   type FigmaPages,
+  type FigmaArtifactPlan,
+  type FigmaPreflightResult,
+  type DesignSystemManifest,
   type FigmaRuntimeErrorCode,
   type FigmaRuntimeHealth,
   type FigmaTargetBinding,
@@ -163,6 +167,20 @@ export class FigmaMcpAdapter {
       sessionId: target.sessionId,
       sourcePageId: target.pageId,
     }, figmaDesignSystemCaptureSchema, 45_000)
+  }
+
+  async preflightArtifactPlan(
+    plan: FigmaArtifactPlan,
+    manifest: DesignSystemManifest,
+    allowedTarget: FigmaTargetBinding,
+  ): Promise<FigmaPreflightResult> {
+    await this.verifyTarget(allowedTarget)
+    return this.call('plan_design_system_screens', {
+      sessionId: allowedTarget.sessionId,
+      artifactPlan: plan,
+      manifest,
+      allowedTarget,
+    }, figmaPreflightResultSchema, 15_000)
   }
 
   close(): Promise<void> {

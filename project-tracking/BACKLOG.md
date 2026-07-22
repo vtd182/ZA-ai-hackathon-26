@@ -292,14 +292,15 @@
 
 ### `P0-FIG-003` MCP strict preflight extension
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-FIG-002
 - **Deliver:** read-only `plan_design_system_screens`, generic role resolver, component/token/layout/metadata/target checks và plan hash.
 - **Acceptance:** invalid component/token và non-sandbox target bị block với zero writes; strict/free mode và warning/error phân biệt rõ.
+- **Evidence:** MCP tool `plan_design_system_screens` is a pure read-only planner with no runtime/write handle; Go tests block target/component/token mismatches and distinguish strict/free severity. Typed adapter schema validation and live connected-Figma capture -> normalize -> four-screen preflight pass.
 
 ### `P0-FIG-004` Figma bridge adapter
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-FIG-003, P0-MCK-001
 - **Deliver:** `apply_design_system_plan`, lifecycle metadata, stable idempotency lookup, approved plan hash và normalized receipt.
 - **Acceptance:** adapter tạo nodes trong sandbox allowlist hoặc trả typed unavailable; không ghi ngoài approved page.

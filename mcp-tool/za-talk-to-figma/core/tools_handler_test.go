@@ -336,6 +336,11 @@ func TestHandlers_DesignSystemSmartTools(t *testing.T) {
 		"screenIntent": "register_account",
 	})
 	callTool(t, s, "audit_design_system_adoption", map[string]any{"rootNodeId": "1:1"})
+	callTool(t, s, "plan_design_system_screens", map[string]any{
+		"artifactPlan":  map[string]any{"schemaVersion": 1, "kind": "figma_design_system_plan", "mode": "strict", "screens": []any{}},
+		"manifest":      map[string]any{},
+		"allowedTarget": map[string]any{},
+	})
 }
 
 // ── Write – linked tools (apply_style_to_node, bind_variable_to_node) ─────────

@@ -78,6 +78,7 @@ func NewCapabilityRegistry() *CapabilityRegistry {
 		"safe_page_inventory", "extract_component_candidates", "normalize_review_board",
 		"get_runtime_sessions", "set_runtime_session",
 		"capture_design_system_context", "apply_design_system_screen", "audit_design_system_adoption",
+		"plan_design_system_screens",
 		"scan_icon_components",
 	}
 

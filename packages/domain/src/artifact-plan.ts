@@ -98,6 +98,14 @@ export const artifactIssueSchema = z.object({
 })
 export type ArtifactIssue = z.infer<typeof artifactIssueSchema>
 
+export const figmaPreflightResultSchema = z.object({
+  allowed: z.boolean(),
+  plan: figmaPreflightPlanSchema,
+  planHash: z.string().regex(/^[a-f0-9]{64}$/),
+  issues: z.array(artifactIssueSchema),
+})
+export type FigmaPreflightResult = z.infer<typeof figmaPreflightResultSchema>
+
 export const artifactNodeSnapshotSchema = z.object({
   nodeId: z.string().min(1),
   screenId: z.string().min(1),
