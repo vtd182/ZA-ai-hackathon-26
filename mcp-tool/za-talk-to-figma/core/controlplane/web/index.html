@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZA Runtime Control Plane</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --surface: #fff;
+      --surface-alt: #f8fbff;
+      --border: #d9e3f1;
+      --text: #0f172a;
+      --muted: #64748b;
+      --accent: #0f6eff;
+      --accent-soft: #eaf2ff;
+      --success: #16a34a;
+      --warn: #d97706;
+      --danger: #dc2626;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #f7f9fd 0%, #f4f7fb 100%);
+      color: var(--text);
+      font: 14px/1.45 "Plus Jakarta Sans", Inter, system-ui, sans-serif;
+    }
+    .shell {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      gap: 16px;
+    }
+    .topbar,
+    .panel {
+      background: rgba(255,255,255,.96);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 18px 20px;
+      flex-wrap: wrap;
+    }
+    .eyebrow {
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 800;
+    }
+    h1 {
+      margin: 4px 0 0;
+      font-size: 28px;
+      line-height: 1.05;
+    }
+    .topbar-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #274690;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--success); }
+    .grid {
+      display: grid;
+      grid-template-columns: 340px minmax(0, 1fr);
+      gap: 16px;
+    }
+    .panel {
+      padding: 16px;
+      min-width: 0;
+    }
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .kv {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px 12px;
+      font-size: 13px;
+    }
+    .k { color: var(--muted); font-weight: 700; }
+    .columns {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+    }
+    .rows {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .row {
+      border-top: 1px solid #edf2f7;
+      padding: 12px 0;
+    }
+    .row:first-child { border-top: 0; padding-top: 0; }
+    .row-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .meta {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      word-break: break-word;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .ghost { background: #edf3fb; color: #274690; }
+    .primary { background: var(--accent); color: #fff; }
+    .danger { background: #fff1f2; color: var(--danger); }
+    .badge {
+      min-width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 8px;
+      background: #edf3fb;
+      color: #274690;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .status-active { color: var(--accent); font-weight: 800; }
+    pre {
+      margin: 8px 0 0;
+      padding: 10px;
+      background: #f8fafc;
+      border: 1px solid #edf2f7;
+      border-radius: 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      color: #334155;
+    }
+    @media (max-width: 980px) {
+      .grid, .columns { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="topbar">
+      <div>
+        <div class="eyebrow">ZA Runtime Control Plane</div>
+        <h1>Server Console</h1>
+      </div>
+      <div class="topbar-actions">
+        <div class="pill" id="status-pill"><span class="dot"></span><span>Loading…</span></div>
+        <button class="ghost" id="refresh-btn" type="button">Refresh</button>
+        <button class="primary" id="reload-btn" type="button">Reload runtime</button>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Overview</h2>
+        <div class="kv" id="overview"></div>
+      </section>
+      <section class="panel">
+        <h2>Client Routes</h2>
+        <div class="rows" id="routes"></div>
+      </section>
+    </div>
+
+    <div class="columns">
+      <section class="panel">
+        <div class="row-top" style="margin-bottom: 12px;">
+          <h2 style="margin: 0;">Sessions</h2>
+          <span class="badge" id="session-count">0</span>
+        </div>
+        <div class="rows" id="sessions"></div>
+      </section>
+      <section class="panel">
+        <div class="row-top" style="margin-bottom: 12px;">
+          <h2 style="margin: 0;">Recent Runtime Events</h2>
+          <span class="badge" id="event-count">0</span>
+        </div>
+        <div class="rows" id="events"></div>
+      </section>
+    </div>
+  </div>
+  <script>
+    const fmt = (v) => v == null || v === "" ? "—" : String(v);
+
+    async function fetchJSON(path, init) {
+      const res = await fetch(path, init);
+      if (!res.ok) throw new Error(path + " failed");
+      return res.json();
+    }
+
+    async function loadOverview() {
+      return fetchJSON("/admin/overview");
+    }
+
+    async function loadEvents() {
+      return fetchJSON("/admin/events");
+    }
+
+    async function setRoute(body) {
+      const data = await fetchJSON("/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (data.error) throw new Error(data.error);
+    }
+
+    async function reloadRuntime() {
+      const data = await fetchJSON("/admin/reload", {
+        method: "POST"
+      });
+      if (data.error) throw new Error(data.error);
+    }
+
+    function renderOverview(data) {
+      const connected = !!data.connected;
+      document.getElementById("status-pill").innerHTML =
+        '<span class="dot" style="background:' + (connected ? 'var(--success)' : 'var(--danger)') + '"></span>' +
+        '<span>' + (connected ? 'Bridge connected' : 'Bridge disconnected') + '</span>';
+      const rows = [
+        ["Role", fmt(data.role)],
+        ["Version", fmt(data.version)],
+        ["Active session", fmt(data.activeSession)],
+        ["Session count", fmt(data.sessionCount)],
+        ["Pending requests", fmt(data.pendingCount)],
+      ];
+      document.getElementById("overview").innerHTML = rows.map(([k, v]) =>
+        '<div class="k">' + k + '</div><div>' + v + '</div>'
+      ).join("");
+    }
+
+    function renderRoutes(data) {
+      const routes = Array.isArray(data.routes) ? data.routes : [];
+      document.getElementById("routes").innerHTML = routes.length === 0
+        ? '<div class="row"><div class="title">No client routes</div><div class="meta">Routes appear here when MCP clients proxy through the leader.</div></div>'
+        : routes.map((route) =>
+            '<div class="row">' +
+              '<div class="row-top">' +
+                '<div><div class="title">' + fmt(route.clientId) + '</div>' +
+                '<div class="meta">Active route: ' + fmt(route.activeSession) + '</div></div>' +
+              '</div>' +
+            '</div>'
+          ).join("");
+    }
+
+    function renderSessions(data) {
+      const active = data.activeSession;
+      const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+      document.getElementById("session-count").textContent = String(sessions.length);
+      document.getElementById("sessions").innerHTML = sessions.length === 0
+        ? '<div class="row"><div class="title">No sessions connected</div><div class="meta">Open the plugin in one or more Figma files to populate the catalog.</div></div>'
+        : sessions.map((session) => {
+            const activeBadge = session.sessionId === active
+              ? '<span class="badge status-active">Active</span>'
+              : '';
+            return '<div class="row">' +
+              '<div class="row-top">' +
+                '<div><div class="title">' + fmt(session.fileName) + '</div>' +
+                '<div class="meta">' + fmt(session.pageName) + ' · ' + fmt(session.selectionCount) + ' sel</div>' +
+                '<div class="meta">' + fmt(session.sessionId) + '</div></div>' +
+                '<div class="actions">' + activeBadge +
+                  '<button class="ghost" type="button" data-switch="' + encodeURIComponent(session.sessionId) + '">Switch</button>' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+          }).join("");
+      document.querySelectorAll("[data-switch]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          try {
+            await setRoute({ sessionId: decodeURIComponent(button.dataset.switch) });
+            await refresh();
+          } catch (error) {
+            alert(error.message);
+          }
+        });
+      });
+    }
+
+    function renderEvents(payload) {
+      const events = Array.isArray(payload.events) ? payload.events : [];
+      document.getElementById("event-count").textContent = String(events.length);
+      document.getElementById("events").innerHTML = events.length === 0
+        ? '<div class="row"><div class="title">No events yet</div><div class="meta">Runtime event telemetry appears here after sessions connect or requests complete.</div></div>'
+        : events.slice().reverse().map((event) =>
+            '<div class="row">' +
+              '<div class="row-top"><div>' +
+                '<div class="title">' + fmt(event.type) + '</div>' +
+                '<div class="meta">' +
+                  [fmt(event.timestamp), fmt(event.sessionId), fmt(event.clientId), fmt(event.requestId)].filter((v) => v !== '—').join(' · ') +
+                '</div>' +
+              '</div></div>' +
+              (event.data ? '<pre>' + JSON.stringify(event.data, null, 2) + '</pre>' : '') +
+            '</div>'
+          ).join("");
+    }
+
+    async function refresh() {
+      const [overview, eventPayload] = await Promise.all([loadOverview(), loadEvents()]);
+      renderOverview(overview);
+      renderRoutes(overview);
+      renderSessions(overview);
+      renderEvents(eventPayload);
+    }
+
+    document.getElementById("refresh-btn").addEventListener("click", refresh);
+    document.getElementById("reload-btn").addEventListener("click", async () => {
+      const button = document.getElementById("reload-btn");
+      try {
+        button.disabled = true;
+        button.textContent = "Reloading…";
+        await reloadRuntime();
+      } catch (error) {
+        alert(error.message);
+        button.disabled = false;
+        button.textContent = "Reload runtime";
+      }
+    });
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>

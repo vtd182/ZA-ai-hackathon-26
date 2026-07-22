@@ -1,0 +1,29 @@
+{
+  "bundleDir": "/Users/lap15116/Desktop/ZA-ai-hackathon-26/mcp-tool/za-talk-to-figma/core/generated/exports/bundles/smoke",
+  "bundleName": "smoke",
+  "executionReports": [],
+  "imageFormat": "PNG",
+  "imageScale": 2,
+  "nodeIds": [
+    "1:1",
+    "2:2"
+  ],
+  "pageContext": null,
+  "pdfPath": "/Users/lap15116/Desktop/ZA-ai-hackathon-26/mcp-tool/za-talk-to-figma/core/generated/exports/bundles/smoke/smoke.pdf",
+  "screenshots": [
+    {
+      "index": 0,
+      "nodeId": "1:1",
+      "outputPath": "/Users/lap15116/Desktop/ZA-ai-hackathon-26/mcp-tool/za-talk-to-figma/core/generated/exports/bundles/smoke/01.png",
+      "success": false,
+      "error": "rpc call: Post \"http://127.0.0.1:19940/rpc\": dial tcp 127.0.0.1:19940: connect: connection refused"
+    },
+    {
+      "index": 1,
+      "nodeId": "2:2",
+      "outputPath": "/Users/lap15116/Desktop/ZA-ai-hackathon-26/mcp-tool/za-talk-to-figma/core/generated/exports/bundles/smoke/02.png",
+      "success": false,
+      "error": "rpc call: Post \"http://127.0.0.1:19940/rpc\": dial tcp 127.0.0.1:19940: connect: connection refused"
+    }
+  ]
+}

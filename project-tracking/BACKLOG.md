@@ -1,0 +1,370 @@
+# Implementation Backlog
+
+## Cách vận hành
+
+- Chỉ một task có status `IN_PROGRESS` trong cùng workstream.
+- Task ID được dùng trong branch/commit/PR/test evidence khi repo đã có Git.
+- Ưu tiên theo thứ tự `P0`, `P1`, `P2`; dependency chưa xong thì không kéo task sau vào làm.
+- Khi hoàn thành, thêm evidence ngắn ngay tại dòng task hoặc trong session log của `PROJECT_MEMORY.md`.
+
+## Epic E0 - Repository foundation
+
+### `P0-FND-001` Bootstrap workspace
+
+- **Status:** TODO
+- **Depends on:** none
+- **Deliver:** pnpm workspace, Electron Vite + React + TypeScript strict, shared tsconfig, Vitest.
+- **Acceptance:** `pnpm dev`, `pnpm test`, `pnpm typecheck` chạy; renderer không có Node integration.
+
+### `P0-FND-002` Package boundaries and lint rules
+
+- **Status:** TODO
+- **Depends on:** P0-FND-001
+- **Deliver:** packages `domain`, `agent-core`, `reasoning`, `connectors`, `canvas`, `persistence`, `shared`.
+- **Acceptance:** import boundaries được document/enforce; `domain` test được không cần Electron/DOM.
+
+### `P0-FND-003` Synthetic demo fixtures
+
+- **Status:** TODO
+- **Depends on:** P0-FND-001
+- **Deliver:** meal-ordering idea, discovery sources, 3 questions/options, mock Jira/Zdoc data, design-system fixture.
+- **Acceptance:** fixture deterministic, versioned, không có production URL/PII/secret; có script reset.
+
+## Epic E1 - Domain and workflow
+
+### `P0-DOM-001` Versioned domain schemas
+
+- **Status:** TODO
+- **Depends on:** P0-FND-002
+- **Deliver:** Zod schemas cho ProductSpec, RunState, ProductIdea, findings, decisions, actions, receipts, mappings.
+- **Acceptance:** valid fixture parses; invalid reference/duplicate ID/unsupported version bị reject với typed error.
+
+### `P0-DOM-002` Workflow state machine
+
+- **Status:** TODO
+- **Depends on:** P0-DOM-001
+- **Deliver:** lifecycle/change states, transition table, guards, domain events.
+- **Acceptance:** test mọi happy transition và ít nhất 5 invalid transitions; write state không thể tới trước approval.
+
+### `P0-DOM-003` ProductSpec invariant validator
+
+- **Status:** TODO
+- **Depends on:** P0-DOM-001
+- **Deliver:** unique IDs, valid refs, AC ownership, traceability, artifact mapping constraints.
+- **Acceptance:** dangling relationship và unmapped must-have requirement được báo cụ thể.
+
+### `P0-DOM-004` Deterministic impact graph
+
+- **Status:** TODO
+- **Depends on:** P0-DOM-003
+- **Deliver:** graph index, traversal, impact set, before/after diff.
+- **Acceptance:** remove-payment fixture chỉ trả đúng payment requirement/screen/story/dependency và affected edges.
+
+## Epic E2 - Agent orchestration
+
+### `P0-AGT-001` Reasoning provider contract and mock
+
+- **Status:** TODO
+- **Depends on:** P0-DOM-001, P0-FND-003
+- **Deliver:** provider interface, phase-specific schemas, deterministic MockReasoningProvider.
+- **Acceptance:** cùng input/version cho cùng output; malformed output không mutate RunState.
+
+### `P0-AGT-002` Core orchestration loop
+
+- **Status:** TODO
+- **Depends on:** P0-AGT-001, P0-DOM-002
+- **Deliver:** build request, validate result, apply domain commands, completion/error conditions.
+- **Acceptance:** fixture chạy Idea -> WAITING_FOR_DECISION và resume từ checkpoint.
+
+### `P0-AGT-003` Provider registry and normalized events
+
+- **Status:** TODO
+- **Depends on:** P0-AGT-001
+- **Deliver:** registry, capability probe, normalized stream events, cancellation và provider conformance kit.
+- **Acceptance:** core/UI không import provider SDK type; malformed/partial stream không mutate canonical state.
+
+### `P0-AGT-004` Approval policy and payload hash
+
+- **Status:** TODO
+- **Depends on:** P0-DOM-002
+- **Deliver:** preview, approve/reject, action policy, payload hash invalidation.
+- **Acceptance:** action thay payload sau approval quay lại `pending_approval`; unapproved write bị chặn.
+
+### `P0-AGT-005` Outbox, execution and verification orchestration
+
+- **Status:** TODO
+- **Depends on:** P0-AGT-004, P0-PER-002
+- **Deliver:** queue, claim, retry, receipt-first recovery, verification status.
+- **Acceptance:** crash/retry simulation không duplicate; verification mismatch thành `VERIFICATION_FAILED`.
+
+## Epic E3 - Persistence
+
+### `P0-PER-001` SQLite repositories and migrations
+
+- **Status:** TODO
+- **Depends on:** P0-DOM-001
+- **Deliver:** schema/migration cho projects, threads, turns, messages, provider segments/events, canvas snapshots/patches, runs, spec versions, actions, approvals, receipts và mappings.
+- **Acceptance:** migration chạy trên clean DB; repository round-trip giữ nguyên schema version.
+
+### `P0-PER-002` Transaction and checkpoint service
+
+- **Status:** TODO
+- **Depends on:** P0-PER-001, P0-DOM-002
+- **Deliver:** atomic domain commit, approval+outbox commit, checkpoint summary.
+- **Acceptance:** injected failure không tạo half-committed ProductSpec/action; restart load đúng phase.
+
+## Epic E4 - Provider, history, desktop UX and canvas
+
+### `P0-PRV-001` Provider segments and canonical handoff
+
+- **Status:** TODO
+- **Depends on:** P0-AGT-003, P0-PER-002
+- **Deliver:** ProviderSegment persistence, HandoffPackage, safe checkpoint guards và cost/privacy confirmation.
+- **Acceptance:** đổi provider giữ nguyên thread/canvas/ProductSpec; switch bị chặn khi stream/write chưa ổn định; không auto-fallback sang paid API.
+
+### `P0-PRV-002` Codex App Server adapter
+
+- **Status:** TODO
+- **Depends on:** P0-PRV-001
+- **Deliver:** stdio lifecycle, initialize, generated versioned schema, thread/turn/item event mapper, resume/cancel.
+- **Acceptance:** app chạy một reasoning segment thật hoặc typed unavailable; Codex thread ID chỉ nằm trong opaque segment metadata; không expose write connectors trực tiếp.
+
+### `P0-PRV-003` Real API adapter release slot
+
+- **Status:** TODO
+- **Depends on:** P0-PRV-001
+- **Deliver:** implement một trong OpenAI Responses, Gemini Interactions hoặc Anthropic Messages theo native API, được chọn dựa trên credential sẵn có.
+- **Acceptance:** pass provider conformance kit; có structured output, streaming/cancel, usage và handoff sang/từ Mock.
+
+### `P0-HIS-001` Thread, turn and message repositories
+
+- **Status:** TODO
+- **Depends on:** P0-PER-001
+- **Deliver:** thread CRUD/archive, paginated messages, normalized parts/events, FTS5 search và indexes.
+- **Acceptance:** 500-message fixture query theo page; app không load full transcript vào renderer.
+
+### `P0-HIS-002` Thread checkpoint and resume
+
+- **Status:** TODO
+- **Depends on:** P0-HIS-001, P0-PER-002
+- **Deliver:** checkpoint schema, migration, latest restore và stale provider handling.
+- **Acceptance:** restart app phục hồi phase, ProductSpec, messages và canvas; resume vẫn xem được offline.
+
+### `P0-HIS-003` History sidebar and chat stream UI
+
+- **Status:** TODO
+- **Depends on:** P0-HIS-001, P0-UI-001, P0-AGT-003
+- **Deliver:** searchable/virtualized history, new/open/archive thread, paginated chat, streaming/cancel states.
+- **Acceptance:** chuyển thread không trộn messages; provider/model/phase/status nhìn thấy rõ; stream delta được batch.
+
+### `P0-HIS-004` One canvas per thread
+
+- **Status:** TODO
+- **Depends on:** P0-HIS-002, P0-CAN-001
+- **Deliver:** CanvasDocument ownership, snapshot/patch persistence, hydrate active/unmount inactive canvas.
+- **Acceptance:** thread A/B có canvas ID/state độc lập; turn tạo checkpoint thay vì canvas mới; resume giữ stable entity refs.
+
+### `P0-HIS-005` Chat-canvas bidirectional commands
+
+- **Status:** TODO
+- **Depends on:** P0-HIS-004, P0-CAN-002, P0-AGT-002
+- **Deliver:** CanvasSelectionContext, chat domain commands, canvas gestures -> command preview, business/presentation undo boundary.
+- **Acceptance:** chat có thể focus/remove entity; canvas delete/drag không mutate ProductSpec trước preview/approval.
+
+### `P0-UI-001` Typed IPC and app shell
+
+- **Status:** TODO
+- **Depends on:** P0-FND-001
+- **Deliver:** main/preload/renderer contract, navigation, status bar, error boundary.
+- **Acceptance:** context isolation bật; renderer không truy cập arbitrary Node API.
+
+### `P0-UI-002` Lifecycle workspace
+
+- **Status:** TODO
+- **Depends on:** P0-AGT-002, P0-UI-001
+- **Deliver:** history + idea/chat intake, clarification, option lanes, selection, ProductSpec inspector.
+- **Acceptance:** user hoàn thành decision flow; tối đa 3 câu hỏi; refresh/resume không mất thread state.
+
+### `P0-CAN-001` Canvas shapes and deterministic layout
+
+- **Status:** TODO
+- **Depends on:** P0-UI-001, P0-DOM-001
+- **Deliver:** custom shapes, four view layouts, stable entity refs and edges.
+- **Acceptance:** snapshot cùng input giống nhau; shape chỉ chứa ref/presentation metadata.
+
+### `P0-CAN-002` ProductSpec projection and domain commands
+
+- **Status:** TODO
+- **Depends on:** P0-CAN-001, P0-DOM-003
+- **Deliver:** projection renderer, selection sync, commands for option/change.
+- **Acceptance:** canvas edit không sửa business state trực tiếp; command invalid bị reject.
+
+### `P0-UI-003` Artifact preview and approval
+
+- **Status:** TODO
+- **Depends on:** P0-AGT-004, P0-CAN-002
+- **Deliver:** grouped actions, diff/summary, approve/reject, target labels (`Figma`, `Mock Jira`, `Mock Zdoc`).
+- **Acceptance:** payload và target rõ ràng; approval status cập nhật theo state machine.
+
+### `P0-UI-004` Change Impact view
+
+- **Status:** TODO
+- **Depends on:** P0-DOM-004, P0-CAN-002
+- **Deliver:** impacted highlights, before/after, target action list, partial failure status.
+- **Acceptance:** remove-payment impact dễ đọc và không overlap ở demo viewport.
+
+## Epic E5 - Mock Jira and Zdoc
+
+### `P0-MCK-001` Connector contract test kit
+
+- **Status:** TODO
+- **Depends on:** P0-DOM-001
+- **Deliver:** reusable test suite cho preflight, execute, read-back, verify, idempotency, unavailable.
+- **Acceptance:** mọi connector adapter chạy cùng suite tối thiểu.
+
+### `P0-MCK-002` Mock Jira connector
+
+- **Status:** TODO
+- **Depends on:** P0-MCK-001, P0-PER-001
+- **Deliver:** epic/story create/update/search/read-back, stable IDs, failure injection.
+- **Acceptance:** verify Epic link, Requirement IDs, AC và payload hash; retry không duplicate.
+
+### `P0-MCK-003` Mock Zdoc connector
+
+- **Status:** TODO
+- **Depends on:** P0-MCK-001, P0-PER-001
+- **Deliver:** PRD preview/create/update/read-back, stable page IDs, failure injection.
+- **Acceptance:** verify title, spec version, requirement sections và traceability metadata.
+
+## Epic E6 - Figma Design System Guard
+
+### `P0-FIG-000` Resolve baseline serializer contract drift
+
+- **Status:** TODO
+- **Depends on:** none
+- **Deliver:** decide/document rich paint object contract versus legacy hex-string contract; align serializer consumers and tests.
+- **Acceptance:** all plugin tests pass; gradients/images/solid opacity behavior has explicit tests; no DS read regression.
+
+### `P0-FIG-001` Existing MCP capability adapter and DS context cache
+
+- **Status:** TODO
+- **Depends on:** P0-FIG-000, P0-FND-003, P0-DOM-001
+- **Deliver:** stdio process adapter, health/session pinning, typed error mapper, `capture_design_system_context` normalization và synthetic cache fallback.
+- **Acceptance:** explicit session/page allowlist; live hoặc fixture DS context có fingerprint/version; không đọc full document không giới hạn.
+
+### `P0-FIG-002` Semantic Figma artifact planner
+
+- **Status:** TODO
+- **Depends on:** P0-FIG-001, P0-DOM-003
+- **Deliver:** ScreenSpec -> generic recipe/component intents, flow edges, lifecycle metadata, deterministic layout recipe.
+- **Acceptance:** plan không chứa pixel placement do model cung cấp; 4 meal-ordering screens parse hợp lệ.
+
+### `P0-FIG-003` MCP strict preflight extension
+
+- **Status:** TODO
+- **Depends on:** P0-FIG-002
+- **Deliver:** read-only `plan_design_system_screens`, generic role resolver, component/token/layout/metadata/target checks và plan hash.
+- **Acceptance:** invalid component/token và non-sandbox target bị block với zero writes; strict/free mode và warning/error phân biệt rõ.
+
+### `P0-FIG-004` Figma bridge adapter
+
+- **Status:** TODO
+- **Depends on:** P0-FIG-003, P0-MCK-001
+- **Deliver:** `apply_design_system_plan`, lifecycle metadata, stable idempotency lookup, approved plan hash và normalized receipt.
+- **Acceptance:** adapter tạo nodes trong sandbox allowlist hoặc trả typed unavailable; không ghi ngoài approved page.
+
+### `P0-FIG-005` Figma read-back and postflight verification
+
+- **Status:** TODO
+- **Depends on:** P0-FIG-004
+- **Deliver:** `read_lifecycle_artifact`, `audit_lifecycle_artifact`, snapshot mapper và binding/metadata/edge checks.
+- **Acceptance:** execute response không đủ để pass; node thiếu requirement metadata bị fail verification.
+
+### `P0-FIG-006` Offline Figma mock parity
+
+- **Status:** TODO
+- **Depends on:** P0-FIG-002, P0-MCK-001
+- **Deliver:** mock execute/read-back/postflight với cùng plan/snapshot contract.
+- **Acceptance:** demo có thể chuyển sang fallback rõ nhãn mà không đổi ProductSpec/workflow.
+
+## Epic E7 - Change synchronization
+
+### `P0-CHG-001` Change intent and impact preview
+
+- **Status:** TODO
+- **Depends on:** P0-DOM-004, P0-UI-004
+- **Deliver:** structured change request, ambiguity handling, immutable impact set and diff.
+- **Acceptance:** preview không mutate state; ambiguous target chuyển `NEEDS_USER_INPUT`.
+
+### `P0-CHG-002` Approved ProductSpec version update
+
+- **Status:** TODO
+- **Depends on:** P0-CHG-001, P0-AGT-004, P0-PER-002
+- **Deliver:** version bump, removed scope semantics, new artifact action plans.
+- **Acceptance:** reject/cancel giữ version cũ; approval commit atomic.
+
+### `P0-CHG-003` Multi-target execute and partial retry
+
+- **Status:** TODO
+- **Depends on:** P0-CHG-002, P0-FIG-005, P0-MCK-002, P0-MCK-003
+- **Deliver:** sync Figma + mock Jira/Zdoc, per-target receipts/status, retry failed target.
+- **Acceptance:** một target fail không duplicate target đã pass; ít nhất hai target verified sau retry.
+
+## Epic E8 - Quality and demo
+
+### `P0-QA-001` Unit and contract test gates
+
+- **Status:** TODO
+- **Depends on:** all P0 domain/core/connectors
+- **Deliver:** coverage cho invariants, transitions, impact, approval, idempotency, connector parity.
+- **Acceptance:** critical test matrix gồm provider/history/canvas/connector trong `TEST_AND_DEMO_PLAN.md` pass.
+
+### `P0-QA-002` Desktop E2E happy path
+
+- **Status:** TODO
+- **Depends on:** P0-CHG-003
+- **Deliver:** Playwright Electron flow từ reset đến verified change.
+- **Acceptance:** test chạy deterministic, tạo/resume thread và lưu screenshot ở các signature checkpoints.
+
+### `P0-QA-003` Failure and recovery E2E
+
+- **Status:** TODO
+- **Depends on:** P0-QA-002
+- **Deliver:** unavailable Figma, crash-after-write, verification mismatch, partial failure/retry.
+- **Acceptance:** UI không báo success sai; run recover được sau restart.
+
+### `P0-DEM-001` Demo mode and reset
+
+- **Status:** TODO
+- **Depends on:** P0-QA-002
+- **Deliver:** seeded DB, reset command/control, connection status, fallback switch, demo-safe logs.
+- **Acceptance:** ba lần reset/run liên tiếp cho cùng expected result.
+
+### `P0-DEM-002` Package and rehearsal
+
+- **Status:** TODO
+- **Depends on:** P0-DEM-001, P0-QA-003
+- **Deliver:** macOS package, demo script, backup screenshots/video, timing notes.
+- **Acceptance:** clean-profile smoke test pass; full demo nằm trong timebox đã chọn.
+
+## P1 sau khi P0 ổn định
+
+| ID | Item | Điều kiện kéo vào |
+| --- | --- | --- |
+| `P1-PRV-001` | OpenAI Responses adapter | Provider conformance kit ổn định; chưa được chọn làm release slot |
+| `P1-PRV-002` | Gemini Interactions adapter | Provider conformance kit ổn định; chưa được chọn làm release slot |
+| `P1-PRV-003` | Anthropic Messages adapter | Provider conformance kit ổn định; chưa được chọn làm release slot |
+| `P1-EXP-001` | ProductSpec import/export | Demo reset đã ổn định |
+| `P1-HIS-006` | Branch/fork thread from checkpoint | P0 resume và canvas isolation ổn định |
+| `P1-HIS-007` | Full ProductSpec/canvas version browser | Change diff P0 hoàn chỉnh |
+| `P1-ZDC-001` | Zdoc real sandbox connector | Được phép và có sandbox chính thức |
+| `P1-JIR-001` | Jira real sandbox connector | Được phép và có sandbox chính thức |
+
+## Blocker register
+
+| ID | Blocker | Owner | Workaround | Status |
+| --- | --- | --- | --- | --- |
+| `BLK-001` | Schema/protocol Figma bridge | Team | Đã review source: stdio MCP + local WS, 98 tools, session routing và DS workflows | RESOLVED |
+| `BLK-002` | Chưa có sanitized Zalo Design System manifest | Team/Design | Dùng synthetic fixture, ghi rõ trong demo | OPEN |
+| `BLK-003` | Chưa xác nhận quyền dùng tldraw cho demo/pilot | Team | Review license trước packaging | OPEN |
+| `BLK-004` | Chưa chọn real API provider cho release slot | Team | Probe credential/runtime, chọn sau provider conformance kit | OPEN |
