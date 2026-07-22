@@ -46,8 +46,9 @@ Signature moment:
 - **Completed task:** `P0-AGT-005` receipt-first outbox execution and verification orchestration; production smoke read-back verifies Figma, Mock Jira and Mock Zdoc.
 - **Completed task:** `P0-CHG-003` multi-target partial retry; deterministic recovery smoke proves successful targets are not duplicated.
 - **Completed task:** `P0-FND-003` deterministic demo fixtures and reset; three repeated resets produce identical canonical state.
-- **Current task:** `P0-AGT-001` phase-specific reasoning contract and malformed-output guard is `IN_PROGRESS`.
-- **Current slice:** Define versioned phase request/result schemas, make MockReasoningProvider deterministic per phase and prove malformed provider output cannot mutate RunState.
+- **Completed task:** `P0-AGT-001` phase-specific reasoning contracts and malformed-output guard; real Codex and Mock smoke pass.
+- **Current task:** `P0-AGT-002` Idea -> clarification -> decision orchestration and resume is `IN_PROGRESS`.
+- **Current slice:** Persist phase proposals/answers, expose at most three clarification questions and transition deterministically to `WAITING_FOR_DECISION` with resumable options.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -348,6 +349,14 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - History, canvas, lifecycle runs/outbox and SQLite mock artifacts are replaced atomically/cascade-safe.
 - `./run.sh smoke-reset` resets three times, proves identical state and completes the verified signature flow.
 - Next action: harden phase-specific reasoning contracts and malformed-output boundaries.
+
+### 2026-07-22 - Phase-specific provider contract
+
+- Added strict result schemas for discovery, decision, delivery and change phases without leaking provider SDK types.
+- Mock provider emits deterministic questions/options/artifact readiness/change intent for the requested phase.
+- Native provider output schemas are selected by phase; Mock and real Codex production smoke both pass.
+- Agent Core validates untrusted output again and malformed/wrong-phase results leave canonical RunState unchanged.
+- Next action: persist and render the discovery questions and decision options through a resumable orchestration loop.
 
 ## 10. End-of-session checklist
 

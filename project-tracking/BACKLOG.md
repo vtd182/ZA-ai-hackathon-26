@@ -72,15 +72,15 @@
 
 ### `P0-AGT-001` Reasoning provider contract and mock
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-DOM-001, P0-FND-003
 - **Deliver:** provider interface, phase-specific schemas, deterministic MockReasoningProvider.
 - **Acceptance:** cùng input/version cho cùng output; malformed output không mutate RunState.
-- **Progress:** đã có provider interface, Zod-validated structured result và deterministic offline mock; còn thiếu phase-specific result schemas và malformed-output conformance test ở orchestration boundary.
+- **Evidence:** four versioned phase schemas cover discover questions, decision options/recommendation, delivery targets and structured change ambiguity. Mock output is deterministic per phase; all native adapters receive phase-specific strict JSON schemas. Agent Core rejects malformed/wrong-phase proposals without mutating RunState. 61 tests, Mock smoke and real Codex App Server smoke pass.
 
 ### `P0-AGT-002` Core orchestration loop
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-AGT-001, P0-DOM-002
 - **Deliver:** build request, validate result, apply domain commands, completion/error conditions.
 - **Acceptance:** fixture chạy Idea -> WAITING_FOR_DECISION và resume từ checkpoint.

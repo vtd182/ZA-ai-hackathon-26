@@ -43,6 +43,63 @@ export const reasoningResultSchema = z.object({
 })
 export type ReasoningResult = z.infer<typeof reasoningResultSchema>
 
+const clarificationQuestionSchema = z.object({
+  id: z.string().min(1),
+  prompt: z.string().min(1),
+  options: z.array(z.string().min(1)).min(2).max(3),
+})
+
+const phaseResultBase = {
+  schemaVersion: z.literal(1),
+  message: z.string().min(1),
+  commands: z.array(providerCommandSchema),
+}
+
+export const discoveryReasoningResultSchema = z.object({
+  ...phaseResultBase,
+  phase: z.literal('discover'),
+  phaseData: z.object({
+    questions: z.array(clarificationQuestionSchema).max(3),
+    assumptions: z.array(z.string().min(1)).max(5),
+  }),
+})
+
+export const decisionReasoningResultSchema = z.object({
+  ...phaseResultBase,
+  phase: z.literal('decide'),
+  phaseData: z.object({
+    options: z.array(z.object({ id: z.string().min(1), title: z.string().min(1), tradeoff: z.string().min(1) })).min(2).max(3),
+    recommendedOptionId: z.string().min(1),
+  }).refine((data) => data.options.some((option) => option.id === data.recommendedOptionId), 'Recommendation must reference an option'),
+})
+
+export const deliveryReasoningResultSchema = z.object({
+  ...phaseResultBase,
+  phase: z.literal('deliver'),
+  phaseData: z.object({
+    artifactTargets: z.array(z.enum(['figma', 'jira', 'zdoc'])).min(1),
+    readinessSummary: z.string().min(1),
+  }),
+})
+
+export const changeReasoningResultSchema = z.object({
+  ...phaseResultBase,
+  phase: z.literal('change'),
+  phaseData: z.object({
+    operation: z.enum(['add', 'update', 'remove', 'needs_user_input']),
+    targetEntityId: z.string().min(1).nullable(),
+    ambiguity: z.string().min(1).nullable(),
+  }),
+})
+
+export const phaseReasoningResultSchema = z.discriminatedUnion('phase', [
+  discoveryReasoningResultSchema,
+  decisionReasoningResultSchema,
+  deliveryReasoningResultSchema,
+  changeReasoningResultSchema,
+])
+export type PhaseReasoningResult = z.infer<typeof phaseReasoningResultSchema>
+
 export interface CanvasSelectionContext {
   entityId: string
   label: string
@@ -167,8 +224,79 @@ export const reasoningJsonSchema = {
   },
 } as const
 
+const commandJsonSchema = reasoningJsonSchema.properties.commands
+const phaseDataJsonSchemas = {
+  discover: {
+    type: 'object', additionalProperties: false, required: ['questions', 'assumptions'],
+    properties: {
+      questions: {
+        type: 'array', maxItems: 3, items: {
+          type: 'object', additionalProperties: false, required: ['id', 'prompt', 'options'],
+          properties: {
+            id: { type: 'string' }, prompt: { type: 'string' },
+            options: { type: 'array', minItems: 2, maxItems: 3, items: { type: 'string' } },
+          },
+        },
+      },
+      assumptions: { type: 'array', maxItems: 5, items: { type: 'string' } },
+    },
+  },
+  decide: {
+    type: 'object', additionalProperties: false, required: ['options', 'recommendedOptionId'],
+    properties: {
+      options: {
+        type: 'array', minItems: 2, maxItems: 3, items: {
+          type: 'object', additionalProperties: false, required: ['id', 'title', 'tradeoff'],
+          properties: { id: { type: 'string' }, title: { type: 'string' }, tradeoff: { type: 'string' } },
+        },
+      },
+      recommendedOptionId: { type: 'string' },
+    },
+  },
+  deliver: {
+    type: 'object', additionalProperties: false, required: ['artifactTargets', 'readinessSummary'],
+    properties: {
+      artifactTargets: { type: 'array', minItems: 1, items: { type: 'string', enum: ['figma', 'jira', 'zdoc'] } },
+      readinessSummary: { type: 'string' },
+    },
+  },
+  change: {
+    type: 'object', additionalProperties: false, required: ['operation', 'targetEntityId', 'ambiguity'],
+    properties: {
+      operation: { type: 'string', enum: ['add', 'update', 'remove', 'needs_user_input'] },
+      targetEntityId: { type: ['string', 'null'] },
+      ambiguity: { type: ['string', 'null'] },
+    },
+  },
+} as const
+
+export function reasoningJsonSchemaForPhase(phase: WorkflowView): Record<string, unknown> {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['schemaVersion', 'phase', 'message', 'commands', 'phaseData'],
+    properties: {
+      schemaVersion: { type: 'integer', const: 1 },
+      phase: { type: 'string', const: phase },
+      message: { type: 'string' },
+      commands: commandJsonSchema,
+      phaseData: phaseDataJsonSchemas[phase],
+    },
+  }
+}
+
 export function parseReasoningResult(value: unknown): ReasoningResult {
   return reasoningResultSchema.parse(value)
+}
+
+export function parsePhaseReasoningResult(value: unknown, expectedPhase: WorkflowView): PhaseReasoningResult {
+  const schemas = {
+    discover: discoveryReasoningResultSchema,
+    decide: decisionReasoningResultSchema,
+    deliver: deliveryReasoningResultSchema,
+    change: changeReasoningResultSchema,
+  } as const
+  return schemas[expectedPhase].parse(value) as PhaseReasoningResult
 }
 
 export function extractJson(text: string): unknown {

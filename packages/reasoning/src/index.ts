@@ -5,12 +5,12 @@ import { GoogleGenAI } from '@google/genai'
 import OpenAI from 'openai'
 import {
   extractJson,
-  parseReasoningResult,
-  reasoningJsonSchema,
+  parsePhaseReasoningResult,
+  reasoningJsonSchemaForPhase,
   type CanvasSelectionContext,
   type ChatMessage,
   type ProviderProbe,
-  type ReasoningResult,
+  type PhaseReasoningResult,
   type WorkflowView,
 } from '@pm-agent/domain'
 
@@ -31,7 +31,7 @@ export interface ProviderRuntimeConfig {
 }
 
 export interface ProviderResponse {
-  result: ReasoningResult
+  result: PhaseReasoningResult
   remoteRef: string | null
 }
 
@@ -45,6 +45,7 @@ const systemPolicy = `Bạn là reasoning provider cho PM Lifecycle Agent.
 Mục tiêu: giúp PM biến ý tưởng thành ProductSpec có traceability và thay đổi scope có kiểm soát.
 Chỉ trả về JSON đúng schema được cung cấp. Không dùng markdown.
 Mỗi command luôn có đủ type, label, query, view; field không áp dụng phải là null.
+Luôn trả phase đúng phase hiện tại và phaseData đúng schema phase được cung cấp.
 Các lệnh canvas chỉ là đề xuất hiển thị; không tuyên bố đã ghi Figma, Jira hay Zdoc.
 Trả lời bằng tiếng Việt, ngắn gọn, nêu outcome và bước quyết định tiếp theo.
 Khi người dùng yêu cầu bỏ một scope, dùng remove_card. Khi yêu cầu thêm, dùng add_card.
@@ -61,9 +62,9 @@ function buildPrompt(request: ReasoningRequest): string {
   return `${systemPolicy}\n\nPhase hiện tại: ${request.phase}\n${selection}\n\nLịch sử gần đây:\n${transcript}\n\nYêu cầu mới:\n${request.message}`
 }
 
-function parseProviderText(text: string): ReasoningResult {
+function parseProviderText(text: string, phase: WorkflowView): PhaseReasoningResult {
   try {
-    return parseReasoningResult(extractJson(text))
+    return parsePhaseReasoningResult(extractJson(text), phase)
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'invalid output'
     throw new Error(`Provider trả về dữ liệu không đúng schema: ${detail}`)
@@ -74,9 +75,38 @@ function normalizeText(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
 
-export function inferLocalCommands(message: string): ReasoningResult {
+function phaseData(phase: WorkflowView, normalized: string): PhaseReasoningResult['phaseData'] {
+  if (phase === 'discover') {
+    return {
+      questions: [
+        { id: 'Q-TARGET', prompt: 'Ai là người dùng chính?', options: ['Nhân viên văn phòng', 'Đối tác tại điểm bán', 'Quản trị vận hành'] },
+        { id: 'Q-SUCCESS', prompt: 'Outcome ưu tiên của MVP?', options: ['Giảm thời gian chờ', 'Tăng tỷ lệ đặt trước', 'Giảm thao tác vận hành'] },
+        { id: 'Q-CONSTRAINT', prompt: 'Constraint nào cần khóa trước?', options: ['Mini App only', 'OA + Mini App', 'Có tích hợp thanh toán'] },
+      ],
+      assumptions: ['Dữ liệu demo là synthetic', 'Jira và Zdoc dùng mock connector'],
+    }
+  }
+  if (phase === 'decide') {
+    return {
+      options: [
+        { id: 'OPT-LEAN', title: 'Lean ordering', tradeoff: 'Ra MVP nhanh, ít tích hợp phụ thuộc.' },
+        { id: 'OPT-FULL', title: 'Full lifecycle', tradeoff: 'Traceability đầy đủ, effort triển khai cao hơn.' },
+      ],
+      recommendedOptionId: 'OPT-LEAN',
+    }
+  }
+  if (phase === 'deliver') {
+    return { artifactTargets: ['figma', 'jira', 'zdoc'], readinessSummary: 'ProductSpec sẵn sàng lập artifact plan có approval.' }
+  }
+  const removePayment = /(bo|xoa|remove|loai).*(payment|thanh toan|vi noi bo)/.test(normalized)
+  return removePayment
+    ? { operation: 'remove', targetEntityId: 'REQ-PAYMENT', ambiguity: null }
+    : { operation: 'needs_user_input', targetEntityId: null, ambiguity: 'Chưa xác định được entity và operation cần thay đổi.' }
+}
+
+export function inferLocalCommands(message: string, phase: WorkflowView = 'discover'): PhaseReasoningResult {
   const normalized = normalizeText(message)
-  const commands: ReasoningResult['commands'] = []
+  const commands: PhaseReasoningResult['commands'] = []
 
   const viewMatchers: Array<[WorkflowView, string[]]> = [
     ['discover', ['discover', 'discovery', 'kham pha']],
@@ -103,7 +133,7 @@ export function inferLocalCommands(message: string): ReasoningResult {
   const messageText = commands.length > 0
     ? 'Mình đã tạo đề xuất trên canvas. Thay đổi business scope vẫn cần được review trước khi đồng bộ artifact.'
     : 'Mình đã ghi nhận. Hãy bổ sung target user, mục tiêu đo lường hoặc constraint quan trọng để tiếp tục discovery.'
-  return { schemaVersion: 1, message: messageText, commands }
+  return { schemaVersion: 1, phase, message: messageText, commands, phaseData: phaseData(phase, normalized) } as PhaseReasoningResult
 }
 
 class MockProvider implements ReasoningProvider {
@@ -114,7 +144,7 @@ class MockProvider implements ReasoningProvider {
   }
 
   async reason(request: ReasoningRequest): Promise<ProviderResponse> {
-    return { result: inferLocalCommands(request.message), remoteRef: null }
+    return { result: inferLocalCommands(request.message, request.phase), remoteRef: null }
   }
 }
 
@@ -137,11 +167,11 @@ class OpenAIProvider implements ReasoningProvider {
           type: 'json_schema',
           name: 'pm_lifecycle_reasoning',
           strict: true,
-          schema: reasoningJsonSchema,
+          schema: reasoningJsonSchemaForPhase(request.phase),
         },
       },
     }, { signal })
-    return { result: parseProviderText(response.output_text), remoteRef: response.id }
+    return { result: parseProviderText(response.output_text, request.phase), remoteRef: response.id }
   }
 }
 
@@ -161,10 +191,10 @@ class GeminiProvider implements ReasoningProvider {
       contents: buildPrompt(request),
       config: {
         responseMimeType: 'application/json',
-        responseJsonSchema: reasoningJsonSchema,
+        responseJsonSchema: reasoningJsonSchemaForPhase(request.phase),
       },
     })
-    return { result: parseProviderText(response.text ?? ''), remoteRef: null }
+    return { result: parseProviderText(response.text ?? '', request.phase), remoteRef: null }
   }
 }
 
@@ -184,14 +214,14 @@ class AnthropicProvider implements ReasoningProvider {
       system: systemPolicy,
       messages: [{ role: 'user', content: buildPrompt(request) }],
       output_config: {
-        format: { type: 'json_schema', schema: reasoningJsonSchema },
+        format: { type: 'json_schema', schema: reasoningJsonSchemaForPhase(request.phase) },
       },
     }, { signal })
     const text = response.content
       .filter((block): block is Anthropic.TextBlock => block.type === 'text')
       .map((block) => block.text)
       .join('')
-    return { result: parseProviderText(text), remoteRef: response.id }
+    return { result: parseProviderText(text, request.phase), remoteRef: response.id }
   }
 }
 
@@ -338,10 +368,10 @@ class CodexProvider implements ReasoningProvider {
       await client.request('turn/start', {
         threadId,
         input: [{ type: 'text', text: buildPrompt(request), text_elements: [] }],
-        outputSchema: reasoningJsonSchema,
+        outputSchema: reasoningJsonSchemaForPhase(request.phase),
       })
       await completed
-      return { result: parseProviderText(output), remoteRef: threadId }
+      return { result: parseProviderText(output, request.phase), remoteRef: threadId }
     } finally {
       signal.removeEventListener('abort', abort)
       client.stop()

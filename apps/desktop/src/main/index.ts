@@ -2,7 +2,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
-import { approveActions, createImpactPreview, executeConnectorAction } from '@pm-agent/agent-core'
+import { acceptReasoningProposal, approveActions, createImpactPreview, executeConnectorAction } from '@pm-agent/agent-core'
 import {
   createFigmaArtifactPlan,
   createMockJiraPlan,
@@ -378,10 +378,11 @@ function registerIpc(): void {
         modelId: profile.modelId,
         ...(apiKey ? { apiKey } : {}),
       }, controller.signal)
-      const paymentRemoval = response.result.commands.find((command) => command.type === 'remove_card' && isPaymentRemoval(command.query))
+      const proposal = acceptReasoningProposal(workspaceFor(input.threadId).runState, response.result, thread.phase)
+      const paymentRemoval = proposal.result.commands.find((command) => command.type === 'remove_card' && isPaymentRemoval(command.query))
       let changePreview
-      let responseMessage = response.result.message
-      let commands = response.result.commands
+      let responseMessage = proposal.result.message
+      let commands = proposal.result.commands
       if (paymentRemoval) {
         const workspace = workspaceFor(input.threadId)
         const payment = workspace.runState.productSpec.requirements.find((requirement) => requirement.id === 'REQ-PAYMENT')
