@@ -35,12 +35,12 @@ export class SqliteMockArtifactStore {
     this.db.close()
   }
 
-  count(target: 'jira' | 'zdoc'): number {
+  count(target: 'figma' | 'jira' | 'zdoc'): number {
     const row = this.db.prepare('SELECT COUNT(*) AS count FROM mock_external_artifacts WHERE target = ?').get(target) as { count: number }
     return row.count
   }
 
-  get<T>(target: 'jira' | 'zdoc', idempotencyKey: string): { externalId: string; planHash: string; payloadHash: string; snapshot: T } | null {
+  get<T>(target: 'figma' | 'jira' | 'zdoc', idempotencyKey: string): { externalId: string; planHash: string; payloadHash: string; snapshot: T } | null {
     const row = this.db.prepare(`
       SELECT external_id, plan_hash, payload_hash, snapshot_json
       FROM mock_external_artifacts WHERE target = ? AND idempotency_key = ?
@@ -55,7 +55,7 @@ export class SqliteMockArtifactStore {
   }
 
   insert<T>(input: {
-    target: 'jira' | 'zdoc'
+    target: 'figma' | 'jira' | 'zdoc'
     idempotencyKey: string
     externalId: string
     planHash: string
@@ -79,7 +79,7 @@ export class SqliteMockArtifactStore {
     )
   }
 
-  updateSnapshot<T>(target: 'jira' | 'zdoc', idempotencyKey: string, snapshot: T, timestamp: string): void {
+  updateSnapshot<T>(target: 'figma' | 'jira' | 'zdoc', idempotencyKey: string, snapshot: T, timestamp: string): void {
     const result = this.db.prepare(`
       UPDATE mock_external_artifacts SET snapshot_json = ?, updated_at = ?
       WHERE target = ? AND idempotency_key = ?

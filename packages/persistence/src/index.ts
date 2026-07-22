@@ -10,6 +10,7 @@ import type {
 
 export { LifecycleStore } from './lifecycle-store'
 export { FigmaIntegrationStore } from './figma-integration-store'
+export { OutboxStore } from './outbox-store'
 
 interface ThreadRow {
   id: string

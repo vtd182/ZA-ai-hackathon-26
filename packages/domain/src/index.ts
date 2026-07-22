@@ -1,11 +1,12 @@
 import { z } from 'zod'
 import type { FigmaSetupStatus } from './figma-setup'
-import type { ApproveChangeOutput, ChangePreview, LifecycleWorkspaceState } from './lifecycle'
+import type { ApproveChangeOutput, ChangePreview, LifecycleWorkspaceState, PlannedAction } from './lifecycle'
 
 export * from './design-system'
 export * from './artifact-plan'
 export * from './figma-integration'
 export * from './figma-setup'
+export * from './execution'
 export * from './invariants'
 export * from './lifecycle'
 export * from './mock-artifact'
@@ -112,6 +113,7 @@ export interface DesktopApi {
   lifecycle: {
     getWorkspace(threadId: string): Promise<LifecycleWorkspaceState>
     approveChange(threadId: string): Promise<ApproveChangeOutput>
+    retryAction(threadId: string, target: PlannedAction['target']): Promise<ApproveChangeOutput>
   }
   figma: {
     status(): Promise<FigmaSetupStatus>

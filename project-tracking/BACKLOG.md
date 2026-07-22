@@ -104,10 +104,11 @@
 
 ### `P0-AGT-005` Outbox, execution and verification orchestration
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-AGT-004, P0-PER-002
 - **Deliver:** queue, claim, retry, receipt-first recovery, verification status.
 - **Acceptance:** crash/retry simulation không duplicate; verification mismatch thành `VERIFICATION_FAILED`.
+- **Evidence:** approval + ba outbox actions commit trong cùng SQLite transaction; receipt được persist trước read-back, restart đưa work về `verifying`, retry không gọi external execute lần hai và mismatch được lưu `verification_failed`. Unit/contract suite 56 tests và production smoke với cả ba target `verified` đều pass.
 
 ## Epic E3 - Persistence
 
@@ -343,10 +344,11 @@
 
 ### `P0-CHG-003` Multi-target execute and partial retry
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-CHG-002, P0-FIG-005, P0-MCK-002, P0-MCK-003
 - **Deliver:** sync Figma + mock Jira/Zdoc, per-target receipts/status, retry failed target.
 - **Acceptance:** một target fail không duplicate target đã pass; ít nhất hai target verified sau retry.
+- **Progress:** Figma + Mock Jira + Mock Zdoc đã execute song song qua durable outbox, hiển thị receipt/read-back status theo target và hỗ trợ retry riêng target. Còn thiếu failure-injection E2E chứng minh target đã pass không tăng attempt khi retry target lỗi.
 
 ## Epic E8 - Quality and demo
 

@@ -11,6 +11,7 @@ export type WorkflowEvent =
   | 'START_VERIFICATION'
   | 'VERIFY_SUCCESS'
   | 'PARTIAL_FAILURE'
+  | 'RETRY_EXECUTION'
 
 interface StateKey {
   phase: RunState['phase']
@@ -28,6 +29,7 @@ const transitions: Record<string, StateKey> = {
   'CHANGE_IMPACT:EXECUTING:START_VERIFICATION': { phase: 'CHANGE_IMPACT', status: 'VERIFYING' },
   'CHANGE_IMPACT:VERIFYING:VERIFY_SUCCESS': { phase: 'DELIVERY', status: 'COMPLETED' },
   'CHANGE_IMPACT:EXECUTING:PARTIAL_FAILURE': { phase: 'CHANGE_IMPACT', status: 'PARTIAL_FAILURE' },
+  'CHANGE_IMPACT:PARTIAL_FAILURE:RETRY_EXECUTION': { phase: 'CHANGE_IMPACT', status: 'EXECUTING' },
 }
 
 export class InvalidWorkflowTransitionError extends Error {
@@ -42,4 +44,3 @@ export function transitionRunState(state: RunState, event: WorkflowEvent, checkp
   if (!next) throw new InvalidWorkflowTransitionError({ phase: state.phase, status: state.status }, event)
   return { ...state, ...next, lastCheckpointAt: checkpointAt }
 }
-

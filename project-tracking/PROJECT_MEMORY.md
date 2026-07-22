@@ -43,8 +43,9 @@ Signature moment:
 - **Completed tasks:** `P0-FIG-004/005/006` approved/idempotent Figma apply, independent plugin-data read-back, strict postflight audit and offline parity connector.
 - **Completed task:** `P0-MCK-001` reusable connector conformance kit now locks availability, preflight, approval, idempotency, read-back, verification and unavailable semantics.
 - **Completed tasks:** `P0-MCK-002/003` SQLite-backed Mock Jira and Mock Zdoc pass the common connector suite, durable retry and traceability tamper tests.
-- **Current task:** `P0-AGT-005` receipt-first outbox execution and verification orchestration is `IN_PROGRESS`.
-- **Current slice:** Persist approved actions atomically into outbox, recover receipts after restart, and retry only failed targets without duplicating verified artifacts.
+- **Completed task:** `P0-AGT-005` receipt-first outbox execution and verification orchestration; production smoke read-back verifies Figma, Mock Jira and Mock Zdoc.
+- **Current task:** `P0-CHG-003` multi-target partial failure and retry E2E is `IN_PROGRESS`.
+- **Current slice:** Inject one connector failure, surface it per target, retry only that target and prove verified target attempts/external IDs remain unchanged.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -173,6 +174,17 @@ Signature moment:
 - **Regression test:** `PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke` builds ESM main, opens the window, allowlists the live page and reaches context-ready state.
 - **Caveat:** New main-process path logic must remain ESM-safe; do not reintroduce `__dirname` or `require.resolve` without an ESM bridge.
 
+### BUG-007 - SQLite recovery timestamp was not ISO 8601
+
+- **Status:** FIXED
+- **Found:** 2026-07-22, `P0-AGT-005` restart recovery test.
+- **Symptom:** Reopening an outbox with interrupted work failed Zod datetime parsing.
+- **Trigger:** Recover an `executing` or `verifying` action after closing and reopening SQLite.
+- **Root cause:** SQLite `datetime('now')` emits `YYYY-MM-DD HH:mm:ss`, while canonical domain schemas require ISO 8601 with `T` and timezone.
+- **Fix:** Recovery writes `new Date().toISOString()` as a bound value.
+- **Regression test:** `packages/persistence/src/outbox-store.test.ts` reopens receipt-backed work and completes verification without duplicate execution.
+- **Caveat:** Persistence code must not use SQLite datetime formatting for domain timestamps.
+
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 
 ```md
@@ -228,7 +240,7 @@ App commands đã chạy thành công:
 ./run.sh             # verified 2026-07-22; Electron dev app opens
 ./run.sh setup       # verified 2026-07-22; installs/builds app, Go runtime and Figma plugin bundle
 ./run.sh typecheck   # verified 2026-07-22
-./run.sh test        # verified 2026-07-22; 23 tests pass
+./run.sh test        # verified 2026-07-22; 56 tests pass, 1 optional live test skipped
 ./run.sh build       # verified 2026-07-22
 ./run.sh smoke       # verified 2026-07-22; Mock provider + canvas
 PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke  # verified 2026-07-22
@@ -306,6 +318,15 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Live source evidence had styles/text but no relevant components, so the UI honestly reports `Synthetic fixture guard` instead of claiming live compliance.
 - Fixed ESM packaging path resolution exposed by MCP SDK bundling; live production smoke passes end to end.
 - Next action: implement `P0-FIG-002` generic semantic screen recipes, then strict zero-write preflight in `P0-FIG-003`.
+
+### 2026-07-22 - Durable multi-artifact execution
+
+- Added atomic approval + outbox persistence for immutable executable Figma/Jira/Zdoc plans.
+- Added receipt-first connector orchestration, restart recovery, independent read-back verification and target-scoped retry.
+- Added SQLite-backed Mock Figma parity so offline demo execution survives process restarts.
+- Renderer now shows per-target attempts and verification status; the approval command performs the complete sync workflow.
+- Verification: 56 tests, workspace typecheck, production build and strengthened smoke all pass; smoke requires exactly Figma/Jira/Zdoc to be verified and visible in the execution panel.
+- Next action: inject a deterministic single-target failure and prove UI retry leaves already verified targets unchanged.
 
 ## 10. End-of-session checklist
 

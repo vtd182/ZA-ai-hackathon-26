@@ -15,6 +15,7 @@ import { stableStringify, type JsonValue } from '@pm-agent/shared'
 import { ConnectorError, type ArtifactConnector, type ConnectorStatus, type PreflightResult, type VerificationResult } from './contract'
 import { hashFigmaPreflightPlan, preflightFigmaArtifactPlan } from './figma-artifact-plan'
 import type { FigmaMcpAdapter } from './figma-mcp'
+import { SqliteMockArtifactStore } from './mock-artifact-store'
 
 export function hashConnectorPayload(payload: Record<string, unknown>): string {
   return createHash('sha256').update(stableStringify(payload as JsonValue)).digest('hex')
@@ -140,6 +141,7 @@ export class FigmaMcpArtifactConnector implements ArtifactConnector<FigmaArtifac
 export interface MockFigmaOptions {
   available?: boolean
   now?: () => string
+  store?: SqliteMockArtifactStore
 }
 
 export class MockFigmaArtifactConnector implements ArtifactConnector<FigmaArtifactPlan, FigmaPreflightPlan, FigmaArtifactSnapshot> {
@@ -147,6 +149,7 @@ export class MockFigmaArtifactConnector implements ArtifactConnector<FigmaArtifa
   private available: boolean
   private readonly snapshots = new Map<string, FigmaArtifactSnapshot>()
   private readonly now: () => string
+  private readonly store: SqliteMockArtifactStore | undefined
 
   constructor(
     private readonly manifest: DesignSystemManifest,
@@ -155,6 +158,7 @@ export class MockFigmaArtifactConnector implements ArtifactConnector<FigmaArtifa
   ) {
     this.available = options.available ?? true
     this.now = options.now ?? (() => new Date().toISOString())
+    this.store = options.store
   }
 
   setAvailable(available: boolean): void {
@@ -175,7 +179,17 @@ export class MockFigmaArtifactConnector implements ArtifactConnector<FigmaArtifa
     if (!this.available) throw new ConnectorError('Mock Figma is unavailable.', 'UNAVAILABLE', true)
     assertApprovedAction(action, preflight)
     const idempotencyKey = preflight.plan.source.metadata.idempotencyKey
-    if (!this.snapshots.has(idempotencyKey)) {
+    const existing = this.store?.get<FigmaArtifactSnapshot>(this.target, idempotencyKey)
+      ?? (this.snapshots.has(idempotencyKey) ? {
+        externalId: this.snapshots.get(idempotencyKey)!.rootNodeIds[0]!,
+        planHash: this.snapshots.get(idempotencyKey)!.planHash,
+        payloadHash: action.payloadHash,
+        snapshot: this.snapshots.get(idempotencyKey)!,
+      } : null)
+    if (existing && existing.planHash !== preflight.planHash) {
+      throw new ConnectorError('Mock Figma idempotency conflict.', 'CONFLICT', false)
+    }
+    if (!existing) {
       const digest = createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 12)
       const snapshot = figmaArtifactSnapshotSchema.parse({
         schemaVersion: 1,
@@ -200,14 +214,28 @@ export class MockFigmaArtifactConnector implements ArtifactConnector<FigmaArtifa
         prototypeEdges: preflight.plan.source.screens.flatMap((screen) => screen.prototypeEdges),
         readAt: this.now(),
       })
-      this.snapshots.set(idempotencyKey, snapshot)
+      if (this.store) {
+        this.store.insert({
+          target: this.target,
+          idempotencyKey,
+          externalId: snapshot.rootNodeIds[0]!,
+          planHash: preflight.planHash,
+          payloadHash: action.payloadHash,
+          snapshot,
+          timestamp: this.now(),
+        })
+      } else {
+        this.snapshots.set(idempotencyKey, snapshot)
+      }
     }
-    return receiptFor(action, preflight, this.snapshots.get(idempotencyKey)!.rootNodeIds[0]!, this.now())
+    const stored = this.store?.get<FigmaArtifactSnapshot>(this.target, idempotencyKey)?.snapshot ?? this.snapshots.get(idempotencyKey)
+    return receiptFor(action, preflight, stored!.rootNodeIds[0]!, this.now())
   }
 
   async readBack(receipt: ActionReceipt): Promise<FigmaArtifactSnapshot> {
     if (!this.available) throw new ConnectorError('Mock Figma is unavailable.', 'UNAVAILABLE', true)
-    const snapshot = this.snapshots.get(receipt.idempotencyKey)
+    const snapshot = this.store?.get<FigmaArtifactSnapshot>(this.target, receipt.idempotencyKey)?.snapshot
+      ?? this.snapshots.get(receipt.idempotencyKey)
     if (!snapshot) throw new ConnectorError('Mock Figma artifact was not found.', 'NOT_FOUND', false)
     return structuredClone(snapshot)
   }
@@ -217,11 +245,13 @@ export class MockFigmaArtifactConnector implements ArtifactConnector<FigmaArtifa
   }
 
   tamper(idempotencyKey: string, mutate: (snapshot: FigmaArtifactSnapshot) => FigmaArtifactSnapshot): void {
-    const snapshot = this.snapshots.get(idempotencyKey)
-    if (snapshot) this.snapshots.set(idempotencyKey, mutate(structuredClone(snapshot)))
+    const snapshot = this.store?.get<FigmaArtifactSnapshot>(this.target, idempotencyKey)?.snapshot
+      ?? this.snapshots.get(idempotencyKey)
+    if (snapshot && this.store) this.store.updateSnapshot(this.target, idempotencyKey, mutate(structuredClone(snapshot)), this.now())
+    else if (snapshot) this.snapshots.set(idempotencyKey, mutate(structuredClone(snapshot)))
   }
 
   artifactCount(): number {
-    return this.snapshots.size
+    return this.store?.count(this.target) ?? this.snapshots.size
   }
 }

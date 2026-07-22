@@ -17,6 +17,7 @@ const api: DesktopApi = {
   lifecycle: {
     getWorkspace: (threadId) => ipcRenderer.invoke('lifecycle:get-workspace', threadId),
     approveChange: (threadId) => ipcRenderer.invoke('lifecycle:approve-change', threadId),
+    retryAction: (threadId, target) => ipcRenderer.invoke('lifecycle:retry-action', threadId, target),
   },
   figma: {
     status: () => ipcRenderer.invoke('figma:status'),

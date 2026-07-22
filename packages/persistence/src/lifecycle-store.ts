@@ -95,6 +95,13 @@ export class LifecycleStore {
           VALUES (?, ?, ?, ?, ?, ?)
         `).run(approval.id, approval.actionId, approval.payloadHash, approval.decision, approval.approver, approval.decidedAt)
       }
+      for (const action of state.pendingActions) {
+        this.db.prepare(`
+          INSERT OR IGNORE INTO action_outbox (
+            id, action_id, run_id, target, action_json, status, attempts, last_error, available_at, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, 'queued', 0, NULL, ?, ?, ?)
+        `).run(`outbox:${action.id}`, action.id, action.runId, action.target, JSON.stringify(action), state.lastCheckpointAt, state.lastCheckpointAt, state.lastCheckpointAt)
+      }
       this.updateRun(state)
       this.insertCheckpoint(state, state.lastCheckpointAt)
     })
@@ -115,6 +122,17 @@ export class LifecycleStore {
   listActions(runId: string): PlannedAction[] {
     const rows = this.db.prepare('SELECT action_json FROM planned_actions WHERE run_id = ? ORDER BY target').all(runId) as Array<{ action_json: string }>
     return rows.map((row) => plannedActionSchema.parse(JSON.parse(row.action_json)))
+  }
+
+  saveRunState(stateInput: RunState): RunState {
+    const state = runStateSchema.parse(stateInput)
+    const transaction = this.db.transaction(() => {
+      this.updateRun(state)
+      for (const action of state.pendingActions) this.upsertAction(action)
+      this.insertCheckpoint(state, state.lastCheckpointAt)
+    })
+    transaction()
+    return state
   }
 
   private insertSpecVersion(threadId: string, spec: ProductSpec, createdAt: string): void {
@@ -203,7 +221,40 @@ export class LifecycleStore {
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_checkpoints_thread_created ON thread_checkpoints(thread_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS action_outbox (
+        id TEXT PRIMARY KEY,
+        action_id TEXT NOT NULL UNIQUE REFERENCES planned_actions(id) ON DELETE CASCADE,
+        run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+        target TEXT NOT NULL,
+        action_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        available_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_outbox_run_target ON action_outbox(run_id, target);
+      CREATE INDEX IF NOT EXISTS idx_outbox_status_available ON action_outbox(status, available_at);
+
+      CREATE TABLE IF NOT EXISTS action_receipts (
+        id TEXT PRIMARY KEY,
+        action_id TEXT NOT NULL UNIQUE REFERENCES planned_actions(id) ON DELETE CASCADE,
+        target TEXT NOT NULL,
+        external_id TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        receipt_json TEXT NOT NULL,
+        recorded_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS artifact_verifications (
+        action_id TEXT PRIMARY KEY REFERENCES planned_actions(id) ON DELETE CASCADE,
+        verified INTEGER NOT NULL,
+        verification_json TEXT NOT NULL,
+        verified_at TEXT NOT NULL
+      );
     `)
   }
 }
-

@@ -25,12 +25,14 @@ import type {
   ChangePreview,
   ChatMessage,
   FigmaSetupStatus,
+  ExecutionSummary,
   LifecycleWorkspaceState,
   ProviderCommand,
   ProviderProbe,
   ProviderProfile,
   ThreadDetail,
   ThreadSummary,
+  PlannedAction,
 } from '@pm-agent/domain'
 
 const CanvasWorkspace = lazy(async () => {
@@ -190,9 +192,25 @@ export function App(): React.JSX.Element {
     setError(null)
     try {
       const result = await window.pmAgent.lifecycle.approveChange(activeThread.id)
-      setLifecycleWorkspace({ runState: result.runState, preview: result.preview })
+      setLifecycleWorkspace(result)
       setActiveThread(await window.pmAgent.threads.get(activeThread.id))
       setCommandBatch({ id: Date.now(), commands: [{ type: 'switch_view', view: 'change' }] })
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setApproving(false)
+    }
+  }
+
+  const retryAction = async (target: PlannedAction['target']): Promise<void> => {
+    if (!activeThread) return
+    setApproving(true)
+    setError(null)
+    try {
+      const result = await window.pmAgent.lifecycle.retryAction(activeThread.id, target)
+      setLifecycleWorkspace(result)
+      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
@@ -325,10 +343,12 @@ export function App(): React.JSX.Element {
         sending={sending}
         approving={approving}
         preview={lifecycleWorkspace?.preview ?? undefined}
+        execution={lifecycleWorkspace?.execution ?? undefined}
         disabled={!activeThread}
         onSend={sendMessage}
         onStop={stopMessage}
         onApprove={approveChange}
+        onRetry={retryAction}
       />
 
       {settingsProfile && (
@@ -470,20 +490,24 @@ function ChatPanel({
   sending,
   approving,
   preview,
+  execution,
   disabled,
   onSend,
   onStop,
   onApprove,
+  onRetry,
 }: {
   messages: ChatMessage[]
   selection?: CanvasSelectionContext
   sending: boolean
   approving: boolean
   preview?: ChangePreview
+  execution?: ExecutionSummary
   disabled: boolean
   onSend(content: string): Promise<void>
   onStop(): Promise<void>
   onApprove(): Promise<void>
+  onRetry(target: PlannedAction['target']): Promise<void>
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const canSend = !disabled && !sending && draft.trim().length > 0
@@ -522,6 +546,7 @@ function ChatPanel({
         )}
       </div>
       {preview && <ChangePreviewPanel preview={preview} approving={approving} onApprove={onApprove} />}
+      {execution && <ExecutionPanel execution={execution} busy={approving} onRetry={onRetry} />}
       <div className="composer">
         <textarea
           value={draft}
@@ -576,8 +601,44 @@ function ChangePreviewPanel({
       </div>
       <button className="approve-button" disabled={approving} onClick={() => void onApprove()}>
         {approving ? <LoaderCircle className="spin" size={16} /> : <ShieldCheck size={16} />}
-        {approving ? 'Đang commit' : 'Duyệt change plan'}
+        {approving ? 'Đang đồng bộ' : 'Duyệt & đồng bộ'}
       </button>
+    </section>
+  )
+}
+
+function ExecutionPanel({
+  execution,
+  busy,
+  onRetry,
+}: {
+  execution: ExecutionSummary
+  busy: boolean
+  onRetry(target: PlannedAction['target']): Promise<void>
+}): React.JSX.Element {
+  const labels: Record<PlannedAction['target'], string> = { figma: 'Figma', jira: 'Mock Jira', zdoc: 'Mock Zdoc' }
+  return (
+    <section className={`execution-panel ${execution.status}`} aria-label="Artifact execution status">
+      <header>
+        <div><strong>Artifact sync</strong><span>{execution.status.replace('_', ' ')}</span></div>
+        {execution.status === 'verified' ? <CheckCircle2 size={18} /> : <GitCompareArrows size={18} />}
+      </header>
+      <div className="execution-list">
+        {execution.actions.map((action) => {
+          const retryable = action.status === 'failed' || action.status === 'verification_failed'
+          return (
+            <div className="execution-row" key={action.actionId}>
+              <span className={`execution-state ${action.status}`} />
+              <div><strong>{labels[action.target]}</strong><small>{action.status.replace('_', ' ')} · attempt {action.attempts}</small></div>
+              {retryable && (
+                <button className="icon-button" disabled={busy} title={`Retry ${labels[action.target]}`} onClick={() => void onRetry(action.target)}>
+                  <RefreshCw className={busy ? 'spin' : ''} size={15} />
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </section>
   )
 }

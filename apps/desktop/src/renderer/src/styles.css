@@ -734,6 +734,98 @@ button {
   cursor: default;
 }
 
+.execution-panel {
+  flex: 0 0 auto;
+  margin: 0 14px 12px;
+  overflow: hidden;
+  border: 1px solid #cbd6d9;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.execution-panel > header,
+.execution-row {
+  display: flex;
+  align-items: center;
+}
+
+.execution-panel > header {
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e3e8ea;
+}
+
+.execution-panel > header > div,
+.execution-row > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.execution-panel > header strong,
+.execution-row strong {
+  font-size: 11px;
+}
+
+.execution-panel > header span,
+.execution-row small {
+  margin-top: 2px;
+  color: #718087;
+  font-size: 9.5px;
+  text-transform: capitalize;
+}
+
+.execution-panel.verified > header {
+  color: #14785d;
+  background: #effaf6;
+}
+
+.execution-panel.partial_failure > header {
+  color: #a33f43;
+  background: #fff3f3;
+}
+
+.execution-list {
+  padding: 3px 10px;
+}
+
+.execution-row {
+  min-height: 38px;
+  gap: 8px;
+  border-bottom: 1px solid #edf0f1;
+}
+
+.execution-row:last-child {
+  border-bottom: 0;
+}
+
+.execution-row .icon-button {
+  margin-left: auto;
+}
+
+.execution-state {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #8a989e;
+}
+
+.execution-state.verified {
+  background: #15926f;
+}
+
+.execution-state.failed,
+.execution-state.verification_failed {
+  background: #c23f46;
+}
+
+.execution-state.executing,
+.execution-state.verifying {
+  background: #d39b20;
+}
+
 .composer {
   position: relative;
   flex: 0 0 auto;

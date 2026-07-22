@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { approveActions, createImpactPreview } from '@pm-agent/agent-core'
 import { transitionRunState, type ChangeIntent } from '@pm-agent/domain'
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
-import { HistoryStore, LifecycleStore } from './index'
+import { HistoryStore, LifecycleStore, OutboxStore } from './index'
 
 const cleanup: string[] = []
 afterEach(() => {
@@ -37,13 +37,22 @@ describe('LifecycleStore', () => {
 
     const approved = approveActions(preview.actions, timestamp)
     state = transitionRunState({ ...state, productSpec: preview.after, pendingIntent: null, pendingActions: approved.actions }, 'APPROVE', timestamp)
+
+    const duplicateApprovalIds = approved.approvals.map((approval, index) => index === 1
+      ? { ...approval, id: approved.approvals[0]!.id }
+      : approval)
+    expect(() => lifecycle.commitApprovedChange(state, duplicateApprovalIds)).toThrow()
+    expect(lifecycle.getSpecVersion(thread.id, 2)).toBeNull()
+
     lifecycle.commitApprovedChange(state, approved.approvals)
 
     expect(lifecycle.getSpecVersion(thread.id, 2)?.requirements.find((item) => item.id === 'REQ-PAYMENT')?.status).toBe('removed')
     expect(lifecycle.listActions(state.id).every((action) => action.status === 'approved')).toBe(true)
+    const outbox = new OutboxStore(filename)
+    expect(outbox.listRun(state.id).map((item) => item.action.target)).toEqual(['figma', 'jira', 'zdoc'])
+    outbox.close()
 
     lifecycle.close()
     history.close()
   })
 })
-

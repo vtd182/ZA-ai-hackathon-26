@@ -2,8 +2,21 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
-import { approveActions, createImpactPreview } from '@pm-agent/agent-core'
-import { FigmaMcpAdapter, FigmaRuntimeManager, normalizeFigmaDesignSystemContext } from '@pm-agent/connectors'
+import { approveActions, createImpactPreview, executeConnectorAction } from '@pm-agent/agent-core'
+import {
+  createFigmaArtifactPlan,
+  createMockJiraPlan,
+  createMockZdocPlan,
+  FigmaMcpAdapter,
+  FigmaMcpArtifactConnector,
+  FigmaRuntimeManager,
+  hashConnectorPayload,
+  MockFigmaArtifactConnector,
+  MockJiraConnector,
+  MockZdocConnector,
+  normalizeFigmaDesignSystemContext,
+  SqliteMockArtifactStore,
+} from '@pm-agent/connectors'
 import type {
   ChangeIntent,
   ConfigureProviderInput,
@@ -11,11 +24,24 @@ import type {
   LifecycleWorkspaceState,
   ProviderProfile,
   SendChatInput,
+  PlannedAction,
+  ProductSpec,
 } from '@pm-agent/domain'
-import { summarizeFigmaDesignSystemContext, transitionRunState, type FigmaSetupStatus } from '@pm-agent/domain'
+import {
+  designSystemManifestSchema,
+  figmaArtifactPlanSchema,
+  mockJiraPlanSchema,
+  mockZdocPlanSchema,
+  summarizeFigmaDesignSystemContext,
+  transitionRunState,
+  type DesignSystemManifest,
+  type FigmaSetupStatus,
+  type FigmaTargetBinding,
+  type RunState,
+} from '@pm-agent/domain'
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
 import { syntheticZaloDesignSystem } from '@pm-agent/fixture-zalo-design-system'
-import { FigmaIntegrationStore, HistoryStore, LifecycleStore } from '@pm-agent/persistence'
+import { FigmaIntegrationStore, HistoryStore, LifecycleStore, OutboxStore } from '@pm-agent/persistence'
 import { ProviderRegistry } from '@pm-agent/reasoning'
 import { SecretStore } from './secret-store'
 
@@ -27,6 +53,10 @@ let lifecycle: LifecycleStore
 let figmaRuntime: FigmaRuntimeManager
 let figmaMcp: FigmaMcpAdapter
 let figmaIntegration: FigmaIntegrationStore
+let outbox: OutboxStore
+let mockFigmaStore: SqliteMockArtifactStore
+let mockJira: MockJiraConnector
+let mockZdoc: MockZdocConnector
 let secrets: SecretStore
 const providers = new ProviderRegistry()
 const activeRuns = new Map<string, AbortController>()
@@ -73,7 +103,117 @@ function workspaceFor(threadId: string): LifecycleWorkspaceState {
   const preview = runState.status === 'WAITING_FOR_APPROVAL' && runState.pendingIntent
     ? createImpactPreview(runState.productSpec, runState.pendingIntent, runState.id, runState.lastCheckpointAt)
     : null
-  return { runState, preview }
+  const execution = outbox.listRun(runState.id).length > 0 ? outbox.summary(runState.id) : null
+  return { runState, preview, execution }
+}
+
+interface FigmaExecutionContext {
+  target: FigmaTargetBinding
+  manifest: DesignSystemManifest
+  connectorMode: 'live' | 'mock'
+}
+
+function figmaExecutionContext(): FigmaExecutionContext {
+  const target = figmaIntegration.getActiveTarget()
+  const context = target ? figmaIntegration.getContext(target.targetHash) : null
+  if (target && context) {
+    return { target, manifest: context.manifest, connectorMode: context.mode === 'live' ? 'live' : 'mock' }
+  }
+  return {
+    target: {
+      schemaVersion: 1,
+      targetHash: 'f'.repeat(64),
+      sessionId: 'mock:figma:offline',
+      fileName: 'Mock Figma sandbox',
+      pageId: '0:1',
+      pageName: 'PM Lifecycle Demo',
+      allowedAt: mealOrderingProductSpec.createdAt,
+    },
+    manifest: syntheticZaloDesignSystem,
+    connectorMode: 'mock',
+  }
+}
+
+async function prepareExecutableActions(state: RunState, spec: ProductSpec): Promise<PlannedAction[]> {
+  const figmaAction = state.pendingActions.find((action) => action.target === 'figma')
+  const jiraAction = state.pendingActions.find((action) => action.target === 'jira')
+  const zdocAction = state.pendingActions.find((action) => action.target === 'zdoc')
+  if (!figmaAction || !jiraAction || !zdocAction) throw new Error('Change plan must contain Figma, Jira and Zdoc actions')
+  const figmaContext = figmaExecutionContext()
+  const figmaPlan = createFigmaArtifactPlan(spec, figmaContext.target, figmaContext.manifest, {
+    runId: state.id,
+    threadId: state.threadId,
+    actionId: figmaAction.id,
+    idempotencyKey: `figma:${state.id}:v${spec.version}`,
+  })
+  const figmaConnector = figmaContext.connectorMode === 'live'
+    ? new FigmaMcpArtifactConnector(figmaMcp, figmaContext.manifest, figmaContext.target)
+    : new MockFigmaArtifactConnector(figmaContext.manifest, figmaContext.target, { store: mockFigmaStore })
+  const [figmaPreflight, jiraPreflight, zdocPreflight] = await Promise.all([
+    figmaConnector.preflight(figmaPlan),
+    mockJira.preflight(createMockJiraPlan(spec, {
+      runId: state.id, threadId: state.threadId, actionId: jiraAction.id, idempotencyKey: `jira:${state.id}:v${spec.version}`,
+    })),
+    mockZdoc.preflight(createMockZdocPlan(spec, {
+      runId: state.id, threadId: state.threadId, actionId: zdocAction.id, idempotencyKey: `zdoc:${state.id}:v${spec.version}`,
+    })),
+  ])
+  if (!figmaPreflight.allowed || !jiraPreflight.allowed || !zdocPreflight.allowed) throw new Error('Artifact preflight contains blocking issues')
+
+  const executable = <T extends Record<string, unknown>>(
+    base: PlannedAction,
+    type: string,
+    planHash: string,
+    plan: T,
+    extra: Record<string, unknown> = {},
+  ): PlannedAction => {
+    const payload = { schemaVersion: 1, type, planHash, plan, ...extra }
+    return { ...base, payload, payloadHash: hashConnectorPayload(payload), status: 'pending_approval' }
+  }
+  return [
+    executable(figmaAction, 'figma_design_system_plan', figmaPreflight.planHash, figmaPlan, {
+      connectorMode: figmaContext.connectorMode,
+      manifest: figmaContext.manifest,
+    }),
+    executable(jiraAction, 'mock_jira_plan', jiraPreflight.planHash, jiraPreflight.plan),
+    executable(zdocAction, 'mock_zdoc_plan', zdocPreflight.planHash, zdocPreflight.plan),
+  ]
+}
+
+async function executeRun(threadId: string, target?: PlannedAction['target']): Promise<LifecycleWorkspaceState> {
+  let state = lifecycle.getRunState(threadId)
+  if (!state) throw new Error('Lifecycle run does not exist')
+  if (state.status === 'PARTIAL_FAILURE') state = transitionRunState(state, 'RETRY_EXECUTION', timestamp())
+  else if (state.status === 'ACTIVE') state = transitionRunState(state, 'START_EXECUTION', timestamp())
+  else if (state.status !== 'EXECUTING') return workspaceFor(threadId)
+  lifecycle.saveRunState(state)
+
+  const work = outbox.listRun(state.id).filter((item) => !target || item.action.target === target)
+  await Promise.all(work.map(async (item) => {
+    const payload = item.action.payload
+    if (item.action.target === 'figma') {
+      const plan = figmaArtifactPlanSchema.parse(payload.plan)
+      const manifest = designSystemManifestSchema.parse(payload.manifest)
+      const connector = payload.connectorMode === 'live'
+        ? new FigmaMcpArtifactConnector(figmaMcp, manifest, plan.target)
+        : new MockFigmaArtifactConnector(manifest, plan.target, { store: mockFigmaStore })
+      await executeConnectorAction({ action: item.action, plan, connector, repository: outbox })
+    } else if (item.action.target === 'jira') {
+      await executeConnectorAction({ action: item.action, plan: mockJiraPlanSchema.parse(payload.plan), connector: mockJira, repository: outbox })
+    } else {
+      await executeConnectorAction({ action: item.action, plan: mockZdocPlanSchema.parse(payload.plan), connector: mockZdoc, repository: outbox })
+    }
+  }))
+
+  const summary = outbox.summary(state.id)
+  if (summary.status === 'verified') {
+    state = transitionRunState(state, 'START_VERIFICATION', timestamp())
+    state = transitionRunState(state, 'VERIFY_SUCCESS', timestamp())
+  } else {
+    state = transitionRunState(state, 'PARTIAL_FAILURE', timestamp())
+  }
+  lifecycle.saveRunState(state)
+  return workspaceFor(threadId)
 }
 
 function isPaymentRemoval(query: string): boolean {
@@ -136,7 +276,7 @@ function registerIpc(): void {
   ipcMain.handle('canvas:save', (_event, threadId: string, snapshot: unknown) => history.saveCanvas(threadId, snapshot))
 
   ipcMain.handle('lifecycle:get-workspace', (_event, threadId: string) => workspaceFor(threadId))
-  ipcMain.handle('lifecycle:approve-change', (_event, threadId: string) => {
+  ipcMain.handle('lifecycle:approve-change', async (_event, threadId: string) => {
     const workspace = workspaceFor(threadId)
     const { runState } = workspace
     if (runState.status !== 'WAITING_FOR_APPROVAL' || !runState.pendingIntent) {
@@ -147,8 +287,9 @@ function registerIpc(): void {
     const previewHashes = preview.actions.map((action) => action.payloadHash).join(':')
     if (currentHashes !== previewHashes) throw new Error('Change plan đã thay đổi và cần preview lại')
 
+    const executableActions = await prepareExecutableActions(runState, preview.after)
     const decidedAt = timestamp()
-    const approved = approveActions(runState.pendingActions, decidedAt)
+    const approved = approveActions(executableActions, decidedAt)
     const approvedState = transitionRunState({
       ...runState,
       productSpec: preview.after,
@@ -157,9 +298,20 @@ function registerIpc(): void {
     }, 'APPROVE', decidedAt)
     lifecycle.commitApprovedChange(approvedState, approved.approvals)
     history.setThreadPhase(threadId, 'change')
-    const message = `Đã duyệt ProductSpec v${preview.after.version}. Ba artifact actions đã khóa payload; chưa ghi ra ngoài cho tới khi connector sẵn sàng.`
+    const executed = await executeRun(threadId)
+    const message = executed.execution?.status === 'verified'
+      ? `Đã duyệt ProductSpec v${preview.after.version} và read-back verified cả Figma, Mock Jira, Mock Zdoc.`
+      : `Đã duyệt ProductSpec v${preview.after.version}; một số artifact cần retry sau khi connector sẵn sàng.`
     history.addMessage(threadId, 'assistant', message)
-    return { runState: approvedState, preview: null, message }
+    return { ...executed, message }
+  })
+  ipcMain.handle('lifecycle:retry-action', async (_event, threadId: string, target: PlannedAction['target']) => {
+    const workspace = await executeRun(threadId, target)
+    const message = workspace.execution?.status === 'verified'
+      ? 'Retry hoàn tất; mọi artifact đã được read-back verified.'
+      : `${target} vẫn chưa verified; các target đã thành công được giữ nguyên.`
+    history.addMessage(threadId, 'assistant', message)
+    return { ...workspace, message }
   })
 
   ipcMain.handle('figma:status', () => figmaStatus())
@@ -336,7 +488,15 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     if (final.hasPreview) {
       await window.webContents.executeJavaScript(`document.querySelector('.approve-button')?.click()`)
     }
-    let approval = { committed: false, specVersion: 0, paymentStatus: '', actionsApproved: false }
+    let approval = {
+      committed: false,
+      specVersion: 0,
+      paymentStatus: '',
+      actionsApproved: false,
+      executionVerified: false,
+      verifiedTargets: [] as string[],
+      executionPanelReady: false,
+    }
     for (let attempt = 0; attempt < 60; attempt += 1) {
       await wait(250)
       approval = await window.webContents.executeJavaScript(`(async () => {
@@ -346,10 +506,17 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
           committed: document.body.innerText.includes('Đã duyệt ProductSpec v2'),
           specVersion: workspace.runState.productSpec.version,
           paymentStatus: workspace.runState.productSpec.requirements.find((item) => item.id === 'REQ-PAYMENT')?.status ?? '',
-          actionsApproved: workspace.runState.pendingActions.every((action) => action.status === 'approved')
+          actionsApproved: workspace.runState.pendingActions.every((action) => action.status === 'approved'),
+          executionVerified: workspace.execution?.status === 'verified',
+          verifiedTargets: workspace.execution?.actions
+            .filter((action) => action.status === 'verified')
+            .map((action) => action.target)
+            .sort() ?? [],
+          executionPanelReady: ['Figma', 'Mock Jira', 'Mock Zdoc']
+            .every((label) => document.querySelector('.execution-panel')?.innerText.includes(label))
         };
       })()`) as typeof approval
-      if (approval.committed && approval.specVersion === 2) break
+      if (approval.committed && approval.executionVerified && approval.executionPanelReady) break
     }
     await window.webContents.executeJavaScript(`document.querySelector('.integration-button')?.click()`)
     await wait(500)
@@ -384,6 +551,8 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && final.hasPreview && !final.pending && !final.hasError
       && approval.committed && approval.specVersion === 2
       && approval.paymentStatus === 'removed' && approval.actionsApproved
+      && approval.executionVerified && approval.executionPanelReady
+      && approval.verifiedTargets.join(',') === 'figma,jira,zdoc'
       && figmaSetup.hasSetupDialog && figmaSetup.runtimeReady && figmaSetup.pluginBuilt && figmaSetup.waitingForPlugin
       && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady))
     console.log(`[smoke] ${JSON.stringify({ passed, ...initial, ...final, ...approval, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
@@ -399,6 +568,10 @@ app.whenReady().then(() => {
   const figmaPaths = figmaRuntimePaths()
   history = new HistoryStore(databasePath)
   lifecycle = new LifecycleStore(databasePath)
+  outbox = new OutboxStore(databasePath)
+  mockFigmaStore = new SqliteMockArtifactStore(databasePath)
+  mockJira = new MockJiraConnector(new SqliteMockArtifactStore(databasePath), timestamp)
+  mockZdoc = new MockZdocConnector(new SqliteMockArtifactStore(databasePath), timestamp)
   figmaIntegration = new FigmaIntegrationStore(databasePath)
   figmaRuntime = new FigmaRuntimeManager(figmaPaths)
   figmaMcp = new FigmaMcpAdapter({ binaryPath: figmaPaths.binaryPath })
@@ -420,6 +593,10 @@ app.on('before-quit', () => {
   void figmaMcp?.close()
   figmaRuntime?.stop()
   figmaIntegration?.close()
+  mockZdoc?.close()
+  mockJira?.close()
+  mockFigmaStore?.close()
+  outbox?.close()
   lifecycle?.close()
   history?.close()
 })

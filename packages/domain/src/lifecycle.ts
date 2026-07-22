@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { productSpecSchema } from './product-spec'
+import type { ExecutionSummary } from './execution'
 
 export const lifecyclePhaseSchema = z.enum(['IDEA_INTAKE', 'DISCOVERY', 'DECISION', 'DELIVERY', 'CHANGE_IMPACT'])
 export const runStatusSchema = z.enum([
@@ -104,6 +105,7 @@ export type ChangePreview = z.infer<typeof changePreviewSchema>
 export interface LifecycleWorkspaceState {
   runState: RunState
   preview: ChangePreview | null
+  execution: ExecutionSummary | null
 }
 
 export interface ApproveChangeOutput extends LifecycleWorkspaceState {
