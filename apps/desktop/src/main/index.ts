@@ -717,10 +717,29 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       };
     })()`) as { paidDialogReady: boolean; paidBlocked: boolean; stableThread: boolean; stableSpec: boolean }
 
-    const lifecycleFlow = { required: process.env.PM_AGENT_SMOKE_LIFECYCLE === '1', questions: 0, options: 0, delivered: false, resumed: false }
+    const lifecycleFlow = {
+      required: process.env.PM_AGENT_SMOKE_LIFECYCLE === '1',
+      blankCanvas: false,
+      questions: 0,
+      options: 0,
+      delivered: false,
+      resumed: false,
+    }
     if (lifecycleFlow.required) {
       await window.webContents.executeJavaScript(`document.querySelector('.new-thread-button')?.click()`)
       await wait(300)
+      lifecycleFlow.blankCanvas = await window.webContents.executeJavaScript(`(async () => {
+        const active = document.querySelector('.thread-row.active');
+        const threadId = active?.getAttribute('data-thread-id');
+        if (!threadId || threadId === ${JSON.stringify(DEMO_THREAD_ID)}) return false;
+        const thread = await window.pmAgent.threads.get(threadId);
+        const workspace = await window.pmAgent.lifecycle.getWorkspace(threadId);
+        const canonicalShapes = [...document.querySelectorAll('.tl-shape')]
+          .filter((shape) => /REQ-|SCREEN-|STORY-|DEP-/.test(shape.textContent ?? ''));
+        return thread.canvasSnapshot === null
+          && workspace.runState.phase === 'IDEA_INTAKE'
+          && canonicalShapes.length === 0;
+      })()`) as boolean
       await window.webContents.executeJavaScript(`(() => {
         const input = document.querySelector('.composer textarea');
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
@@ -1071,7 +1090,8 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     const passed = initial.hasApi && initial.hasCanvas && initial.hasSeed
       && reset.controlReady && reset.deterministic
       && providerSwitch.paidDialogReady && providerSwitch.paidBlocked && providerSwitch.stableThread && providerSwitch.stableSpec
-      && (!lifecycleFlow.required || (lifecycleFlow.questions > 0 && lifecycleFlow.questions <= 3 && lifecycleFlow.options >= 2 && lifecycleFlow.options <= 3 && lifecycleFlow.delivered && lifecycleFlow.resumed))
+      && (!lifecycleFlow.required || (lifecycleFlow.blankCanvas && lifecycleFlow.questions > 0 && lifecycleFlow.questions <= 3
+        && lifecycleFlow.options >= 2 && lifecycleFlow.options <= 3 && lifecycleFlow.delivered && lifecycleFlow.resumed))
       && (!rejection.required || (rejection.rejected && rejection.preservedVersion && rejection.noExecution && rejection.previewedAgain))
       && (!canvasGesture.required || (canvasGesture.targetFound && canvasGesture.dragPresentationOnly && canvasGesture.undoPresentationOnly
         && canvasGesture.shapePreserved && canvasGesture.specUnchanged

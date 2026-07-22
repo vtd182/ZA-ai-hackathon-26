@@ -313,6 +313,9 @@ export function App(): React.JSX.Element {
   }, [activeThread, approving, refreshThreads])
 
   const activeProfile = profiles.find((profile) => profile.id === activeThread?.providerId)
+  const projectedProductSpec = lifecycleWorkspace?.runState.phase === 'IDEA_INTAKE'
+    ? undefined
+    : lifecycleWorkspace?.runState.productSpec
 
   const resetDemo = async (): Promise<void> => {
     setLoading(true)
@@ -434,7 +437,7 @@ export function App(): React.JSX.Element {
                 snapshot={activeThread.canvasSnapshot}
                 initialView={activeThread.phase}
                 commandBatch={commandBatch}
-                productSpec={lifecycleWorkspace?.runState.productSpec}
+                productSpec={projectedProductSpec}
                 changePreview={lifecycleWorkspace?.preview ?? undefined}
                 changeEntityIds={lifecycleWorkspace?.preview?.affectedEntityIds
                   ?? lifecycleWorkspace?.runState.pendingActions.flatMap((action) => action.entityIds)

@@ -211,6 +211,17 @@ Signature moment:
 - **Regression test:** `./run.sh smoke-canvas` requires drag-only presentation state, position undo, blocked canonical deletion, unchanged ProductSpec v1 and a validated approval preview.
 - **Caveat:** Renderer-owned projection updates must stay outside tldraw user history; domain undo remains a separate future workflow command.
 
+### BUG-009 - New thread projected the demo canvas before idea intake
+
+- **Status:** FIXED
+- **Found:** 2026-07-22, manual new-chat verification during `P0-QA-001`.
+- **Symptom:** Clicking `Cuộc hội thoại mới` appeared to reuse the previous canvas instead of opening a blank workspace.
+- **Trigger:** Create a thread and open its freshly initialized `IDEA_INTAKE` workspace before sending the first idea.
+- **Root cause:** The new thread correctly had `canvasSnapshot = null`, but `workspaceFor()` initialized every run with the meal-ordering ProductSpec and the renderer projected that fixture immediately.
+- **Fix:** Suppress canonical ProductSpec projection while a non-demo thread remains in `IDEA_INTAKE`; projection begins after the first validated transition to Discovery. The seeded demo thread remains unchanged.
+- **Regression test:** `./run.sh smoke-lifecycle` now requires a null snapshot and zero canonical tldraw shapes before the first message, then completes clarification, decision, resume and verified change sync.
+- **Caveat:** This is a projection rule, not an empty fake ProductSpec; Agent Core still owns a schema-valid run state from thread creation.
+
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 
 ```md
@@ -267,7 +278,7 @@ App commands đã chạy thành công:
 ./run.sh setup       # verified 2026-07-22; installs/builds app, Go runtime and Figma plugin bundle
 ./run.sh reset       # verified by shared reset path 2026-07-22; resets then opens dev app
 ./run.sh typecheck   # verified 2026-07-22
-./run.sh test        # verified 2026-07-22; 83 tests pass, 1 optional live test skipped
+./run.sh test        # verified 2026-07-22; 84 tests pass, 1 optional live test skipped
 ./run.sh build       # verified 2026-07-22
 ./run.sh smoke       # verified 2026-07-22; Mock provider + canvas
 ./run.sh smoke-recovery  # verified 2026-07-22; injected Jira failure + target-only UI retry
