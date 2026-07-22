@@ -214,6 +214,9 @@ importers:
       '@pm-agent/fixture-meal-ordering':
         specifier: workspace:*
         version: link:../../fixtures/meal-ordering
+      '@pm-agent/reasoning':
+        specifier: workspace:*
+        version: link:../reasoning
       '@types/better-sqlite3':
         specifier: 7.6.13
         version: 7.6.13

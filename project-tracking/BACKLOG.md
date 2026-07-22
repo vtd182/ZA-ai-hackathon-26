@@ -80,15 +80,15 @@
 
 ### `P0-AGT-002` Core orchestration loop
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-AGT-001, P0-DOM-002
 - **Deliver:** build request, validate result, apply domain commands, completion/error conditions.
 - **Acceptance:** fixture chạy Idea -> WAITING_FOR_DECISION và resume từ checkpoint.
-- **Progress:** signature change flow đã validate provider result, tạo domain command, persist preview và resume ProductSpec/checkpoint; discovery Idea -> WAITING_FOR_DECISION chưa được orchestration thành workflow hoàn chỉnh.
+- **Evidence:** Agent Core validates phase output before transitions, advances Idea -> Discovery -> Decision, validates selected option and emits versioned reasoning checkpoints. SQLite persists checkpoints atomically with RunState; reopen test restores `DECISION/WAITING_FOR_DECISION` and the deterministic recommendation. Signature change flow remains independently covered by production smoke.
 
 ### `P0-AGT-003` Provider registry and normalized events
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-AGT-001
 - **Deliver:** registry, capability probe, normalized stream events, cancellation và provider conformance kit.
 - **Acceptance:** core/UI không import provider SDK type; malformed/partial stream không mutate canonical state.

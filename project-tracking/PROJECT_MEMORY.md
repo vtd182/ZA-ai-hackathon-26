@@ -47,8 +47,9 @@ Signature moment:
 - **Completed task:** `P0-CHG-003` multi-target partial retry; deterministic recovery smoke proves successful targets are not duplicated.
 - **Completed task:** `P0-FND-003` deterministic demo fixtures and reset; three repeated resets produce identical canonical state.
 - **Completed task:** `P0-AGT-001` phase-specific reasoning contracts and malformed-output guard; real Codex and Mock smoke pass.
-- **Current task:** `P0-AGT-002` Idea -> clarification -> decision orchestration and resume is `IN_PROGRESS`.
-- **Current slice:** Persist phase proposals/answers, expose at most three clarification questions and transition deterministically to `WAITING_FOR_DECISION` with resumable options.
+- **Completed task:** `P0-AGT-002` Idea -> Discovery -> `WAITING_FOR_DECISION` orchestration with persisted/reopened reasoning checkpoints.
+- **Current task:** `P0-AGT-003` normalized provider events, capabilities and conformance is `IN_PROGRESS`.
+- **Current slice:** Add internal event union and capability probes, normalize adapter completion/cancel/error semantics and prove partial/malformed events cannot mutate canonical state.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -357,6 +358,14 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Native provider output schemas are selected by phase; Mock and real Codex production smoke both pass.
 - Agent Core validates untrusted output again and malformed/wrong-phase results leave canonical RunState unchanged.
 - Next action: persist and render the discovery questions and decision options through a resumable orchestration loop.
+
+### 2026-07-22 - Resumable Idea-to-decision core
+
+- Added deterministic transitions from Idea Intake through Discovery to `WAITING_FOR_DECISION`.
+- Reasoning checkpoints persist the validated phase result alongside canonical RunState in one SQLite transaction.
+- Restart test restores both decision state and the exact recommended option; invalid phase/option transitions remain guarded.
+- Seeded signature flow intentionally starts at Delivery so the change-sync demo remains one command away.
+- Next action: normalize provider capabilities/events before wiring phase cards into UI.
 
 ## 10. End-of-session checklist
 

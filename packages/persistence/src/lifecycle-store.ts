@@ -3,10 +3,12 @@ import {
   approvalSchema,
   plannedActionSchema,
   productSpecSchema,
+  phaseReasoningResultSchema,
   runStateSchema,
   type Approval,
   type PlannedAction,
   type ProductSpec,
+  type PhaseReasoningResult,
   type RunState,
 } from '@pm-agent/domain'
 
@@ -16,6 +18,21 @@ interface JsonRow {
 
 interface VersionRow {
   spec_json: string
+}
+
+interface ReasoningCheckpointRow {
+  run_id: string
+  phase: PhaseReasoningResult['phase']
+  result_json: string
+  created_at: string
+}
+
+interface PersistedReasoningCheckpoint {
+  schemaVersion: 1
+  runId: string
+  phase: PhaseReasoningResult['phase']
+  result: PhaseReasoningResult
+  createdAt: string
 }
 
 export class LifecycleStore {
@@ -32,13 +49,19 @@ export class LifecycleStore {
     this.db.close()
   }
 
-  initializeRun(threadId: string, runId: string, spec: ProductSpec, checkpointAt: string): RunState {
+  initializeRun(
+    threadId: string,
+    runId: string,
+    spec: ProductSpec,
+    checkpointAt: string,
+    initialPhase: RunState['phase'] = 'DELIVERY',
+  ): RunState {
     const productSpec = productSpecSchema.parse(spec)
     const state = runStateSchema.parse({
       schemaVersion: 1,
       id: runId,
       threadId,
-      phase: 'DELIVERY',
+      phase: initialPhase,
       status: 'ACTIVE',
       productSpec,
       pendingIntent: null,
@@ -135,6 +158,34 @@ export class LifecycleStore {
     return state
   }
 
+  saveReasoningCheckpoint(stateInput: RunState, checkpointInput: PersistedReasoningCheckpoint): RunState {
+    const state = runStateSchema.parse(stateInput)
+    const result = phaseReasoningResultSchema.parse(checkpointInput.result)
+    if (checkpointInput.runId !== state.id || checkpointInput.phase !== result.phase) {
+      throw new Error('Reasoning checkpoint does not match run/phase')
+    }
+    const transaction = this.db.transaction(() => {
+      this.updateRun(state)
+      this.db.prepare(`
+        INSERT INTO reasoning_checkpoints (run_id, phase, result_json, created_at)
+        VALUES (?, ?, ?, ?)
+      `).run(state.id, result.phase, JSON.stringify(result), checkpointInput.createdAt)
+      this.insertCheckpoint(state, checkpointInput.createdAt)
+    })
+    transaction()
+    return state
+  }
+
+  getLatestReasoningCheckpoint(runId: string): PersistedReasoningCheckpoint | null {
+    const row = this.db.prepare(`
+      SELECT run_id, phase, result_json, created_at FROM reasoning_checkpoints
+      WHERE run_id = ? ORDER BY id DESC LIMIT 1
+    `).get(runId) as ReasoningCheckpointRow | undefined
+    if (!row) return null
+    const result = phaseReasoningResultSchema.parse(JSON.parse(row.result_json))
+    return { schemaVersion: 1, runId: row.run_id, phase: row.phase, result, createdAt: row.created_at }
+  }
+
   private insertSpecVersion(threadId: string, spec: ProductSpec, createdAt: string): void {
     this.db.prepare(`
       INSERT OR IGNORE INTO product_spec_versions (thread_id, version, schema_version, spec_json, created_at)
@@ -221,6 +272,15 @@ export class LifecycleStore {
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_checkpoints_thread_created ON thread_checkpoints(thread_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS reasoning_checkpoints (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+        phase TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_reasoning_checkpoints_run ON reasoning_checkpoints(run_id, id DESC);
 
       CREATE TABLE IF NOT EXISTS action_outbox (
         id TEXT PRIMARY KEY,
