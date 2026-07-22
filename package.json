@@ -1,0 +1,22 @@
+{
+  "name": "pm-lifecycle-agent",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.15.1",
+  "scripts": {
+    "dev": "pnpm --filter @pm-agent/desktop dev",
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "4.2.0",
+    "@types/node": "24.10.0",
+    "electron": "43.2.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}
+

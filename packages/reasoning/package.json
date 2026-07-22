@@ -1,0 +1,21 @@
+{
+  "name": "@pm-agent/reasoning",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.112.5",
+    "@google/genai": "2.13.0",
+    "@pm-agent/domain": "workspace:*",
+    "openai": "6.48.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}
+

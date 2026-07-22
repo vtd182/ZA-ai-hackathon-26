@@ -1,0 +1,17 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  '@google/genai': true
+  better-sqlite3: true
+  electron: true
+  esbuild: true
+  protobufjs: true
+
+minimumReleaseAgeExclude:
+  - '@anthropic-ai/sdk@0.112.5'
+  - '@google/genai@2.13.0'
+  - electron@43.2.0
+  - react-dom@19.2.8
+  - react@19.2.8

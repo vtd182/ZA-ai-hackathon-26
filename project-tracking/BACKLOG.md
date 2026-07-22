@@ -11,10 +11,12 @@
 
 ### `P0-FND-001` Bootstrap workspace
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-22)
 - **Depends on:** none
 - **Deliver:** pnpm workspace, Electron Vite + React + TypeScript strict, shared tsconfig, Vitest.
 - **Acceptance:** `pnpm dev`, `pnpm test`, `pnpm typecheck` chạy; renderer không có Node integration.
+- **Current slice:** Electron shell + typed IPC + SQLite history + provider registry + one tldraw canvas per thread + `run.sh`.
+- **Evidence:** `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, Mock smoke và Codex App Server smoke đều pass; production screenshot xác nhận history/chat/tldraw render.
 
 ### `P0-FND-002` Package boundaries and lint rules
 

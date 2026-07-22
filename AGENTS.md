@@ -84,4 +84,4 @@ See `project-tracking/FIGMA_MCP_INTEGRATION.md`.
 
 ## Verification
 
-The app has not been bootstrapped yet, so no app commands are authoritative. Once verified, record them in `project-tracking/PROJECT_MEMORY.md`. For the existing Figma MCP, use its documented Go and plugin checks.
+Use root `./run.sh typecheck`, `./run.sh test`, `./run.sh build` and `./run.sh smoke` for the desktop app. `PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke` verifies a real Codex App Server turn. For the existing Figma MCP, use its documented Go and plugin checks. Keep command evidence current in `project-tracking/PROJECT_MEMORY.md`.
