@@ -2,7 +2,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
-import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, changeIntentFromCanvasCommand, createHandoffPackage, createImpactPreview, executeConnectorAction, rejectActions, selectDecisionOption } from '@pm-agent/agent-core'
+import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, changeIntentFromCanvasCommand, createHandoffPackage, createImpactPreview, executeConnectorAction, rejectActions, resolveRemovalChangeIntent, selectDecisionOption } from '@pm-agent/agent-core'
 import {
   createFigmaArtifactPlan,
   createMockJiraPlan,
@@ -131,13 +131,40 @@ function stageChangePreview(threadId: string, intent: ChangeIntent, at: string):
     }
     throw new Error('Một change plan khác đang chờ quyết định')
   }
-  const deliveryState = moveToDeliveryForChange(workspace.runState, at)
-  const preview = createImpactPreview(deliveryState.productSpec, intent, deliveryState.id, at)
-  let nextState = transitionRunState(deliveryState, 'REQUEST_CHANGE', at)
-  nextState = transitionRunState({ ...nextState, pendingIntent: intent, pendingActions: preview.actions }, 'PREVIEW_READY', at)
+  let impactState = moveToDeliveryForChange(workspace.runState, at)
+  if (impactState.phase === 'CHANGE_IMPACT' && impactState.status === 'NEEDS_USER_INPUT') {
+    impactState = transitionRunState(impactState, 'PROVIDE_INPUT', at)
+  } else {
+    impactState = transitionRunState(impactState, 'REQUEST_CHANGE', at)
+  }
+  const preview = createImpactPreview(impactState.productSpec, intent, impactState.id, at)
+  const nextState = transitionRunState({
+    ...impactState,
+    pendingIntent: intent,
+    pendingActions: preview.actions,
+    pendingClarification: null,
+  }, 'PREVIEW_READY', at)
   lifecycle.savePreview(nextState)
   history.setThreadPhase(threadId, 'change')
   return { workspace: workspaceFor(threadId), created: true }
+}
+
+function stageChangeAmbiguity(threadId: string, ambiguity: string, at: string): LifecycleWorkspaceState {
+  let state = moveToDeliveryForChange(workspaceFor(threadId).runState, at)
+  if (state.phase === 'DELIVERY' && state.status === 'ACTIVE') state = transitionRunState(state, 'REQUEST_CHANGE', at)
+  if (state.phase === 'CHANGE_IMPACT' && state.status === 'ACTIVE') state = transitionRunState(state, 'NEEDS_INPUT', at)
+  if (state.phase !== 'CHANGE_IMPACT' || state.status !== 'NEEDS_USER_INPUT') {
+    throw new Error(`Không thể yêu cầu clarification từ ${state.phase}/${state.status}`)
+  }
+  lifecycle.saveRunState({
+    ...state,
+    pendingIntent: null,
+    pendingActions: [],
+    pendingClarification: ambiguity,
+    lastCheckpointAt: at,
+  })
+  history.setThreadPhase(threadId, 'change')
+  return workspaceFor(threadId)
 }
 
 function resetDemoWorkspace(): { fixtureVersion: 1; thread: ReturnType<HistoryStore['resetDemoWorkspace']>; workspace: LifecycleWorkspaceState } {
@@ -255,11 +282,6 @@ async function executeRun(threadId: string, target?: PlannedAction['target']): P
   }
   lifecycle.saveRunState(state)
   return workspaceFor(threadId)
-}
-
-function isPaymentRemoval(query: string): boolean {
-  const normalized = query.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  return normalized.includes('payment') || normalized.includes('thanh toan') || normalized.includes('vi noi bo')
 }
 
 function exposeProfile(profile: Omit<ProviderProfile, 'hasCredential'>): ProviderProfile {
@@ -524,32 +546,38 @@ function registerIpc(): void {
         ...(apiKey ? { apiKey } : {}),
       }, controller.signal)
       const proposal = acceptCompletedProviderEvents(workspaceFor(input.threadId).runState, response.events, thread.phase)
-      const paymentRemoval = proposal.result.commands.find((command) => command.type === 'remove_card' && isPaymentRemoval(command.query))
+      const removalCommand = proposal.result.commands.find((command) => command.type === 'remove_card')
       let changePreview
       let responseMessage = proposal.result.message
       let commands = proposal.result.commands
-      if (paymentRemoval) {
+      if (removalCommand) {
         const workspace = workspaceFor(input.threadId)
-        const payment = workspace.runState.productSpec.requirements.find((requirement) => requirement.id === 'REQ-PAYMENT')
         if (workspace.preview) {
           changePreview = workspace.preview
           responseMessage = 'Change plan hiện tại vẫn đang chờ duyệt; payload và before/after chưa thay đổi.'
-          commands = [{ type: 'focus_card', query: 'REQ-PAYMENT' }, { type: 'switch_view', view: 'change' }]
-        } else if (payment?.status === 'in_scope') {
-          const checkpointAt = timestamp()
-          const intent: ChangeIntent = {
-            id: `CHANGE-REMOVE-PAYMENT-V${workspace.runState.productSpec.version}`,
-            operation: 'remove',
-            targetEntityId: 'REQ-PAYMENT',
+          commands = [{ type: 'focus_card', query: workspace.preview.intent.targetEntityId }, { type: 'switch_view', view: 'change' }]
+        } else {
+          const resolution = resolveRemovalChangeIntent(workspace.runState.productSpec, {
+            query: removalCommand.query,
             reason: input.content.trim(),
+            ...(input.selection ? { selectedEntityId: input.selection.entityId } : {}),
+          })
+          if (resolution.status === 'needs_user_input') {
+            stageChangeAmbiguity(input.threadId, resolution.ambiguity, timestamp())
+            responseMessage = resolution.ambiguity
+            commands = [{ type: 'switch_view', view: 'change' }]
+          } else {
+            const target = workspace.runState.productSpec.requirements.find((item) => item.id === resolution.intent.targetEntityId)
+            if (target?.status === 'removed') {
+              responseMessage = `${target.id} đã bị loại khỏi ProductSpec v${workspace.runState.productSpec.version}; không tạo action trùng.`
+              commands = [{ type: 'focus_card', query: target.id }, { type: 'switch_view', view: 'change' }]
+            } else {
+              const staged = stageChangePreview(input.threadId, resolution.intent, timestamp())
+              changePreview = staged.workspace.preview ?? undefined
+              responseMessage = `Đã phân tích ${changePreview?.affectedEntityIds.length ?? 0} entity bị ảnh hưởng. Chưa có artifact nào được ghi; hãy kiểm tra before/after và duyệt change plan.`
+              commands = [...commands, { type: 'switch_view', view: 'change' }]
+            }
           }
-          const staged = stageChangePreview(input.threadId, intent, checkpointAt)
-          changePreview = staged.workspace.preview ?? undefined
-          responseMessage = `Đã phân tích ${changePreview?.affectedEntityIds.length ?? 0} entity bị ảnh hưởng. Chưa có artifact nào được ghi; hãy kiểm tra before/after và duyệt change plan.`
-          commands = [...commands, { type: 'switch_view', view: 'change' }]
-        } else if (payment?.status === 'removed') {
-          responseMessage = `REQ-PAYMENT đã bị loại khỏi ProductSpec v${workspace.runState.productSpec.version}; không tạo action trùng.`
-          commands = [{ type: 'focus_card', query: 'REQ-PAYMENT' }, { type: 'switch_view', view: 'change' }]
         }
       } else {
         const workspace = workspaceFor(input.threadId)
@@ -825,6 +853,43 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!.replace(/\.png$/, '-canvas-command.png'), canvasImage.toPNG())
     }
 
+    const ambiguity = {
+      required: process.env.PM_AGENT_SMOKE_AMBIGUITY === '1',
+      needsInput: false,
+      panelReady: false,
+      specUnchanged: false,
+      noPreview: false,
+      noActions: false,
+    }
+    if (ambiguity.required) {
+      await window.webContents.executeJavaScript(`(() => {
+        const input = document.querySelector('.composer textarea');
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(input, 'Bỏ cái đó');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        setTimeout(() => document.querySelector('.send-button')?.click(), 30);
+      })()`)
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        await wait(250)
+        const state = await window.webContents.executeJavaScript(`(async () => {
+          const [thread] = await window.pmAgent.threads.list();
+          const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
+          return {
+            needsInput: workspace.runState.status === 'NEEDS_USER_INPUT'
+              && Boolean(workspace.runState.pendingClarification),
+            panelReady: Boolean(document.querySelector('[aria-label="Change clarification required"]')),
+            specUnchanged: workspace.runState.productSpec.version === 1,
+            noPreview: workspace.preview === null && !document.querySelector('.approve-button'),
+            noActions: workspace.runState.pendingActions.length === 0 && workspace.execution === null
+          };
+        })()`) as Omit<typeof ambiguity, 'required'>
+        Object.assign(ambiguity, state)
+        if (ambiguity.needsInput && ambiguity.panelReady && ambiguity.specUnchanged && ambiguity.noPreview && ambiguity.noActions) break
+      }
+      const ambiguityImage = await window.webContents.capturePage()
+      writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!.replace(/\.png$/, '-ambiguity.png'), ambiguityImage.toPNG())
+    }
+
     if (process.env.PM_AGENT_SMOKE_PROVIDER) {
       await window.webContents.executeJavaScript(`(async () => {
         const [thread] = await window.pmAgent.threads.list();
@@ -1011,6 +1076,8 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && (!canvasGesture.required || (canvasGesture.targetFound && canvasGesture.dragPresentationOnly && canvasGesture.undoPresentationOnly
         && canvasGesture.shapePreserved && canvasGesture.specUnchanged
         && canvasGesture.previewReady && canvasGesture.historyRecorded && canvasGesture.invalidRejected))
+      && (!ambiguity.required || (ambiguity.needsInput && ambiguity.panelReady && ambiguity.specUnchanged
+        && ambiguity.noPreview && ambiguity.noActions))
       && final.hasPreview && !final.pending && !final.hasError
       && approval.committed && approval.specVersion === 2
       && approval.paymentStatus === 'removed' && approval.actionsApproved
@@ -1020,7 +1087,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && recovery.verified && recovery.preservedTargets
       && figmaSetup.hasSetupDialog && figmaSetup.runtimeReady && figmaSetup.pluginBuilt && figmaSetup.waitingForPlugin
       && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady))
-    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, lifecycleFlow, rejection, canvasGesture, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
+    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, lifecycleFlow, rejection, canvasGesture, ambiguity, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
     app.exit(passed ? 0 : 1)
   } catch (error) {
     console.error('[smoke] failed', error)

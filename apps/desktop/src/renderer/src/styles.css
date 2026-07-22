@@ -696,6 +696,30 @@ button {
   background: #ffffff;
 }
 
+.ambiguity-panel {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0 14px 12px;
+  padding: 12px;
+  border: 1px solid #e5a33d;
+  border-radius: 6px;
+  background: #fff8e8;
+  color: #6b4507;
+}
+
+.ambiguity-panel div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ambiguity-panel span {
+  color: #735c32;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .change-preview > header,
 .change-preview-title,
 .impact-row,

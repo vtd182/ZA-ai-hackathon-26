@@ -78,7 +78,7 @@ case "$MODE" in
   build)
     exec "${PNPM[@]}" build
     ;;
-  smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas)
+  smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas|smoke-ambiguity)
     unset ELECTRON_RUN_AS_NODE
     "${PNPM[@]}" build
     SMOKE_FAIL_TARGET="${PM_AGENT_SMOKE_FAIL_TARGET:-}"
@@ -101,6 +101,10 @@ case "$MODE" in
     if [[ "$MODE" == "smoke-canvas" ]]; then
       SMOKE_CANVAS="1"
     fi
+    SMOKE_AMBIGUITY="${PM_AGENT_SMOKE_AMBIGUITY:-0}"
+    if [[ "$MODE" == "smoke-ambiguity" ]]; then
+      SMOKE_AMBIGUITY="1"
+    fi
     PM_AGENT_USER_DATA="${TMPDIR:-/tmp}/pm-agent-smoke-$$" \
       PM_AGENT_SMOKE_CAPTURE="${TMPDIR:-/tmp}/pm-agent-smoke.png" \
       PM_AGENT_SMOKE_FAIL_TARGET="$SMOKE_FAIL_TARGET" \
@@ -108,6 +112,7 @@ case "$MODE" in
       PM_AGENT_SMOKE_LIFECYCLE="$SMOKE_LIFECYCLE" \
       PM_AGENT_SMOKE_REJECT="$SMOKE_REJECT" \
       PM_AGENT_SMOKE_CANVAS="$SMOKE_CANVAS" \
+      PM_AGENT_SMOKE_AMBIGUITY="$SMOKE_AMBIGUITY" \
       exec "${PNPM[@]}" exec electron apps/desktop/out/main/index.js
     ;;
   test)
@@ -117,7 +122,7 @@ case "$MODE" in
     exec "${PNPM[@]}" typecheck
     ;;
   *)
-    echo "Usage: ./run.sh [setup|dev|reset|build|test|typecheck|smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas]" >&2
+    echo "Usage: ./run.sh [setup|dev|reset|build|test|typecheck|smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas|smoke-ambiguity]" >&2
     exit 2
     ;;
 esac

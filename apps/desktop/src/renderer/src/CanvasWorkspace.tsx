@@ -272,9 +272,11 @@ export function CanvasWorkspace({
         const sourceEntityId = String(shape.meta.sourceEntityId ?? '')
         const targetEntityId = String(shape.meta.targetEntityId ?? '')
         const visible = view === 'change'
-          ? isEdge
-            ? affected.has(sourceEntityId) && affected.has(targetEntityId)
-            : affected.has(entityId) || shapeView === 'change'
+          ? affected.size === 0
+            ? true
+            : isEdge
+              ? affected.has(sourceEntityId) && affected.has(targetEntityId)
+              : affected.has(entityId) || shapeView === 'change'
           : isEdge
             ? shape.meta.sourceView === view && shape.meta.targetView === view
             : shapeView === view

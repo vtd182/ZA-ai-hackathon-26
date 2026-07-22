@@ -460,6 +460,7 @@ export function App(): React.JSX.Element {
         sending={sending}
         approving={approving}
         preview={lifecycleWorkspace?.preview ?? undefined}
+        clarification={lifecycleWorkspace?.runState.pendingClarification ?? undefined}
         execution={lifecycleWorkspace?.execution ?? undefined}
         reasoning={lifecycleWorkspace?.reasoning ?? undefined}
         productSpec={lifecycleWorkspace?.runState.productSpec}
@@ -640,6 +641,7 @@ function ChatPanel({
   sending,
   approving,
   preview,
+  clarification,
   execution,
   reasoning,
   productSpec,
@@ -659,6 +661,7 @@ function ChatPanel({
   sending: boolean
   approving: boolean
   preview?: ChangePreview
+  clarification?: string
   execution?: ExecutionSummary
   reasoning?: PhaseReasoningResult
   productSpec?: import('@pm-agent/domain').ProductSpec
@@ -713,6 +716,12 @@ function ChatPanel({
         )}
       </div>
       {preview && <ChangePreviewPanel preview={preview} approving={approving} onApprove={onApprove} onReject={onReject} />}
+      {clarification && !preview && (
+        <section className="ambiguity-panel" aria-label="Change clarification required">
+          <CircleAlert size={18} />
+          <div><strong>Cần xác định target</strong><span>{clarification}</span></div>
+        </section>
+      )}
       {execution && <ExecutionPanel execution={execution} busy={approving} onRetry={onRetry} />}
       {reasoning && (reasoning.phase === 'discover' || reasoning.phase === 'decide') && (
         <PhaseReasoningPanel

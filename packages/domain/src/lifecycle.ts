@@ -7,6 +7,7 @@ export const runStatusSchema = z.enum([
   'ACTIVE',
   'WAITING_FOR_DECISION',
   'WAITING_FOR_APPROVAL',
+  'NEEDS_USER_INPUT',
   'EXECUTING',
   'VERIFYING',
   'COMPLETED',
@@ -88,6 +89,7 @@ export const runStateSchema = z.object({
   productSpec: productSpecSchema,
   pendingIntent: changeIntentSchema.nullable(),
   pendingActions: z.array(plannedActionSchema),
+  pendingClarification: z.string().min(1).nullable().optional(),
   lastCheckpointAt: z.string().datetime(),
 })
 export type RunState = z.infer<typeof runStateSchema>

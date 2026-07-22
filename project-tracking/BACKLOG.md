@@ -330,11 +330,11 @@
 
 ### `P0-CHG-001` Change intent and impact preview
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-DOM-004, P0-UI-004
 - **Deliver:** structured change request, ambiguity handling, immutable impact set and diff.
 - **Acceptance:** preview không mutate state; ambiguous target chuyển `NEEDS_USER_INPUT`.
-- **Current slice:** add explicit ambiguity state/response and prove ambiguous chat/canvas targets queue no preview, action or ProductSpec mutation.
+- **Evidence:** Agent Core resolves exact stable IDs, semantic title/alias and explicit canvas selection before impact analysis. Ambiguous requests persist `NEEDS_USER_INPUT` with candidate IDs and survive restart without preview, actions or ProductSpec mutation. `./run.sh smoke-ambiguity` proves the clarification UI and subsequent resolved request complete the verified v2 flow.
 
 ### `P0-CHG-002` Approved ProductSpec version update
 
@@ -356,10 +356,11 @@
 
 ### `P0-QA-001` Unit and contract test gates
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** all P0 domain/core/connectors
 - **Deliver:** coverage cho invariants, transitions, impact, approval, idempotency, connector parity.
 - **Acceptance:** critical test matrix gồm provider/history/canvas/connector trong `TEST_AND_DEMO_PLAN.md` pass.
+- **Current slice:** reconcile the documented critical matrix against the 84-test suite and dedicated production smoke modes; add or record evidence for any uncovered P0 contract.
 
 ### `P0-QA-002` Desktop E2E happy path
 

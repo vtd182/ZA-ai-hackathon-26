@@ -13,6 +13,33 @@ afterEach(() => {
 })
 
 describe('LifecycleStore', () => {
+  it('persists ambiguity without a preview, action or ProductSpec mutation', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pm-agent-lifecycle-ambiguity-'))
+    cleanup.push(directory)
+    const filename = join(directory, 'app.db')
+    const history = new HistoryStore(filename)
+    const thread = history.createThread()
+    let lifecycle = new LifecycleStore(filename)
+    const timestamp = '2026-07-22T02:00:00.000Z'
+    let state = lifecycle.initializeRun(thread.id, 'RUN-AMBIGUITY', mealOrderingProductSpec, timestamp)
+    state = transitionRunState(state, 'REQUEST_CHANGE', timestamp)
+    state = transitionRunState(state, 'NEEDS_INPUT', timestamp)
+    lifecycle.saveRunState({ ...state, pendingClarification: 'Hãy chọn stable requirement ID.' })
+    lifecycle.close()
+
+    lifecycle = new LifecycleStore(filename)
+    expect(lifecycle.getRunState(thread.id)).toMatchObject({
+      status: 'NEEDS_USER_INPUT',
+      pendingClarification: 'Hãy chọn stable requirement ID.',
+      productSpec: { version: 1 },
+      pendingActions: [],
+    })
+    expect(lifecycle.getSpecVersion(thread.id, 2)).toBeNull()
+    expect(lifecycle.listActions(state.id)).toEqual([])
+    lifecycle.close()
+    history.close()
+  })
+
   it('persists preview then commits approved spec/actions atomically', () => {
     const directory = mkdtempSync(join(tmpdir(), 'pm-agent-lifecycle-'))
     cleanup.push(directory)

@@ -5,6 +5,59 @@ import { stableStringify, type JsonValue } from '@pm-agent/shared'
 
 export type ImpactPreview = ChangePreview
 
+export type RemovalIntentResolution =
+  | { status: 'resolved'; intent: ChangeIntent }
+  | { status: 'needs_user_input'; ambiguity: string; candidateEntityIds: string[] }
+
+function normalizeEntityText(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+export function resolveRemovalChangeIntent(
+  spec: ProductSpec,
+  input: { query: string; reason: string; selectedEntityId?: string },
+): RemovalIntentResolution {
+  const query = normalizeEntityText(input.query)
+  const deictic = /^(cai )?(nay|do)$|^(this|that|selected|selection)$/.test(query)
+  const selected = input.selectedEntityId
+    ? spec.requirements.find((item) => item.id === input.selectedEntityId)
+    : undefined
+  const aliasId = /(payment|thanh toan|vi noi bo)/.test(query) ? 'REQ-PAYMENT' : null
+  const matches = spec.requirements.filter((requirement) => {
+    const id = normalizeEntityText(requirement.id)
+    const title = normalizeEntityText(requirement.title)
+    return id === query || title === query || (query.length >= 4 && (title.includes(query) || query.includes(title)))
+  })
+  const target = aliasId
+    ? spec.requirements.find((item) => item.id === aliasId)
+    : deictic && selected
+      ? selected
+      : matches.length === 1
+        ? matches[0]
+        : undefined
+  if (target) {
+    return {
+      status: 'resolved',
+      intent: {
+        id: `CHANGE-REMOVE-${target.id}-V${spec.version}`,
+        operation: 'remove',
+        targetEntityId: target.id,
+        reason: input.reason,
+      },
+    }
+  }
+  const candidates = matches.length > 1
+    ? matches.map((item) => item.id)
+    : spec.requirements.filter((item) => item.status === 'in_scope').map((item) => item.id)
+  return {
+    status: 'needs_user_input',
+    ambiguity: candidates.length > 0
+      ? `Bạn muốn loại requirement nào? Hãy dùng stable ID: ${candidates.join(', ')}.`
+      : 'Chưa xác định được requirement cần loại. Hãy nhập stable entity ID.',
+    candidateEntityIds: candidates,
+  }
+}
+
 export function changeIntentFromCanvasCommand(spec: ProductSpec, input: unknown): ChangeIntent {
   const command: CanvasGestureCommand = canvasGestureCommandSchema.parse(input)
   const requirement = spec.requirements.find((item) => item.id === command.entityId)

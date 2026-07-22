@@ -58,8 +58,9 @@ Signature moment:
 - **Completed task:** `P0-HIS-004` one stable CanvasDocument per thread with A/B restart/checkpoint evidence.
 - **Completed task:** `P0-CAN-001` versioned entity/edge projection contract, deterministic four-view layout and semantic traceability arrows.
 - **Completed tasks:** `P0-CAN-002` and `P0-HIS-005` guarded bidirectional canvas commands with an explicit business/presentation undo boundary.
-- **Current task:** `P0-CHG-001` structured ambiguity handling is `IN_PROGRESS`.
-- **Current slice:** Ambiguous targets must enter an explicit needs-input state and create no preview, pending action or ProductSpec mutation.
+- **Completed task:** `P0-CHG-001` exact/semantic change resolution and persisted `NEEDS_USER_INPUT` ambiguity handling.
+- **Current task:** `P0-QA-001` critical unit and contract gate audit is `IN_PROGRESS`.
+- **Current slice:** Map provider/history/canvas/connector requirements to executable tests and close any uncovered critical contracts.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -266,12 +267,13 @@ App commands đã chạy thành công:
 ./run.sh setup       # verified 2026-07-22; installs/builds app, Go runtime and Figma plugin bundle
 ./run.sh reset       # verified by shared reset path 2026-07-22; resets then opens dev app
 ./run.sh typecheck   # verified 2026-07-22
-./run.sh test        # verified 2026-07-22; 80 tests pass, 1 optional live test skipped
+./run.sh test        # verified 2026-07-22; 83 tests pass, 1 optional live test skipped
 ./run.sh build       # verified 2026-07-22
 ./run.sh smoke       # verified 2026-07-22; Mock provider + canvas
 ./run.sh smoke-recovery  # verified 2026-07-22; injected Jira failure + target-only UI retry
 ./run.sh smoke-reset # verified 2026-07-22; UI reset + three deterministic seeds + full flow
 ./run.sh smoke-canvas # verified 2026-07-22; drag/undo/delete boundary + invalid command + full flow
+./run.sh smoke-ambiguity # verified 2026-07-22; NEEDS_USER_INPUT + no-write guard + resolved full flow
 PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke  # verified 2026-07-22
 PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke  # verified 2026-07-22; live allowlist + bounded DS capture + cache + UI
 ```
@@ -445,6 +447,14 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Invalid canvas payloads and unsupported entity kinds are rejected before lifecycle state changes.
 - `./run.sh smoke-canvas`, 80 unit/contract tests and workspace typecheck pass.
 - Next action: implement explicit ambiguity handling for change requests that do not resolve to one target.
+
+### 2026-07-22 - Explicit change ambiguity
+
+- Added exact stable-ID, semantic title/alias and selected-entity resolution before deterministic impact traversal.
+- Ambiguous remove requests persist `NEEDS_USER_INPUT` with candidate IDs and queue no preview, action or ProductSpec version.
+- Clarification appears in chat beside the full canonical graph; a resolved follow-up resumes the same run and existing approval flow.
+- Persistence restart tests and `./run.sh smoke-ambiguity` prove the no-write boundary and eventual verified v2 sync.
+- Next action: audit the complete provider/history/canvas/connector critical test matrix.
 
 ## 10. End-of-session checklist
 

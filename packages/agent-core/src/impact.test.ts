@@ -8,7 +8,7 @@ import {
   type WorkflowEvent,
 } from '@pm-agent/domain'
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
-import { approvalMatchesAction, approveActions, changeIntentFromCanvasCommand, createImpactPreview, invalidateChangedActions, rejectActions } from './index'
+import { approvalMatchesAction, approveActions, changeIntentFromCanvasCommand, createImpactPreview, invalidateChangedActions, rejectActions, resolveRemovalChangeIntent } from './index'
 
 const timestamp = '2026-07-22T01:00:00.000Z'
 const intent: ChangeIntent = {
@@ -33,6 +33,25 @@ function initialRun(): RunState {
 }
 
 describe('deterministic change impact', () => {
+  it('resolves exact IDs and selected deictic targets before impact analysis', () => {
+    expect(resolveRemovalChangeIntent(mealOrderingProductSpec, {
+      query: 'REQ-PAYMENT', reason: 'MVP',
+    })).toMatchObject({ status: 'resolved', intent: { targetEntityId: 'REQ-PAYMENT' } })
+    expect(resolveRemovalChangeIntent(mealOrderingProductSpec, {
+      query: 'cái này', reason: 'MVP', selectedEntityId: 'REQ-PICKUP',
+    })).toMatchObject({ status: 'resolved', intent: { targetEntityId: 'REQ-PICKUP' } })
+  })
+
+  it('returns explicit ambiguity without creating an intent', () => {
+    expect(resolveRemovalChangeIntent(mealOrderingProductSpec, {
+      query: 'cái đó', reason: 'MVP',
+    })).toEqual({
+      status: 'needs_user_input',
+      ambiguity: expect.stringContaining('REQ-PAYMENT'),
+      candidateEntityIds: ['REQ-ORDER', 'REQ-PICKUP', 'REQ-PAYMENT'],
+    })
+  })
+
   it('validates a canvas delete proposal without mutating ProductSpec', () => {
     const before = structuredClone(mealOrderingProductSpec)
     expect(changeIntentFromCanvasCommand(mealOrderingProductSpec, {
@@ -102,6 +121,18 @@ describe('deterministic change impact', () => {
 })
 
 describe('workflow state machine', () => {
+  it('pauses ambiguous changes for input and resumes impact analysis', () => {
+    let state = initialRun()
+    state = transitionRunState(state, 'START_DISCOVERY', timestamp)
+    state = transitionRunState(state, 'REQUEST_DECISION', timestamp)
+    state = transitionRunState(state, 'SELECT_OPTION', timestamp)
+    state = transitionRunState(state, 'REQUEST_CHANGE', timestamp)
+    state = transitionRunState(state, 'NEEDS_INPUT', timestamp)
+    expect(state).toMatchObject({ phase: 'CHANGE_IMPACT', status: 'NEEDS_USER_INPUT', pendingActions: [] })
+    state = transitionRunState(state, 'PROVIDE_INPUT', timestamp)
+    expect(state).toMatchObject({ phase: 'CHANGE_IMPACT', status: 'ACTIVE' })
+  })
+
   it('covers the complete happy lifecycle including change approval', () => {
     const events: WorkflowEvent[] = [
       'START_DISCOVERY', 'REQUEST_DECISION', 'SELECT_OPTION', 'REQUEST_CHANGE', 'PREVIEW_READY',
