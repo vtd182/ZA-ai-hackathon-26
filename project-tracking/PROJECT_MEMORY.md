@@ -38,8 +38,9 @@ Signature moment:
 - **Completed tasks:** Foundation/fixtures/domain schemas, workflow state machine, ProductSpec invariants, deterministic impact graph and immutable approval policy.
 - **Completed tasks:** Foundation/domain workflow plus typed signature change preview, approval and persisted ProductSpec v2 projection.
 - **Completed task:** `P0-FIG-001` typed MCP adapter, explicit session/page allowlist, bounded DS capture, normalized cache and synthetic fallback.
-- **Current task:** `P0-FIG-002` semantic Figma artifact planner is `IN_PROGRESS`.
-- **Current slice:** Reconciled backlog against code evidence. Build deterministic ScreenSpec recipes first, then strict preflight, connector execution/read-back, outbox and demo recovery in dependency order.
+- **Completed task:** `P0-FIG-002` deterministic semantic recipes for four meal-ordering screens, with lifecycle metadata and no provider-controlled pixel placement.
+- **Current task:** `P0-FIG-003` MCP strict zero-write preflight is `IN_PROGRESS`.
+- **Current slice:** Move generic component/token/target resolution and immutable plan hashing into the existing MCP runtime while preserving all existing tool names.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.

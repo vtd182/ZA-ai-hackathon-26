@@ -13,6 +13,8 @@
     "@pm-agent/shared": "workspace:*"
   },
   "devDependencies": {
+    "@pm-agent/fixture-meal-ordering": "workspace:*",
+    "@pm-agent/fixture-zalo-design-system": "workspace:*",
     "@types/node": "24.10.0",
     "typescript": "7.0.2"
   }

@@ -284,14 +284,15 @@
 
 ### `P0-FIG-002` Semantic Figma artifact planner
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-FIG-001, P0-DOM-003
 - **Deliver:** ScreenSpec -> generic recipe/component intents, flow edges, lifecycle metadata, deterministic layout recipe.
 - **Acceptance:** plan không chứa pixel placement do model cung cấp; 4 meal-ordering screens parse hợp lệ.
+- **Evidence:** versioned semantic recipe/slot/edge/metadata schemas plus deterministic planner produce all four fixture screens; strict fixture resolution and no-pixel-placement tests pass in `packages/connectors/src/figma-artifact-plan.test.ts`.
 
 ### `P0-FIG-003` MCP strict preflight extension
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-FIG-002
 - **Deliver:** read-only `plan_design_system_screens`, generic role resolver, component/token/layout/metadata/target checks và plan hash.
 - **Acceptance:** invalid component/token và non-sandbox target bị block với zero writes; strict/free mode và warning/error phân biệt rõ.

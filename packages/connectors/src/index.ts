@@ -10,7 +10,7 @@ export interface PreflightIssue {
   code: string
   severity: 'warning' | 'error'
   message: string
-  entityId?: string
+  entityId?: string | undefined
 }
 
 export interface PreflightResult<TPlan> {
@@ -37,3 +37,4 @@ export interface ArtifactConnector<TPlan, TSnapshot> {
 export * from './figma-runtime'
 export * from './figma-mcp'
 export * from './figma-design-system'
+export * from './figma-artifact-plan'

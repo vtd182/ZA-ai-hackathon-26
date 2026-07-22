@@ -167,6 +167,12 @@ importers:
         specifier: workspace:*
         version: link:../shared
     devDependencies:
+      '@pm-agent/fixture-meal-ordering':
+        specifier: workspace:*
+        version: link:../../fixtures/meal-ordering
+      '@pm-agent/fixture-zalo-design-system':
+        specifier: workspace:*
+        version: link:../../fixtures/zalo-design-system
       '@types/node':
         specifier: 24.10.0
         version: 24.10.0
