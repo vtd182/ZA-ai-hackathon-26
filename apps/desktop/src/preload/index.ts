@@ -1,5 +1,5 @@
 import electron from 'electron'
-import type { ConfigureProviderInput, DesktopApi, SendChatInput } from '@pm-agent/domain'
+import type { ConfigureProviderInput, DesktopApi, ExternalCanvasCommandBatch, SendChatInput } from '@pm-agent/domain'
 
 const { contextBridge, ipcRenderer } = electron
 
@@ -15,6 +15,11 @@ const api: DesktopApi = {
   canvas: {
     save: (threadId, snapshot) => ipcRenderer.invoke('canvas:save', threadId, snapshot),
     proposeCommand: (threadId, command) => ipcRenderer.invoke('canvas:propose-command', threadId, command),
+    onExternalCommands: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, batch: ExternalCanvasCommandBatch): void => listener(batch)
+      ipcRenderer.on('canvas:external-commands', handler)
+      return () => ipcRenderer.removeListener('canvas:external-commands', handler)
+    },
   },
   lifecycle: {
     getWorkspace: (threadId) => ipcRenderer.invoke('lifecycle:get-workspace', threadId),

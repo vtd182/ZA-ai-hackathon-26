@@ -189,3 +189,32 @@ export function parseProductSpec(input: unknown): ProductSpec {
   return productSpecSchema.parse(input)
 }
 
+export function createDraftProductSpec(threadId: string, createdAt: string): ProductSpec {
+  const stableSuffix = threadId.toUpperCase().replace(/[^A-Z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'LOCAL'
+  return parseProductSpec({
+    schemaVersion: 1,
+    id: `SPEC-${stableSuffix}`,
+    version: 1,
+    title: 'Ý tưởng đang được làm rõ',
+    status: 'draft',
+    idea: {
+      id: `IDEA-${stableSuffix}`,
+      kind: 'idea',
+      title: 'Ý tưởng mới',
+      summary: 'Nội dung sẽ được chuẩn hóa từ cuộc trò chuyện.',
+      productType: 'mini_app',
+      targetUsers: ['Chưa xác định'],
+    },
+    goals: [],
+    findings: [],
+    requirements: [],
+    screens: [],
+    stories: [],
+    dependencies: [],
+    decisions: [],
+    relationships: [],
+    artifactMappings: [],
+    createdAt,
+    updatedAt: createdAt,
+  })
+}

@@ -22,7 +22,6 @@ import type {
 interface CanvasWorkspaceProps {
   threadId: string
   snapshot: unknown | null
-  initialView: WorkflowView
   commandBatch: { id: number; commands: ProviderCommand[] }
   productSpec?: ProductSpec
   changePreview?: ChangePreview
@@ -36,7 +35,10 @@ interface CanonicalShapeRef {
   entityId: string
 }
 
-const views: Array<{ id: WorkflowView; label: string }> = [
+type CanvasView = 'board' | WorkflowView
+
+const views: Array<{ id: CanvasView; label: string }> = [
+  { id: 'board', label: 'Board' },
   { id: 'discover', label: 'Discover' },
   { id: 'decide', label: 'Decide' },
   { id: 'deliver', label: 'Deliver' },
@@ -97,8 +99,6 @@ function reconcileProductSpec(editor: Editor, spec: ProductSpec): void {
       editor.updateShape({
         id: existing.id,
         type: 'note',
-        x: projection.x,
-        y: projection.y,
         opacity: projection.state === 'removed' ? 0.18 : 1,
         props: { color: projection.tone, size: 'm', richText: toRichText(projection.label) },
         meta,
@@ -121,8 +121,12 @@ function reconcileProductSpec(editor: Editor, spec: ProductSpec): void {
   for (const edge of graph.edges) {
     const source = projectionById.get(edge.sourceEntityId)!
     const target = projectionById.get(edge.targetEntityId)!
-    const x = source.x + source.width / 2
-    const y = source.y + source.height / 2
+    const sourceShapeId = createShapeId(source.entityId.toLowerCase())
+    const targetShapeId = createShapeId(target.entityId.toLowerCase())
+    const sourceBounds = editor.getShapePageBounds(sourceShapeId)
+    const targetBounds = editor.getShapePageBounds(targetShapeId)
+    const x = sourceBounds?.center.x ?? source.x + source.width / 2
+    const y = sourceBounds?.center.y ?? source.y + source.height / 2
     const edgeId = createShapeId(`edge-${edge.relationshipId.toLowerCase()}`)
     const meta = {
       entityId: edge.relationshipId,
@@ -143,7 +147,10 @@ function reconcileProductSpec(editor: Editor, spec: ProductSpec): void {
       y,
       props: {
         start: { x: 0, y: 0 },
-        end: { x: target.x + target.width / 2 - x, y: target.y + target.height / 2 - y },
+        end: {
+          x: (targetBounds?.center.x ?? target.x + target.width / 2) - x,
+          y: (targetBounds?.center.y ?? target.y + target.height / 2) - y,
+        },
         color: 'grey' as const,
         dash: 'dashed' as const,
         size: 's' as const,
@@ -151,14 +158,145 @@ function reconcileProductSpec(editor: Editor, spec: ProductSpec): void {
       },
       meta,
     }
-    if (editor.getShape(edgeId)?.type === 'arrow') editor.updateShape(shape)
+    if (editor.getShape(edgeId)?.type === 'arrow') editor.updateShape({ id: edgeId, type: 'arrow', meta })
     else editor.createShape(shape)
+
+    const bindings = editor.getBindingsInvolvingShape(edgeId, 'arrow').filter((binding) => binding.fromId === edgeId)
+    if (!bindings.some((binding) => binding.props.terminal === 'start')) {
+      editor.createBinding({
+        type: 'arrow', fromId: edgeId, toId: sourceShapeId,
+        props: { terminal: 'start', normalizedAnchor: { x: 0.5, y: 0.5 }, isExact: false, isPrecise: false, snap: 'none' },
+      })
+    }
+    if (!bindings.some((binding) => binding.props.terminal === 'end')) {
+      editor.createBinding({
+        type: 'arrow', fromId: edgeId, toId: targetShapeId,
+        props: { terminal: 'end', normalizedAnchor: { x: 0.5, y: 0.5 }, isExact: false, isPrecise: false, snap: 'none' },
+      })
+    }
   }
 
   for (const shape of currentShapes) {
     const entityId = typeof shape.meta.entityId === 'string' ? shape.meta.entityId : null
     if (!entityId || typeof shape.meta.entityKind !== 'string' || canonicalIds.has(entityId)) continue
     editor.updateShape({ id: shape.id, type: shape.type, opacity: 0.18, meta: { ...shape.meta, status: 'removed' } })
+  }
+}
+
+function semanticShapeId(nodeId: string): TLShape['id'] {
+  const normalized = nodeId.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'node'
+  return createShapeId(`agent-${normalized}`)
+}
+
+function createSemanticFlow(editor: Editor, commands: ProviderCommand[]): TLShape['id'][] {
+  const nodes = commands.filter((command) => command.type === 'create_canvas_node')
+  const viewport = editor.getViewportPageBounds()
+  const originX = viewport.center.x - Math.min(nodes.length, 3) * 130
+  const originY = viewport.center.y - Math.ceil(nodes.length / 3) * 80
+  const createdIds: TLShape['id'][] = []
+
+  nodes.forEach((command, index) => {
+    if (command.type !== 'create_canvas_node') return
+    const id = semanticShapeId(command.nodeId)
+    const existing = editor.getShape(id)
+    const meta = { semanticId: command.nodeId, label: command.label, canvasOwner: 'agent', nodeKind: command.nodeKind }
+    if (existing) {
+      if (existing.type === 'note' || existing.type === 'geo') {
+        editor.updateShape({ id, type: existing.type, props: { richText: toRichText(command.label) }, meta: { ...existing.meta, ...meta } })
+      } else {
+        editor.updateShape({ id, type: existing.type, meta: { ...existing.meta, ...meta } })
+      }
+      createdIds.push(id)
+      return
+    }
+    const x = originX + (index % 3) * 280
+    const y = originY + Math.floor(index / 3) * 180
+    if (command.nodeKind === 'note') {
+      editor.createShape({ id, type: 'note', x, y, props: { color: 'yellow', size: 'm', richText: toRichText(command.label) }, meta })
+    } else {
+      const geo = command.nodeKind === 'decision' ? 'diamond' : 'rectangle'
+      const color = command.nodeKind === 'screen' ? 'blue' : command.nodeKind === 'decision' ? 'yellow' : 'green'
+      editor.createShape({
+        id,
+        type: 'geo',
+        x,
+        y,
+        props: { geo, w: 220, h: command.nodeKind === 'screen' ? 150 : 110, color, fill: 'semi', richText: toRichText(command.label) },
+        meta,
+      })
+    }
+    createdIds.push(id)
+  })
+
+  for (const command of commands) {
+    if (command.type !== 'connect_canvas_nodes') continue
+    const fromId = semanticShapeId(command.fromId)
+    const toId = semanticShapeId(command.toId)
+    const fromBounds = editor.getShapePageBounds(fromId)
+    const toBounds = editor.getShapePageBounds(toId)
+    if (!fromBounds || !toBounds) continue
+    const edgeId = createShapeId(`agent-edge-${command.fromId}-${command.toId}`.toLowerCase().replace(/[^a-z0-9_-]+/g, '-'))
+    const existingEdge = editor.getShape(edgeId)
+    if (!existingEdge) {
+      editor.createShape({
+        id: edgeId,
+        type: 'arrow',
+        x: fromBounds.center.x,
+        y: fromBounds.center.y,
+        props: {
+          start: { x: 0, y: 0 },
+          end: { x: toBounds.center.x - fromBounds.center.x, y: toBounds.center.y - fromBounds.center.y },
+          arrowheadEnd: 'arrow',
+          color: 'grey',
+          ...(command.label ? { richText: toRichText(command.label) } : {}),
+        },
+        meta: { canvasOwner: 'agent', semanticId: `${command.fromId}->${command.toId}`, label: command.label ?? '' },
+      })
+      editor.createBindings([
+        { type: 'arrow', fromId: edgeId, toId: fromId, props: { terminal: 'start', normalizedAnchor: { x: 0.5, y: 0.5 }, isExact: false, isPrecise: false, snap: 'none' } },
+        { type: 'arrow', fromId: edgeId, toId, props: { terminal: 'end', normalizedAnchor: { x: 0.5, y: 0.5 }, isExact: false, isPrecise: false, snap: 'none' } },
+      ])
+    } else if (existingEdge.type === 'arrow' && command.label) {
+      editor.updateShape({
+        id: edgeId,
+        type: 'arrow',
+        props: { richText: toRichText(command.label) },
+        meta: { ...existingEdge.meta, label: command.label },
+      })
+    }
+    createdIds.push(edgeId)
+  }
+  return createdIds
+}
+
+function selectionContext(editor: Editor): CanvasSelectionContext | undefined {
+  const selected = editor.getSelectedShapes()
+  if (selected.length === 0) return undefined
+  const selectedIds = new Set(selected.map((shape) => shape.id))
+  const selectionBounds = editor.getSelectionPageBounds()
+  const nearby = selectionBounds
+    ? editor.getCurrentPageShapes().filter((shape) => {
+      if (selectedIds.has(shape.id)) return true
+      const bounds = editor.getShapePageBounds(shape)
+      if (!bounds) return false
+      return bounds.center.x >= selectionBounds.x && bounds.center.x <= selectionBounds.maxX
+        && bounds.center.y >= selectionBounds.y && bounds.center.y <= selectionBounds.maxY
+    })
+    : selected
+  const contextItems = nearby.slice(0, 12).map((shape) => ({
+    shapeId: shape.id,
+    ...(typeof shape.meta.entityId === 'string' ? { entityId: shape.meta.entityId } : {}),
+    type: shape.type,
+    label: shapeLabel(shape) || String(shape.meta.semanticId ?? shape.type),
+  }))
+  const primary = selected[0]!
+  const entityId = typeof primary.meta.entityId === 'string' ? primary.meta.entityId : primary.id
+  return {
+    entityId,
+    label: selected.map((shape) => shapeLabel(shape) || String(shape.meta.semanticId ?? shape.type)).slice(0, 3).join(' · '),
+    shapeIds: selected.map((shape) => shape.id),
+    selectedShapeCount: selected.length,
+    contextItems,
   }
 }
 
@@ -173,7 +311,6 @@ function canonicalShapeRefs(spec: ProductSpec): Map<string, CanonicalShapeRef> {
 export function CanvasWorkspace({
   threadId,
   snapshot,
-  initialView,
   commandBatch,
   productSpec,
   changePreview,
@@ -188,7 +325,7 @@ export function CanvasWorkspace({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastCommandBatch = useRef(0)
   const lastGestureProposal = useRef<{ entityId: string; at: number } | null>(null)
-  const [view, setView] = useState<WorkflowView>(initialView)
+  const [view, setView] = useState<CanvasView>('board')
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
   const [editorEpoch, setEditorEpoch] = useState(0)
   const changeKey = changeEntityIds.join('|')
@@ -217,13 +354,7 @@ export function CanvasWorkspace({
     }, { history: 'ignore' })
     const stopDocumentListener = editor.store.listen(scheduleSave, { scope: 'document' })
     const stopSelectionListener = editor.store.listen(() => {
-      const selected = editor.getSelectedShapes()[0]
-      if (!selected) {
-        onSelectionChange()
-        return
-      }
-      const entityId = typeof selected.meta.entityId === 'string' ? selected.meta.entityId : selected.id
-      onSelectionChange({ entityId, label: shapeLabel(selected) || selected.type })
+      onSelectionChange(selectionContext(editor))
     }, { scope: 'session' })
     const stopCanonicalDelete = editor.sideEffects.registerBeforeDeleteHandler('shape', (shape) => {
       const canonicalRef = canonicalShapeRefsRef.current.get(shape.id)
@@ -265,13 +396,17 @@ export function CanvasWorkspace({
     const selectedBefore = editor.getSelectedShapeIds()[0]
     editor.run(() => {
       for (const shape of editor.getCurrentPageShapes()) {
+        const managed = shape.meta.shapeType === 'pm_entity' || shape.meta.shapeType === 'pm_traceability_edge'
+        if (!managed) continue
         const entityId = String(shape.meta.entityId ?? '')
         const shapeView = shape.meta.view
         const status = shape.meta.status
         const isEdge = shape.meta.shapeType === 'pm_traceability_edge'
         const sourceEntityId = String(shape.meta.sourceEntityId ?? '')
         const targetEntityId = String(shape.meta.targetEntityId ?? '')
-        const visible = view === 'change'
+        const visible = view === 'board'
+          ? false
+          : view === 'change'
           ? affected.size === 0
             ? true
             : isEdge
@@ -281,11 +416,11 @@ export function CanvasWorkspace({
             ? shape.meta.sourceView === view && shape.meta.targetView === view
             : shapeView === view
         const opacity = !visible ? 0 : status === 'removed' ? 0.18 : changePreview && affected.has(entityId) ? 0.5 : 1
-        editor.updateShape({ id: shape.id, type: shape.type, opacity })
+        editor.updateShape({ id: shape.id, type: shape.type, opacity, isLocked: !visible })
         if (visible) visibleShapeIds.push(shape.id)
       }
     }, { history: 'ignore' })
-    if (visibleShapeIds.length > 0) {
+    if (view !== 'board' && visibleShapeIds.length > 0) {
       editor.select(...visibleShapeIds)
       editor.zoomToSelection({ animation: { duration: 180 } })
       if (selectedBefore && visibleShapeIds.includes(selectedBefore)) editor.select(selectedBefore)
@@ -305,6 +440,7 @@ export function CanvasWorkspace({
     const editor = editorRef.current
     if (!editor || commandBatch.id === 0 || commandBatch.id === lastCommandBatch.current) return
     lastCommandBatch.current = commandBatch.id
+    const semanticIds = createSemanticFlow(editor, commandBatch.commands)
     for (const command of commandBatch.commands) {
       if (command.type === 'switch_view') {
         setView(command.view)
@@ -322,6 +458,7 @@ export function CanvasWorkspace({
         })
         continue
       }
+      if (command.type === 'create_canvas_node' || command.type === 'connect_canvas_nodes') continue
       const shape = findShape(editor, command.query)
       if (!shape) continue
       editor.select(shape.id)
@@ -329,7 +466,13 @@ export function CanvasWorkspace({
         editor.updateShape({ id: shape.id, type: shape.type, opacity: 0.5, meta: { ...shape.meta, status: 'pending_remove' } })
       }
     }
-  }, [commandBatch, view])
+    if (semanticIds.length > 0) {
+      setView('board')
+      editor.select(...semanticIds)
+      editor.zoomToSelection({ animation: { duration: 180 } })
+      editor.selectNone()
+    }
+  }, [commandBatch, editorEpoch, view])
 
   useEffect(() => () => {
     cleanupListeners.current?.()

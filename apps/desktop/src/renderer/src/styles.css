@@ -460,7 +460,7 @@ button {
 
 .view-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 84px);
+  grid-template-columns: repeat(5, 76px);
   padding: 3px;
   border: 1px solid #d8e0e2;
   border-radius: 7px;
@@ -1530,6 +1530,6 @@ button {
   }
 
   .view-tabs {
-    grid-template-columns: repeat(4, 72px);
+    grid-template-columns: repeat(5, 64px);
   }
 }

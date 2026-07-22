@@ -29,6 +29,7 @@ import type {
   ProductSpec,
 } from '@pm-agent/domain'
 import {
+  createDraftProductSpec,
   designSystemManifestSchema,
   figmaArtifactPlanSchema,
   mockJiraPlanSchema,
@@ -45,6 +46,7 @@ import { syntheticZaloDesignSystem } from '@pm-agent/fixture-zalo-design-system'
 import { DEMO_FIXTURE_VERSION, DEMO_THREAD_ID, FigmaIntegrationStore, HistoryStore, LifecycleStore, OutboxStore } from '@pm-agent/persistence'
 import { ProviderRegistry } from '@pm-agent/reasoning'
 import { SecretStore } from './secret-store'
+import { CanvasBridge } from './canvas-bridge'
 
 const { app, BrowserWindow, ipcMain, shell } = electron
 
@@ -59,6 +61,7 @@ let mockFigmaStore: SqliteMockArtifactStore
 let mockJira: MockJiraConnector
 let mockZdoc: MockZdocConnector
 let secrets: SecretStore
+let canvasBridge: CanvasBridge
 const providers = new ProviderRegistry()
 const activeRuns = new Map<string, AbortController>()
 
@@ -102,7 +105,7 @@ function workspaceFor(threadId: string): LifecycleWorkspaceState {
     runState = lifecycle.initializeRun(
       threadId,
       `run:${threadId}`,
-      mealOrderingProductSpec,
+      threadId === DEMO_THREAD_ID ? mealOrderingProductSpec : createDraftProductSpec(threadId, createdAt),
       createdAt,
       threadId === DEMO_THREAD_ID ? 'DELIVERY' : 'IDEA_INTAKE',
     )
@@ -1075,6 +1078,34 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
           && beforeRetry.externalIds[target] === approval.externalIds[target]),
       }
     }
+    const semanticFlow = { required: process.env.PM_AGENT_SMOKE_FLOW === '1', nodes: 0, edges: 0, boardActive: false }
+    if (semanticFlow.required) {
+      await window.webContents.executeJavaScript(`document.querySelector('.new-thread-button')?.click()`)
+      await wait(600)
+      await window.webContents.executeJavaScript(`(() => {
+        const input = document.querySelector('.composer textarea');
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(input, 'Vẽ workflow xử lý yêu cầu');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      })()`)
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await wait(250)
+        const state = await window.webContents.executeJavaScript(`(async () => {
+          const [thread] = await window.pmAgent.threads.list();
+          const detail = await window.pmAgent.threads.get(thread.id);
+          const snapshot = JSON.stringify(detail.canvasSnapshot ?? {});
+          return {
+            nodes: (snapshot.match(/\"nodeKind\"/g) || []).length,
+            edges: (snapshot.match(/agent-edge-/g) || []).length,
+            boardActive: document.querySelector('.view-tab.active')?.textContent?.trim() === 'Board'
+          };
+        })()`)
+        Object.assign(semanticFlow, state)
+        if (semanticFlow.nodes >= 3 && semanticFlow.edges >= 2 && semanticFlow.boardActive) break
+      }
+    }
+
     await window.webContents.executeJavaScript(`document.querySelector('.integration-button')?.click()`)
     await wait(500)
     const figmaSetup = await window.webContents.executeJavaScript(`(async () => {
@@ -1116,6 +1147,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
         && canvasGesture.previewReady && canvasGesture.historyRecorded && canvasGesture.invalidRejected))
       && (!ambiguity.required || (ambiguity.needsInput && ambiguity.panelReady && ambiguity.specUnchanged
         && ambiguity.noPreview && ambiguity.noActions))
+      && (!semanticFlow.required || (semanticFlow.nodes >= 3 && semanticFlow.edges >= 2 && semanticFlow.boardActive))
       && final.hasPreview && !final.pending && !final.hasError
       && approval.committed && approval.specVersion === 2
       && approval.paymentStatus === 'removed' && approval.actionsApproved
@@ -1125,7 +1157,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && recovery.verified && recovery.preservedTargets
       && figmaSetup.hasSetupDialog && figmaSetup.runtimeReady && figmaSetup.pluginBuilt && figmaSetup.waitingForPlugin
       && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady))
-    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, lifecycleFlow, rejection, canvasGesture, ambiguity, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
+    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, lifecycleFlow, rejection, canvasGesture, ambiguity, semanticFlow, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
     app.exit(passed ? 0 : 1)
   } catch (error) {
     console.error('[smoke] failed', error)
@@ -1151,6 +1183,13 @@ app.whenReady().then(() => {
   if (process.env.PM_AGENT_RESET_ON_START === '1') resetDemoWorkspace()
   registerIpc()
   createWindow()
+  canvasBridge = new CanvasBridge({
+    homePath: app.getPath('home'),
+    listThreads: () => history.listThreads(),
+    getThread: (threadId) => history.getThread(threadId),
+    dispatch: (threadId, commands) => mainWindow?.webContents.send('canvas:external-commands', { threadId, batchId: Date.now(), commands }),
+  })
+  void canvasBridge.start().catch((error) => console.error('[canvas-bridge] failed to start', error))
   void figmaRuntime.start()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -1165,6 +1204,7 @@ app.on('before-quit', () => {
   activeRuns.forEach((controller) => controller.abort())
   void figmaMcp?.close()
   figmaRuntime?.stop()
+  canvasBridge?.stop()
   figmaIntegration?.close()
   mockZdoc?.close()
   mockJira?.close()

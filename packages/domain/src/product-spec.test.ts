@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseProductSpec } from './product-spec'
+import { createDraftProductSpec, parseProductSpec } from './product-spec'
 
 function validSpec(): Record<string, unknown> {
   return {
@@ -29,6 +29,14 @@ function validSpec(): Record<string, unknown> {
 }
 
 describe('ProductSpec schema', () => {
+  it('creates an isolated empty draft for a new conversation thread', () => {
+    const draft = createDraftProductSpec('thread-123', '2026-07-23T00:00:00.000Z')
+    expect(draft.id).toBe('SPEC-THREAD-123')
+    expect(draft.requirements).toEqual([])
+    expect(draft.screens).toEqual([])
+    expect(draft.relationships).toEqual([])
+  })
+
   it('accepts a valid versioned spec', () => {
     expect(parseProductSpec(validSpec()).schemaVersion).toBe(1)
   })
@@ -49,4 +57,3 @@ describe('ProductSpec schema', () => {
     expect(() => parseProductSpec(spec)).toThrow(/Dangling entity reference/)
   })
 })
-

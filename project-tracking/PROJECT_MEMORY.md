@@ -59,8 +59,9 @@ Signature moment:
 - **Completed task:** `P0-CAN-001` versioned entity/edge projection contract, deterministic four-view layout and semantic traceability arrows.
 - **Completed tasks:** `P0-CAN-002` and `P0-HIS-005` guarded bidirectional canvas commands with an explicit business/presentation undo boundary.
 - **Completed task:** `P0-CHG-001` exact/semantic change resolution and persisted `NEEDS_USER_INPUT` ambiguity handling.
-- **Current task:** `P0-QA-001` critical unit and contract gate audit is `IN_PROGRESS`.
-- **Current slice:** Map provider/history/canvas/connector requirements to executable tests and close any uncovered critical contracts.
+- **Completed task:** `P0-CAN-003` free Board, optional managed lifecycle filters, semantic workflows, spatial selection context and guarded Dev Canvas Bridge/skill.
+- **Current task:** `P0-QA-001` critical unit and contract gate audit is `IN_PROGRESS` again.
+- **Current slice:** Map the remaining provider/history/canvas/connector requirements to executable tests, with Dev Canvas Bridge acknowledgement/idempotency tracked as hardening rather than a demo blocker.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -83,8 +84,8 @@ Signature moment:
 
 ### Canvas
 
-- Shape chỉ lưu entity ref và presentation metadata.
-- Layout deterministic; model không sinh coordinates.
+- Managed shapes chỉ lưu entity ref và presentation metadata; freeform shapes remain tldraw-owned presentation data.
+- ProductSpec gets deterministic initial layout, then reconciliation preserves user positions. Semantic provider commands use IDs/kinds and renderer-owned placement, never raw JavaScript or provider coordinates.
 - Canvas interaction phát domain command; core validate rồi projection render lại.
 
 ### Figma guard
@@ -244,6 +245,28 @@ Signature moment:
 - **Regression test:** `./run.sh smoke-lifecycle` now requires `delivered=true` and `optionsCleared=true` before resuming the demo thread.
 - **Caveat:** Historical reasoning checkpoints remain queryable for audit/resume; UI actionability must always be derived from RunState.
 
+### BUG-012 - Irrelevant provider view field failed the whole turn
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, real Codex chat turn using canvas commands.
+- **Symptom:** `chat:send` failed because `commands[*].view` contained a non-lifecycle label such as `workflow` instead of `discover|decide|deliver|change`.
+- **Trigger:** A provider fills every field in the fixed structured-output envelope and uses a free-canvas concept for `view`, including on commands that do not consume that field.
+- **Root cause:** The provider wire envelope exists for structured-output compatibility, but it was parsed directly as the stricter internal discriminated union. Irrelevant nullable fields were incorrectly treated as domain command fields.
+- **Fix:** Normalize the wire envelope by command type before domain parsing: ignore irrelevant fields, default legacy add-card view to the current phase, discard only an invalid `switch_view`, and continue rejecting unknown or incomplete commands. Added semantic node/connection commands for free-canvas diagrams.
+- **Regression test:** `packages/domain/src/index.test.ts` reproduces three commands with `view: workflow`; full suite passes with 89 tests and one optional live test skipped.
+- **Caveat:** Provider output remains untrusted; normalization is deliberately narrow and must not become a general malformed-output fallback.
+
+### BUG-013 - New threads inherited the demo ProductSpec behind a free canvas
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, visual review of semantic workflow smoke.
+- **Symptom:** A new workflow thread showed meal-ordering cards behind the flow and inspector counts `3 Req / 4 Screen / 2 Story` even though the user never requested that product.
+- **Trigger:** Send the first message in any non-demo thread, then create a freeform workflow on Board.
+- **Root cause:** Every run initialized from `mealOrderingProductSpec`, and Board treated managed ProductSpec projections as always visible. Hiding the projection only during Idea Intake masked the underlying cross-thread fixture contamination.
+- **Fix:** Only the deterministic demo thread uses meal-ordering data. Normal threads receive an isolated schema-valid empty draft; Board hides managed projections, while lifecycle filters reveal them without hiding freeform shapes.
+- **Regression test:** `createDraftProductSpec` unit coverage, `./run.sh smoke-lifecycle`, and `./run.sh smoke-flow`; screenshot review confirms a clean three-node flow and `0 Req / 0 Screen / 0 Story`.
+- **Caveat:** Generating a rich ProductSpec from a selected option remains a separate lifecycle capability; an empty draft must not be pitched as a generated delivery spec.
+
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 
 ```md
@@ -299,14 +322,15 @@ App commands đã chạy thành công:
 ./run.sh             # verified 2026-07-22; Electron dev app opens
 ./run.sh setup       # verified 2026-07-22; installs/builds app, Go runtime and Figma plugin bundle
 ./run.sh reset       # verified by shared reset path 2026-07-22; resets then opens dev app
-./run.sh typecheck   # verified 2026-07-22
-./run.sh test        # verified 2026-07-22; 84 tests pass, 1 optional live test skipped
+./run.sh typecheck   # verified 2026-07-23
+./run.sh test        # verified 2026-07-23; 89 tests pass, 1 optional live test skipped
 ./run.sh build       # verified 2026-07-22
 ./run.sh smoke       # verified 2026-07-22; Mock provider + canvas
 ./run.sh smoke-recovery  # verified 2026-07-22; injected Jira failure + target-only UI retry
 ./run.sh smoke-reset # verified 2026-07-22; UI reset + three deterministic seeds + full flow
 ./run.sh smoke-canvas # verified 2026-07-22; drag/undo/delete boundary + invalid command + full flow
 ./run.sh smoke-ambiguity # verified 2026-07-22; NEEDS_USER_INPUT + no-write guard + resolved full flow
+./run.sh smoke-flow  # verified 2026-07-23; free Board + 3 semantic nodes + bound connections + persisted snapshot
 PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke  # verified 2026-07-22
 PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke  # verified 2026-07-22; live allowlist + bounded DS capture + cache + UI
 ```
@@ -488,6 +512,16 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Clarification appears in chat beside the full canonical graph; a resolved follow-up resumes the same run and existing approval flow.
 - Persistence restart tests and `./run.sh smoke-ambiguity` prove the no-write boundary and eventual verified v2 sync.
 - Next action: audit the complete provider/history/canvas/connector critical test matrix.
+
+### 2026-07-23 - Open canvas collaboration and developer skill
+
+- Split tldraw into a freeform `Board` and optional ProductSpec-managed lifecycle filters; user/agent shapes remain visible and movable in every filter.
+- Provider commands now support semantic process/decision/screen/note nodes and bound connections without arbitrary coordinates or JavaScript.
+- Multi-selection and the contents spatially enclosed by a selected shape are normalized into a bounded chat context.
+- Added a loopback Canvas Bridge with per-launch bearer token, validated command batches and a reusable `skills/pm-lifecycle-canvas` helper for Codex/Claude.
+- Removed meal-ordering ProductSpec contamination from normal threads; the seeded fixture remains exclusive to the deterministic demo thread.
+- Verification: workspace typecheck, 89 tests + 1 optional live skip, lifecycle/canvas production smokes and `./run.sh smoke-flow` pass; final screenshot reviewed at 1520x940.
+- Next action: resume `P0-QA-001`, then add durable bridge command acknowledgement/idempotency under a follow-up hardening ticket.
 
 ## 10. End-of-session checklist
 

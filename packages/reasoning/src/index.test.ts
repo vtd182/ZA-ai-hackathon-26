@@ -12,6 +12,13 @@ describe('mock provider command inference', () => {
     expect(result.commands).toContainEqual({ type: 'switch_view', view: 'change' })
   })
 
+  it('creates a connected semantic workflow on the free canvas', () => {
+    const result = inferLocalCommands('Vẽ workflow xử lý yêu cầu')
+    expect(result.commands.filter((command) => command.type === 'create_canvas_node')).toHaveLength(3)
+    expect(result.commands.filter((command) => command.type === 'connect_canvas_nodes')).toHaveLength(2)
+    expect(result.commands.some((command) => command.type === 'switch_view')).toBe(false)
+  })
+
   it('returns deterministic phase-specific decision data', () => {
     const first = inferLocalCommands('Đề xuất phương án', 'decide')
     const second = inferLocalCommands('Đề xuất phương án', 'decide')

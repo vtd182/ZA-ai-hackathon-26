@@ -6,9 +6,9 @@ The app is a work surface, not a landing page:
 
 ```text
 ┌──────────────┬──────────────────────────────────┬─────────────────────┐
-│ History      │ Active thread canvas             │ Chat / Inspector    │
-│ search       │ Discover / Decide / Deliver /    │ messages            │
-│ recent runs  │ Change                           │ approvals           │
+│ History      │ Active free canvas               │ Chat / Inspector    │
+│ search       │ Board + optional lifecycle       │ messages            │
+│ recent runs  │ filters                          │ approvals           │
 │ archived     │                                  │ entity detail       │
 ├──────────────┴──────────────────────────────────┴─────────────────────┤
 │ provider · phase · connector health · save/sync/verification status  │
@@ -118,6 +118,9 @@ Supported P0 commands:
 - switch Discover/Decide/Deliver/Change view;
 - request artifact preview;
 - approve/reject a planned write.
+- create semantic workflow/prototype nodes and bound connections on the free board.
+
+`Board` is the default freeform workspace and hides managed ProductSpec projections. Discover/Decide/Deliver/Change reveal the relevant managed projection while keeping every user/agent-created freeform shape visible and in place.
 
 ### Canvas to chat/domain
 

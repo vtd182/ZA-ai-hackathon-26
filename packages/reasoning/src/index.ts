@@ -72,12 +72,13 @@ const anthropicCapabilities: ProviderCapabilities = { structuredOutput: true, st
 const systemPolicy = `Bạn là reasoning provider cho PM Lifecycle Agent.
 Mục tiêu: giúp PM biến ý tưởng thành ProductSpec có traceability và thay đổi scope có kiểm soát.
 Chỉ trả về JSON đúng schema được cung cấp. Không dùng markdown.
-Mỗi command luôn có đủ type, label, query, view; field không áp dụng phải là null.
+Mỗi command luôn có đủ type, label, query, view, nodeId, nodeKind, fromId, toId; field không áp dụng phải là null.
 Luôn trả phase đúng phase hiện tại và phaseData đúng schema phase được cung cấp.
 Các lệnh canvas chỉ là đề xuất hiển thị; không tuyên bố đã ghi Figma, Jira hay Zdoc.
 Trả lời bằng tiếng Việt, ngắn gọn, nêu outcome và bước quyết định tiếp theo.
 Khi người dùng yêu cầu bỏ một scope, dùng remove_card. Khi yêu cầu thêm, dùng add_card.
-Khi yêu cầu xem một vùng, dùng switch_view. Khi muốn tìm/nhấn mạnh entity, dùng focus_card.`
+Khi yêu cầu xem một vùng lifecycle, dùng switch_view. Khi muốn tìm/nhấn mạnh entity, dùng focus_card.
+Khi người dùng muốn brainstorm, vẽ workflow hoặc prototype, dùng nhiều create_canvas_node rồi connect_canvas_nodes bằng nodeId ổn định. Không đặt lifecycle view cho các node tự do.`
 
 function buildPrompt(request: ReasoningRequest): string {
   const transcript = request.recentMessages
@@ -85,7 +86,10 @@ function buildPrompt(request: ReasoningRequest): string {
     .map((message) => `${message.role}: ${message.content}`)
     .join('\n')
   const selection = request.selection
-    ? `Canvas đang chọn: ${request.selection.entityId} (${request.selection.label})`
+    ? `Canvas đang chọn ${request.selection.selectedShapeCount ?? 1} shape: ${request.selection.label}. Ngữ cảnh vùng chọn: ${(request.selection.contextItems ?? [])
+      .slice(0, 12)
+      .map((item) => `${item.entityId ?? item.shapeId}:${item.label}`)
+      .join(' | ') || request.selection.entityId}`
     : 'Canvas không có entity được chọn.'
   return `${systemPolicy}\n\nPhase hiện tại: ${request.phase}\n${selection}\n\nLịch sử gần đây:\n${transcript}\n\nYêu cầu mới:\n${request.message}`
 }
@@ -147,7 +151,15 @@ export function inferLocalCommands(message: string, phase: WorkflowView = 'disco
     commands.push({ type: 'switch_view', view: matchedView[0] })
   }
 
-  if (/(bo|xoa|remove|loai)/.test(normalized)) {
+  if (/(workflow|user flow|prototype|so do|luong xu ly)/.test(normalized) && /(ve|tao|phac|draw)/.test(normalized)) {
+    commands.push(
+      { type: 'create_canvas_node', nodeId: 'user-intent', label: 'Người dùng gửi yêu cầu', nodeKind: 'process' },
+      { type: 'create_canvas_node', nodeId: 'agent-check', label: 'Đủ dữ liệu để tiếp tục?', nodeKind: 'decision' },
+      { type: 'create_canvas_node', nodeId: 'artifact-preview', label: 'Xem trước artifact', nodeKind: 'screen' },
+      { type: 'connect_canvas_nodes', fromId: 'user-intent', toId: 'agent-check', label: 'phân tích' },
+      { type: 'connect_canvas_nodes', fromId: 'agent-check', toId: 'artifact-preview', label: 'đã rõ' },
+    )
+  } else if (/(bo|xoa|remove|loai)/.test(normalized)) {
     const query = /(payment|thanh toan|vi noi bo)/.test(normalized) ? 'payment' : message.replace(/^(hãy\s+)?(bỏ|xóa|remove|loại)\s*/i, '').trim()
     if (query) commands.push({ type: 'remove_card', query })
   } else if (/(them|add|tao card)/.test(normalized)) {

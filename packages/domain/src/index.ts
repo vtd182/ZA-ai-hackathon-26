@@ -34,6 +34,18 @@ export const providerCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('remove_card'), query: z.string().min(1) }),
   z.object({ type: z.literal('focus_card'), query: z.string().min(1) }),
   z.object({ type: z.literal('switch_view'), view: z.enum(workflowViews) }),
+  z.object({
+    type: z.literal('create_canvas_node'),
+    nodeId: z.string().min(1),
+    label: z.string().min(1),
+    nodeKind: z.enum(['note', 'process', 'decision', 'screen']),
+  }),
+  z.object({
+    type: z.literal('connect_canvas_nodes'),
+    fromId: z.string().min(1),
+    toId: z.string().min(1),
+    label: z.string().min(1).optional(),
+  }),
 ])
 export type ProviderCommand = z.infer<typeof providerCommandSchema>
 
@@ -125,6 +137,14 @@ export type ProviderEvent = z.infer<typeof providerEventSchema>
 export interface CanvasSelectionContext {
   entityId: string
   label: string
+  shapeIds?: string[]
+  selectedShapeCount?: number
+  contextItems?: Array<{
+    shapeId: string
+    entityId?: string
+    type: string
+    label: string
+  }>
 }
 
 export interface ThreadSummary {
@@ -179,6 +199,12 @@ export interface SendChatOutput {
   changePreview?: ChangePreview
 }
 
+export interface ExternalCanvasCommandBatch {
+  threadId: string
+  batchId: number
+  commands: ProviderCommand[]
+}
+
 export interface ConfigureProviderInput {
   profileId: string
   modelId: string
@@ -222,6 +248,7 @@ export interface DesktopApi {
   canvas: {
     save(threadId: string, snapshot: unknown): Promise<void>
     proposeCommand(threadId: string, command: CanvasGestureCommand): Promise<CanvasCommandOutput>
+    onExternalCommands(listener: (batch: ExternalCanvasCommandBatch) => void): () => void
   }
   lifecycle: {
     getWorkspace(threadId: string): Promise<LifecycleWorkspaceState>
@@ -265,12 +292,16 @@ export const reasoningJsonSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['type', 'label', 'query', 'view'],
+        required: ['type', 'label', 'query', 'view', 'nodeId', 'nodeKind', 'fromId', 'toId'],
         properties: {
-          type: { type: 'string', enum: ['add_card', 'remove_card', 'focus_card', 'switch_view'] },
+          type: { type: 'string', enum: ['add_card', 'remove_card', 'focus_card', 'switch_view', 'create_canvas_node', 'connect_canvas_nodes'] },
           label: { type: ['string', 'null'] },
           query: { type: ['string', 'null'] },
           view: { type: ['string', 'null'], enum: [...workflowViews, null] },
+          nodeId: { type: ['string', 'null'] },
+          nodeKind: { type: ['string', 'null'], enum: ['note', 'process', 'decision', 'screen', null] },
+          fromId: { type: ['string', 'null'] },
+          toId: { type: ['string', 'null'] },
         },
       },
     },
@@ -349,7 +380,51 @@ export function parsePhaseReasoningResult(value: unknown, expectedPhase: Workflo
     deliver: deliveryReasoningResultSchema,
     change: changeReasoningResultSchema,
   } as const
-  return schemas[expectedPhase].parse(value) as PhaseReasoningResult
+  return schemas[expectedPhase].parse(normalizeProviderCommandEnvelope(value, expectedPhase)) as PhaseReasoningResult
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function normalizeProviderCommandEnvelope(value: unknown, expectedPhase: WorkflowView): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+  const result = value as Record<string, unknown>
+  if (!Array.isArray(result.commands)) return value
+  const commands: unknown[] = []
+
+  for (const raw of result.commands) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
+    const command = raw as Record<string, unknown>
+    const label = nonEmptyString(command.label)
+    const query = nonEmptyString(command.query)
+    const view = workflowViews.find((item) => item === command.view)
+    if (command.type === 'add_card' && label) {
+      commands.push({ type: 'add_card', label, view: view ?? expectedPhase })
+    } else if (command.type === 'remove_card' && query) {
+      commands.push({ type: 'remove_card', query })
+    } else if (command.type === 'focus_card' && query) {
+      commands.push({ type: 'focus_card', query })
+    } else if (command.type === 'switch_view' && view) {
+      commands.push({ type: 'switch_view', view })
+    } else if (command.type === 'create_canvas_node' && label) {
+      const nodeId = nonEmptyString(command.nodeId) ?? `node-${commands.length + 1}`
+      const nodeKind = ['note', 'process', 'decision', 'screen'].find((item) => item === command.nodeKind)
+      commands.push({ type: 'create_canvas_node', nodeId, label, nodeKind: (nodeKind ?? 'process') as 'note' | 'process' | 'decision' | 'screen' })
+    } else if (command.type === 'connect_canvas_nodes') {
+      const fromId = nonEmptyString(command.fromId)
+      const toId = nonEmptyString(command.toId)
+      if (fromId && toId && fromId !== toId) {
+        commands.push({ type: 'connect_canvas_nodes', fromId, toId, ...(label ? { label } : {}) })
+      } else {
+        commands.push(raw)
+      }
+    } else if (command.type !== 'switch_view') {
+      commands.push(raw)
+    }
+  }
+
+  return { ...result, commands }
 }
 
 export function extractJson(text: string): unknown {

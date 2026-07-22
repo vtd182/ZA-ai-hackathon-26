@@ -115,6 +115,28 @@ export function App(): React.JSX.Element {
       })
   }, [openThread])
 
+  useEffect(() => window.pmAgent.canvas.onExternalCommands((batch) => {
+    void (async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const [detail, workspace] = await Promise.all([
+          window.pmAgent.threads.get(batch.threadId),
+          window.pmAgent.lifecycle.getWorkspace(batch.threadId),
+        ])
+        setActiveThread(detail)
+        setLifecycleWorkspace(workspace)
+        setSelection(undefined)
+        setCommandBatch({ id: batch.batchId, commands: batch.commands })
+        await refreshThreads()
+      } catch (nextError) {
+        setError(errorText(nextError))
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }), [refreshThreads])
+
   useEffect(() => {
     if (!figmaSetupOpen) return
     const refresh = (): void => { void window.pmAgent.figma.status().then(setFigmaStatus) }
@@ -450,7 +472,6 @@ export function App(): React.JSX.Element {
                 key={activeThread.id}
                 threadId={activeThread.id}
                 snapshot={activeThread.canvasSnapshot}
-                initialView={activeThread.phase}
                 commandBatch={commandBatch}
                 productSpec={projectedProductSpec}
                 changePreview={lifecycleWorkspace?.preview ?? undefined}

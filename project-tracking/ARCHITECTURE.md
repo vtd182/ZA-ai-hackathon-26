@@ -16,6 +16,8 @@ history/run  native adapters      |       |       |
 
 Renderer không được truy cập filesystem, SQLite, secret hoặc connector process trực tiếp. Preload chỉ expose allowlisted typed commands/events.
 
+Developer agents use the guarded loopback Canvas Bridge described in `DEV_CANVAS_BRIDGE.md`. It accepts semantic presentation commands only; arbitrary JavaScript and direct ProductSpec/connector access are not exposed.
+
 ## 2. Package boundaries đề xuất
 
 ```text

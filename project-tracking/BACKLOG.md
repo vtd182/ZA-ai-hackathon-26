@@ -110,6 +110,14 @@
 - **Acceptance:** crash/retry simulation không duplicate; verification mismatch thành `VERIFICATION_FAILED`.
 - **Evidence:** approval + ba outbox actions commit trong cùng SQLite transaction; receipt được persist trước read-back, restart đưa work về `verifying`, retry không gọi external execute lần hai và mismatch được lưu `verification_failed`. Unit/contract suite 56 tests và production smoke với cả ba target `verified` đều pass.
 
+### `P0-AGT-006` Decision to ProductSpec synthesis
+
+- **Status:** TODO
+- **Depends on:** P0-AGT-002, P0-DOM-003, P0-CAN-003
+- **Deliver:** convert the selected option plus clarified idea into a validated thread-specific ProductSpec v1 with requirements, screens, stories, dependencies, decisions and traceability relationships.
+- **Acceptance:** a normal empty-draft thread reaches Delivery with a non-placeholder ProductSpec derived from its own messages/decision; malformed or untraceable synthesis cannot replace the draft; canvas and Figma planner consume the committed spec without fixture data.
+- **Priority note:** This closes the main non-demo path `chat -> canvas -> decision -> Figma`; the deterministic meal-ordering thread remains only a demo fixture.
+
 ## Epic E3 - Persistence
 
 ### `P0-PER-001` SQLite repositories and migrations
@@ -225,6 +233,14 @@
 - **Deliver:** projection renderer, selection sync, commands for option/change.
 - **Acceptance:** canvas edit không sửa business state trực tiếp; command invalid bị reject.
 - **Evidence:** versioned `CanvasGestureCommand` crosses typed preload IPC and is validated again by Agent Core against canonical ProductSpec. Canonical delete is intercepted, deduplicated and staged through the same immutable preview flow as chat; invalid/non-requirement and already-removed targets are rejected by unit and production smoke tests.
+
+### `P0-CAN-003` Open canvas collaboration and semantic diagrams
+
+- **Status:** DONE (2026-07-23)
+- **Depends on:** P0-CAN-002, P0-AGT-003, P0-HIS-004
+- **Deliver:** free canvas as the default workspace, optional lifecycle filters, semantic flow/prototype commands, multi-shape spatial chat context and a guarded Dev Canvas Bridge/skill contract.
+- **Acceptance:** provider output with nullable/irrelevant view fields cannot fail a whole turn; freeform shapes remain visible in every lifecycle filter; ProductSpec reconciliation preserves user layout; provider can create and connect a semantic flow without arbitrary JavaScript; selected/encircled canvas context reaches chat in bounded normalized form.
+- **Evidence:** provider wire normalization tolerates irrelevant/invalid `view` fields while still rejecting unknown commands; `Board` shows only persisted freeform content while lifecycle filters reveal managed projections without hiding freeform shapes. ProductSpec reconciliation preserves user positions and relationship arrows use real tldraw bindings. Mock/Codex-compatible semantic node/connection commands render a workflow, multi-shape/spatial selection is bounded into chat context, and the token-authenticated loopback bridge plus `skills/pm-lifecycle-canvas` expose the same safe command contract to developer agents. `./run.sh smoke-flow` verifies 3 nodes, at least 2 connections, Board mode and persisted snapshot; visual review shows a clean flow and `0 Req / 0 Screen / 0 Story` for a non-demo thread.
 
 ### `P0-UI-003` Artifact preview and approval
 
@@ -356,11 +372,11 @@
 
 ### `P0-QA-001` Unit and contract test gates
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** IN_PROGRESS (resumed 2026-07-23)
 - **Depends on:** all P0 domain/core/connectors
 - **Deliver:** coverage cho invariants, transitions, impact, approval, idempotency, connector parity.
 - **Acceptance:** critical test matrix gồm provider/history/canvas/connector trong `TEST_AND_DEMO_PLAN.md` pass.
-- **Current slice:** reconcile the documented critical matrix against the 84-test suite and dedicated production smoke modes; add or record evidence for any uncovered P0 contract.
+- **Current slice:** reconcile the documented critical matrix against the 89-test suite and dedicated production smoke modes; add or record evidence for any uncovered P0 contract.
 - **Progress:** lifecycle production smoke now also proves a newly created `IDEA_INTAKE` thread switches ThreadDetail/workspace atomically, has a null snapshot and contains zero canonical canvas shapes before the first message.
 - **Progress:** active reasoning is now phase/status-gated; lifecycle smoke proves decision options disappear after the first valid selection and duplicate selection is idempotent in Delivery.
 
@@ -402,6 +418,7 @@
 | `P1-EXP-001` | ProductSpec import/export | Demo reset đã ổn định |
 | `P1-HIS-006` | Branch/fork thread from checkpoint | P0 resume và canvas isolation ổn định |
 | `P1-HIS-007` | Full ProductSpec/canvas version browser | Change diff P0 hoàn chỉnh |
+| `P1-CAN-004` | Durable Dev Canvas Bridge inbox, idempotency, apply acknowledgement, normalized shape reads and screenshot/lint endpoints | P0 semantic bridge contract ổn định |
 | `P1-ZDC-001` | Zdoc real sandbox connector | Được phép và có sandbox chính thức |
 | `P1-JIR-001` | Jira real sandbox connector | Được phép và có sandbox chính thức |
 
