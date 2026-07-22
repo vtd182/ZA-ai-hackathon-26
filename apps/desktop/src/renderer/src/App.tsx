@@ -12,6 +12,7 @@ import {
   GitCompareArrows,
   LoaderCircle,
   Plus,
+  RefreshCw,
   Search,
   Send,
   Settings,
@@ -270,7 +271,7 @@ export function App(): React.JSX.Element {
               <Settings size={18} />
             </button>
             <button
-              className={figmaStatus?.pluginConnected ? 'integration-button connected' : 'integration-button'}
+              className={figmaStatus?.target && figmaStatus.designSystem ? 'integration-button connected' : 'integration-button'}
               title="Figma integration"
               onClick={() => setFigmaSetupOpen(true)}
             >
@@ -348,6 +349,8 @@ export function App(): React.JSX.Element {
           status={figmaStatus}
           onClose={() => setFigmaSetupOpen(false)}
           onStart={async () => setFigmaStatus(await window.pmAgent.figma.start())}
+          onAllowTarget={async (sessionId) => setFigmaStatus(await window.pmAgent.figma.allowTarget(sessionId))}
+          onRefreshDesignSystem={async () => setFigmaStatus(await window.pmAgent.figma.refreshDesignSystem())}
           onShowManifest={() => window.pmAgent.figma.showManifest()}
           onOpenControlPlane={() => window.pmAgent.figma.openControlPlane()}
         />
@@ -360,25 +363,35 @@ function FigmaSetupDialog({
   status,
   onClose,
   onStart,
+  onAllowTarget,
+  onRefreshDesignSystem,
   onShowManifest,
   onOpenControlPlane,
 }: {
   status: FigmaSetupStatus | null
   onClose(): void
   onStart(): Promise<void>
+  onAllowTarget(sessionId: string): Promise<void>
+  onRefreshDesignSystem(): Promise<void>
   onShowManifest(): Promise<void>
   onOpenControlPlane(): Promise<void>
 }): React.JSX.Element {
   const [busy, setBusy] = useState(false)
+  const [operationError, setOperationError] = useState<string | null>(null)
   const run = async (operation: () => Promise<void>): Promise<void> => {
     setBusy(true)
+    setOperationError(null)
     try {
       await operation()
+    } catch (nextError) {
+      setOperationError(errorText(nextError))
     } finally {
       setBusy(false)
     }
   }
   const runtimeReady = status?.runtime === 'ready'
+  const activeSession = status?.sessions.find((session) => session.sessionId === status.activeSession) ?? status?.sessions[0]
+  const integrationReady = Boolean(status?.target && status.designSystem)
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -403,16 +416,44 @@ function FigmaSetupDialog({
             <div>
               <strong>{status?.pluginConnected ? 'Figma đã kết nối' : 'Import vào Figma Desktop'}</strong>
               <small>{status?.pluginConnected
-                ? `${status.sessionCount} session · ${status.activeSession ?? 'active'}`
+                ? `${activeSession?.fileName ?? status.sessionCount + ' session'} · ${activeSession?.pageName ?? 'active'}`
                 : 'Plugins → Development → Import plugin from manifest, sau đó chạy ZA Talk To Figma.'}</small>
             </div>
           </div>
+          <div className={status?.target ? 'setup-step complete' : status?.pluginConnected ? 'setup-step current' : 'setup-step'}>
+            <span className="step-index">4</span>
+            <div>
+              <strong>{status?.target ? 'Sandbox đã allowlist' : 'Xác nhận target sandbox'}</strong>
+              <small>{status?.target
+                ? `${status.target.fileName} · ${status.target.pageName}`
+                : 'Chỉ cho phép đọc file và page đang mở; target khác sẽ bị từ chối.'}</small>
+            </div>
+            {!status?.target && status?.pluginConnected && activeSession && (
+              <button className="allow-target-button" disabled={busy} onClick={() => void run(() => onAllowTarget(activeSession.sessionId))}>
+                <ShieldCheck size={14} /> Dùng page này
+              </button>
+            )}
+          </div>
         </div>
         <div className="manifest-path"><span>manifest.json</span><code>{status?.manifestPath ?? 'Đang xác định đường dẫn...'}</code></div>
+        {status?.designSystem && (
+          <div className={status.designSystem.mode === 'live' ? 'ds-context-status live' : 'ds-context-status fallback'}>
+            <ShieldCheck size={18} />
+            <div>
+              <strong>{status.designSystem.mode === 'live' ? 'Live Design System context' : 'Synthetic fixture guard'}</strong>
+              <span>{status.designSystem.componentCount} components · {status.designSystem.tokenCount} tokens · {status.designSystem.fingerprint.slice(0, 12)}</span>
+              {status.designSystem.fallbackReason && <small>{status.designSystem.fallbackReason}</small>}
+            </div>
+            <button className="icon-button" disabled={busy} title="Đọc lại Design System" onClick={() => void run(onRefreshDesignSystem)}>
+              <RefreshCw className={busy ? 'spin' : ''} size={16} />
+            </button>
+          </div>
+        )}
+        {operationError && <div className="figma-operation-error"><CircleAlert size={15} /> {operationError}</div>}
         <footer>
-          <span className={status?.pluginConnected ? 'figma-ready-label ready' : 'figma-ready-label'}>
-            {status?.pluginConnected ? <CheckCircle2 size={15} /> : <LoaderCircle size={15} />}
-            {status?.pluginConnected ? 'Sẵn sàng cho preflight' : 'Đang chờ plugin'}
+          <span className={integrationReady ? 'figma-ready-label ready' : 'figma-ready-label'}>
+            {integrationReady ? <CheckCircle2 size={15} /> : <LoaderCircle size={15} />}
+            {integrationReady ? 'Sẵn sàng cho preflight' : status?.pluginConnected ? 'Chờ allowlist' : 'Đang chờ plugin'}
           </span>
           <button className="secondary-button" disabled={!runtimeReady || busy} onClick={() => void run(onOpenControlPlane)}>
             <ExternalLink size={14} /> Runtime console

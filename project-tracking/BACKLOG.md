@@ -259,11 +259,11 @@
 
 ### `P0-FIG-001` Existing MCP capability adapter and DS context cache
 
-- **Status:** IN_PROGRESS
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-FIG-000, P0-FND-003, P0-DOM-001
 - **Deliver:** stdio process adapter, health/session pinning, typed error mapper, `capture_design_system_context` normalization và synthetic cache fallback.
 - **Acceptance:** explicit session/page allowlist; live hoặc fixture DS context có fingerprint/version; không đọc full document không giới hạn.
-- **Progress:** local runtime manager, health probe, plugin bundle detection, Electron setup IPC/UI, one-command setup và import instructions đã verified. Đang chờ user import/run plugin để hoàn tất explicit session pinning, page allowlist và DS context capture.
+- **Evidence:** typed MCP SDK follower adapter, immutable target hash, explicit current-page allowlist, typed runtime errors, bounded live capture, deterministic manifest fingerprint, SQLite normalized cache and labeled fixture fallback. `PM_AGENT_FIGMA_LIVE=1` adapter test and production smoke pass against the connected public sandbox; UI screenshot shows target/context readiness.
 
 ### `P0-FIG-002` Semantic Figma artifact planner
 

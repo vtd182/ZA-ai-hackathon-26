@@ -17,7 +17,7 @@ Verified characteristics from source/docs:
   - `audit_design_system_adoption`
 - Read/write tools include local components, styles, variables, component instantiation, layout, page and prototype operations.
 - Go tests and plugin TypeScript typecheck currently pass in this workspace.
-- Plugin unit suite has a known baseline contract drift: 242 pass, 9 fail around `serializePaints`; see `BUG-001` in project memory.
+- Plugin serializer contract drift is resolved: 253 tests pass and rich paints remain available for DS audit fidelity.
 
 ## 2. Current gaps for PM Lifecycle Agent
 
@@ -226,4 +226,23 @@ bun run typecheck
 bun test
 ```
 
-Baseline note: `bun test` currently exits 1 with 9 stale `serializePaints` expectations. Do not treat the plugin suite as green until `P0-FIG-000` is resolved.
+Live adapter verification after importing the plugin:
+
+```text
+PM_AGENT_FIGMA_LIVE=1 pnpm exec vitest run packages/connectors/src/figma-mcp.live.test.ts
+PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke
+```
+
+## 12. Implemented connection baseline
+
+`P0-FIG-001` is complete:
+
+- official MCP SDK stdio follower; provider/runtime SDK types stay inside the connector;
+- typed runtime error mapping and bounded call deadlines;
+- exact live session/file/current-page validation before an immutable target hash is allowlisted;
+- one active target persisted in SQLite; a changed session/page removes ready state;
+- bounded `capture_design_system_context`, normalized deterministic manifest fingerprint and cache reuse;
+- raw document/capture payloads are not persisted;
+- explicit `fixture_fallback` when the live source has no relevant component mappings.
+
+The connected public framework duplicate currently exposes paint/text evidence but no relevant components in the allowlisted page subtree. This is not treated as live DS compliance. The UI shows `Synthetic fixture guard`, while the next implementation item remains generic semantic planning followed by strict zero-write preflight.

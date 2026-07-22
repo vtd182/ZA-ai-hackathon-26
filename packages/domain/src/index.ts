@@ -114,6 +114,8 @@ export interface DesktopApi {
   figma: {
     status(): Promise<FigmaSetupStatus>
     start(): Promise<FigmaSetupStatus>
+    allowTarget(sessionId: string): Promise<FigmaSetupStatus>
+    refreshDesignSystem(): Promise<FigmaSetupStatus>
     showManifest(): Promise<void>
     openControlPlane(): Promise<void>
   }

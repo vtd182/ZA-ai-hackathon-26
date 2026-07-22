@@ -33,14 +33,15 @@ Signature moment:
 ## 3. Current status
 
 - **Date:** 2026-07-22
-- **Milestone:** Signature change slice complete; Figma import gate ready.
+- **Milestone:** Signature change slice and live Figma read connection complete.
 - **Completed task:** `P0-FND-001` Bootstrap workspace.
 - **Completed tasks:** Foundation/fixtures/domain schemas, workflow state machine, ProductSpec invariants, deterministic impact graph and immutable approval policy.
 - **Completed tasks:** Foundation/domain workflow plus typed signature change preview, approval and persisted ProductSpec v2 projection.
-- **Current task:** `P0-FIG-001` complete the existing MCP capability adapter and DS context cache.
-- **Current slice:** Local runtime/setup/import flow is verified. Waiting for the user to import and run `ZA Talk To Figma`, then pin the explicit session/page, capture DS context and add read-back verification.
-- **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a local Figma setup/import gate.
-- **Known blockers:** User must import/run the local Figma plugin before live session work; chưa có sanitized/allowed Zalo Design System source; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
+- **Completed task:** `P0-FIG-001` typed MCP adapter, explicit session/page allowlist, bounded DS capture, normalized cache and synthetic fallback.
+- **Current task:** `P0-FIG-002` semantic Figma artifact planner is the next implementation item.
+- **Current slice:** Live plugin connection is read-only and preflight-ready. Next work converts ScreenSpec into generic component-role recipes before any Figma write path is enabled.
+- **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
+- **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 
 ## 4. Important implementation notes
 
@@ -155,6 +156,17 @@ Signature moment:
 - **Regression test:** Production smoke verifies the signature change projection after editor mount; screenshot review confirms only the five impacted entities are visible in Change phase.
 - **Caveat:** Giữ editor lifecycle signal nếu sau này tách canvas thành worker hoặc unmount khi đổi thread.
 
+### BUG-006 - Electron main used CommonJS path globals after ESM bundling
+
+- **Status:** FIXED
+- **Found:** 2026-07-22, live Figma production smoke.
+- **Symptom:** Production smoke không mở window và log `ReferenceError: __dirname is not defined`.
+- **Trigger:** Bundle MCP SDK into the Electron main ESM output.
+- **Root cause:** Runtime and BrowserWindow asset path resolution still referenced the CommonJS-only `__dirname` global.
+- **Fix:** Derive `moduleDirectory` from `fileURLToPath(import.meta.url)` and use it for repository, preload and renderer paths.
+- **Regression test:** `PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke` builds ESM main, opens the window, allowlists the live page and reaches context-ready state.
+- **Caveat:** New main-process path logic must remain ESM-safe; do not reintroduce `__dirname` or `require.resolve` without an ESM bridge.
+
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 
 ```md
@@ -183,6 +195,9 @@ Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 - Plugin verification after `BUG-001`: `bun run typecheck` passed; `bun test` has 253 pass/0 fail.
 - Setup adapter starts or reuses the local HTTP/WebSocket runtime on port 1802, detects the built manifest/bundle and polls session health without requiring a Figma REST token.
 - The import gate intentionally performs no Figma write. Session pinning, target page allowlist and DS context capture start only after the user runs the plugin.
+- Live verification used the imported plugin against a public sandbox duplicate. MCP follower health, `get_pages` and bounded `capture_design_system_context` all succeeded with an explicit session ID.
+- The public page exposed 6 paint styles, 3 text styles and 312 text nodes, but zero relevant components in the allowlisted subtree. The app stores only normalized counts/manifest data and switches to the clearly labeled synthetic fixture guard.
+- Plugin connection is not permission: readiness requires an immutable hash over exact session/file/page identity plus cached DS context. A session/page mismatch removes ready state.
 
 Khi tiếp tục spike Figma bridge, ghi lại:
 
@@ -209,6 +224,7 @@ App commands đã chạy thành công:
 ./run.sh build       # verified 2026-07-22
 ./run.sh smoke       # verified 2026-07-22; Mock provider + canvas
 PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke  # verified 2026-07-22
+PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke  # verified 2026-07-22; live allowlist + bounded DS capture + cache + UI
 ```
 
 Command MCP đã chạy thành công:
@@ -217,6 +233,7 @@ Command MCP đã chạy thành công:
 cd mcp-tool/za-talk-to-figma && go test ./...  # verified 2026-07-22
 cd mcp-tool/za-talk-to-figma/plugin && bun run typecheck  # verified 2026-07-22
 cd mcp-tool/za-talk-to-figma/plugin && bun test  # verified 2026-07-22; 253 tests pass
+PM_AGENT_FIGMA_LIVE=1 pnpm exec vitest run packages/connectors/src/figma-mcp.live.test.ts  # verified 2026-07-22
 ```
 
 Chỉ thêm command mới sau khi đã chạy thành công trong workspace hiện tại.
@@ -271,6 +288,16 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Added local Figma runtime lifecycle, typed Electron IPC, setup status modal, manifest reveal action and `./run.sh setup` for judge-friendly installation.
 - Production smoke verifies preload, canvas, signature approval and the Figma import gate; visual review confirms no modal/canvas overlap at desktop demo viewport.
 - Next action: user imports/runs `ZA Talk To Figma`; then finish `P0-FIG-001` with explicit session/page pinning, allowlist, DS context fingerprint/cache and read-back.
+
+### 2026-07-22 - Live Figma read connection
+
+- User imported and ran `ZA Talk To Figma`; runtime reported one connected public sandbox session.
+- Added an official MCP SDK stdio follower adapter with typed runtime errors and live session/page validation before target pinning.
+- Added immutable target hashes, one-active-target SQLite allowlist, bounded DS capture, deterministic normalized manifest fingerprints and cache reuse.
+- Connected setup UI now separates plugin attachment, explicit sandbox permission and DS readiness. Green status requires all three.
+- Live source evidence had styles/text but no relevant components, so the UI honestly reports `Synthetic fixture guard` instead of claiming live compliance.
+- Fixed ESM packaging path resolution exposed by MCP SDK bundling; live production smoke passes end to end.
+- Next action: implement `P0-FIG-002` generic semantic screen recipes, then strict zero-write preflight in `P0-FIG-003`.
 
 ## 10. End-of-session checklist
 

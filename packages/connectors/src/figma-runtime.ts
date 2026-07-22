@@ -1,13 +1,14 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { FigmaSetupStatus } from '@pm-agent/domain'
+import type { FigmaSession, FigmaSetupStatus } from '@pm-agent/domain'
 
 interface RuntimeOverview {
   version?: string
   activeSession?: string
   connected?: boolean
   sessionCount?: number
+  sessions?: FigmaSession[]
 }
 
 export interface FigmaRuntimeOptions {
@@ -54,6 +55,9 @@ export class FigmaRuntimeManager {
         pluginConnected: Boolean(overview.connected),
         sessionCount: overview.sessionCount ?? 0,
         activeSession: overview.activeSession || null,
+        sessions: overview.sessions ?? [],
+        target: null,
+        designSystem: null,
         manifestPath: this.options.manifestPath,
         controlPlaneUrl: this.controlPlaneUrl,
         detail: overview.connected ? 'Figma plugin đã kết nối runtime local.' : 'Runtime sẵn sàng; đang chờ Figma plugin.',
@@ -69,6 +73,9 @@ export class FigmaRuntimeManager {
       pluginConnected: false,
       sessionCount: 0,
       activeSession: null,
+      sessions: [],
+      target: null,
+      designSystem: null,
       manifestPath: this.options.manifestPath,
       controlPlaneUrl: this.controlPlaneUrl,
       detail: this.lastError ?? (binaryReady ? 'Runtime chưa chạy.' : 'Chưa build Figma runtime cho máy này.'),
@@ -127,4 +134,3 @@ export class FigmaRuntimeManager {
     }
   }
 }
-

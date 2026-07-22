@@ -8,6 +8,7 @@ const workspacePackages = [
   '@pm-agent/connectors',
   '@pm-agent/domain',
   '@pm-agent/fixture-meal-ordering',
+  '@pm-agent/fixture-zalo-design-system',
   '@pm-agent/persistence',
   '@pm-agent/reasoning',
   '@pm-agent/shared',

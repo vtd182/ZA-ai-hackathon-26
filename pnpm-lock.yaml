@@ -47,6 +47,9 @@ importers:
       '@pm-agent/fixture-meal-ordering':
         specifier: workspace:*
         version: link:../../fixtures/meal-ordering
+      '@pm-agent/fixture-zalo-design-system':
+        specifier: workspace:*
+        version: link:../../fixtures/zalo-design-system
       '@pm-agent/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence

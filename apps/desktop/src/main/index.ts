@@ -1,8 +1,9 @@
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { existsSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
 import { approveActions, createImpactPreview } from '@pm-agent/agent-core'
-import { FigmaRuntimeManager } from '@pm-agent/connectors'
+import { FigmaMcpAdapter, FigmaRuntimeManager, normalizeFigmaDesignSystemContext } from '@pm-agent/connectors'
 import type {
   ChangeIntent,
   ConfigureProviderInput,
@@ -11,9 +12,10 @@ import type {
   ProviderProfile,
   SendChatInput,
 } from '@pm-agent/domain'
-import { transitionRunState } from '@pm-agent/domain'
+import { summarizeFigmaDesignSystemContext, transitionRunState, type FigmaSetupStatus } from '@pm-agent/domain'
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
-import { HistoryStore, LifecycleStore } from '@pm-agent/persistence'
+import { syntheticZaloDesignSystem } from '@pm-agent/fixture-zalo-design-system'
+import { FigmaIntegrationStore, HistoryStore, LifecycleStore } from '@pm-agent/persistence'
 import { ProviderRegistry } from '@pm-agent/reasoning'
 import { SecretStore } from './secret-store'
 
@@ -23,6 +25,8 @@ let mainWindow: BrowserWindowType | null = null
 let history: HistoryStore
 let lifecycle: LifecycleStore
 let figmaRuntime: FigmaRuntimeManager
+let figmaMcp: FigmaMcpAdapter
+let figmaIntegration: FigmaIntegrationStore
 let secrets: SecretStore
 const providers = new ProviderRegistry()
 const activeRuns = new Map<string, AbortController>()
@@ -34,6 +38,7 @@ const providerEnv: Record<string, string> = {
   gemini: 'GEMINI_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
 }
+const moduleDirectory = dirname(fileURLToPath(import.meta.url))
 
 function timestamp(): string {
   return new Date().toISOString()
@@ -48,7 +53,7 @@ function figmaRuntimePaths(): { binaryPath: string; manifestPath: string } {
     process.env.PM_AGENT_REPO_ROOT,
     process.cwd(),
     resolve(app.getAppPath(), '../..'),
-    resolve(__dirname, '../../../..'),
+    resolve(moduleDirectory, '../../../..'),
   ].filter((candidate): candidate is string => Boolean(candidate))
   const root = candidates.find((candidate) => existsSync(join(candidate, 'mcp-tool', 'za-talk-to-figma', 'plugin', 'manifest.json')))
     ?? candidates[0]!
@@ -83,6 +88,42 @@ function exposeProfile(profile: Omit<ProviderProfile, 'hasCredential'>): Provide
     || secrets.has(profile.id)
     || Boolean(envName && process.env[envName])
   return { ...profile, hasCredential }
+}
+
+async function figmaStatus(): Promise<FigmaSetupStatus> {
+  const runtime = await figmaRuntime.status()
+  const storedTarget = figmaIntegration.getActiveTarget()
+  const target = storedTarget && runtime.sessions.some((session) => (
+    session.sessionId === storedTarget.sessionId
+    && session.fileName === storedTarget.fileName
+    && session.pageName === storedTarget.pageName
+  )) ? storedTarget : null
+  const context = target ? figmaIntegration.getContext(target.targetHash) : null
+  return {
+    ...runtime,
+    target,
+    designSystem: context ? summarizeFigmaDesignSystemContext(context) : null,
+  }
+}
+
+async function allowFigmaTarget(sessionId: string, forceCapture: boolean): Promise<FigmaSetupStatus> {
+  const health = await figmaMcp.health()
+  const session = health.sessions.find((item) => item.sessionId === sessionId)
+  if (!session) throw new Error('Figma session không còn tồn tại. Hãy mở lại plugin.')
+  const pages = await figmaMcp.pages(sessionId)
+  const activeTarget = figmaIntegration.getActiveTarget()
+  const allowedAt = activeTarget?.sessionId === sessionId && activeTarget.pageId === pages.currentPageId
+    ? activeTarget.allowedAt
+    : timestamp()
+  const target = await figmaMcp.pinTarget(sessionId, pages.currentPageId, allowedAt)
+  figmaIntegration.saveActiveTarget(target)
+
+  const cached = forceCapture ? null : figmaIntegration.getContext(target.targetHash)
+  if (!cached) {
+    const capture = await figmaMcp.captureDesignSystem(target)
+    figmaIntegration.saveContext(normalizeFigmaDesignSystemContext(capture, target, syntheticZaloDesignSystem, timestamp()))
+  }
+  return figmaStatus()
 }
 
 function registerIpc(): void {
@@ -121,8 +162,17 @@ function registerIpc(): void {
     return { runState: approvedState, preview: null, message }
   })
 
-  ipcMain.handle('figma:status', () => figmaRuntime.status())
-  ipcMain.handle('figma:start', () => figmaRuntime.start())
+  ipcMain.handle('figma:status', () => figmaStatus())
+  ipcMain.handle('figma:start', async () => {
+    await figmaRuntime.start()
+    return figmaStatus()
+  })
+  ipcMain.handle('figma:allow-target', (_event, sessionId: string) => allowFigmaTarget(sessionId, false))
+  ipcMain.handle('figma:refresh-design-system', () => {
+    const target = figmaIntegration.getActiveTarget()
+    if (!target) throw new Error('Chưa có Figma target trong allowlist.')
+    return allowFigmaTarget(target.sessionId, true)
+  })
   ipcMain.handle('figma:show-manifest', () => {
     if (!existsSync(figmaRuntime.manifestPath)) throw new Error('Figma plugin chưa được build. Chạy ./run.sh setup trước.')
     shell.showItemInFolder(figmaRuntime.manifestPath)
@@ -222,7 +272,7 @@ function createWindow(): void {
     backgroundColor: '#f5f7f8',
     titleBarStyle: 'hiddenInset',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.cjs'),
+      preload: join(moduleDirectory, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -241,7 +291,7 @@ function createWindow(): void {
   if (process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
-    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    void mainWindow.loadFile(join(moduleDirectory, '../renderer/index.html'))
   }
 }
 
@@ -303,17 +353,31 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     }
     await window.webContents.executeJavaScript(`document.querySelector('.integration-button')?.click()`)
     await wait(500)
-    const figmaSetup = await window.webContents.executeJavaScript(`({
-      hasSetupDialog: Boolean(document.querySelector('.figma-setup-dialog')),
-      runtimeReady: document.querySelector('.figma-setup-dialog')?.innerText.includes('Runtime local')
-        && document.querySelector('.figma-setup-dialog')?.innerText.includes('Runtime sẵn sàng'),
-      pluginBuilt: document.querySelector('.figma-setup-dialog')?.innerText.includes('Manifest và bundle đã sẵn sàng'),
-      waitingForPlugin: document.querySelector('.figma-setup-dialog')?.innerText.includes('Import vào Figma Desktop')
-        || document.querySelector('.figma-setup-dialog')?.innerText.includes('Figma đã kết nối')
-    })`) as { hasSetupDialog: boolean; runtimeReady: boolean; pluginBuilt: boolean; waitingForPlugin: boolean }
+    const figmaSetup = await window.webContents.executeJavaScript(`(async () => {
+      const status = await window.pmAgent.figma.status();
+      return {
+        hasSetupDialog: Boolean(document.querySelector('.figma-setup-dialog')),
+        runtimeReady: status.runtime === 'ready',
+        pluginBuilt: status.pluginBuilt === true,
+        waitingForPlugin: document.querySelector('.figma-setup-dialog')?.innerText.includes('Import vào Figma Desktop')
+          || document.querySelector('.figma-setup-dialog')?.innerText.includes('Figma đã kết nối')
+      };
+    })()`) as { hasSetupDialog: boolean; runtimeReady: boolean; pluginBuilt: boolean; waitingForPlugin: boolean }
+    const figmaLive = { required: process.env.PM_AGENT_FIGMA_LIVE === '1', targetAllowed: false, contextReady: false, contextMode: '' }
+    if (figmaLive.required) {
+      await window.webContents.executeJavaScript(`document.querySelector('.allow-target-button')?.click()`)
+      for (let attempt = 0; attempt < 90; attempt += 1) {
+        await wait(500)
+        const liveStatus = await window.webContents.executeJavaScript(`window.pmAgent.figma.status()`)
+        figmaLive.targetAllowed = Boolean(liveStatus.target)
+        figmaLive.contextReady = Boolean(liveStatus.designSystem)
+        figmaLive.contextMode = liveStatus.designSystem?.mode ?? ''
+        if (figmaLive.targetAllowed && figmaLive.contextReady) break
+      }
+    }
     const figmaSetupImage = await window.webContents.capturePage()
     writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!.replace(/\.png$/, '-figma-setup.png'), figmaSetupImage.toPNG())
-    await window.webContents.executeJavaScript(`document.querySelector('.figma-setup-dialog .icon-button')?.click()`)
+    await window.webContents.executeJavaScript(`document.querySelector('.figma-setup-dialog > header .icon-button')?.click()`)
     const image = await window.webContents.capturePage()
     writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!, image.toPNG())
     const passed = initial.hasApi && initial.hasCanvas && initial.hasSeed
@@ -321,7 +385,8 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && approval.committed && approval.specVersion === 2
       && approval.paymentStatus === 'removed' && approval.actionsApproved
       && figmaSetup.hasSetupDialog && figmaSetup.runtimeReady && figmaSetup.pluginBuilt && figmaSetup.waitingForPlugin
-    console.log(`[smoke] ${JSON.stringify({ passed, ...initial, ...final, ...approval, ...figmaSetup, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
+      && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady))
+    console.log(`[smoke] ${JSON.stringify({ passed, ...initial, ...final, ...approval, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
     app.exit(passed ? 0 : 1)
   } catch (error) {
     console.error('[smoke] failed', error)
@@ -331,9 +396,12 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
 
 app.whenReady().then(() => {
   const databasePath = join(app.getPath('userData'), 'pm-lifecycle-agent.sqlite')
+  const figmaPaths = figmaRuntimePaths()
   history = new HistoryStore(databasePath)
   lifecycle = new LifecycleStore(databasePath)
-  figmaRuntime = new FigmaRuntimeManager(figmaRuntimePaths())
+  figmaIntegration = new FigmaIntegrationStore(databasePath)
+  figmaRuntime = new FigmaRuntimeManager(figmaPaths)
+  figmaMcp = new FigmaMcpAdapter({ binaryPath: figmaPaths.binaryPath })
   secrets = new SecretStore(join(app.getPath('userData'), 'provider-secrets.json'))
   registerIpc()
   createWindow()
@@ -349,7 +417,9 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   activeRuns.forEach((controller) => controller.abort())
+  void figmaMcp?.close()
   figmaRuntime?.stop()
+  figmaIntegration?.close()
   lifecycle?.close()
   history?.close()
 })

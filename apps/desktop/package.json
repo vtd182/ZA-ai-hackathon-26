@@ -17,6 +17,7 @@
     "@pm-agent/connectors": "workspace:*",
     "@pm-agent/domain": "workspace:*",
     "@pm-agent/fixture-meal-ordering": "workspace:*",
+    "@pm-agent/fixture-zalo-design-system": "workspace:*",
     "@pm-agent/persistence": "workspace:*",
     "@pm-agent/reasoning": "workspace:*",
     "@tldraw/assets": "5.2.5",
