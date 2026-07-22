@@ -44,8 +44,9 @@ Signature moment:
 - **Completed task:** `P0-MCK-001` reusable connector conformance kit now locks availability, preflight, approval, idempotency, read-back, verification and unavailable semantics.
 - **Completed tasks:** `P0-MCK-002/003` SQLite-backed Mock Jira and Mock Zdoc pass the common connector suite, durable retry and traceability tamper tests.
 - **Completed task:** `P0-AGT-005` receipt-first outbox execution and verification orchestration; production smoke read-back verifies Figma, Mock Jira and Mock Zdoc.
-- **Current task:** `P0-CHG-003` multi-target partial failure and retry E2E is `IN_PROGRESS`.
-- **Current slice:** Inject one connector failure, surface it per target, retry only that target and prove verified target attempts/external IDs remain unchanged.
+- **Completed task:** `P0-CHG-003` multi-target partial retry; deterministic recovery smoke proves successful targets are not duplicated.
+- **Current task:** `P0-FND-003` deterministic demo fixtures and reset is `IN_PROGRESS`.
+- **Current slice:** Add a repeatable seeded reset command/control and prove three clean demo runs produce the same canonical outcome.
 - **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -243,6 +244,7 @@ App commands đã chạy thành công:
 ./run.sh test        # verified 2026-07-22; 56 tests pass, 1 optional live test skipped
 ./run.sh build       # verified 2026-07-22
 ./run.sh smoke       # verified 2026-07-22; Mock provider + canvas
+./run.sh smoke-recovery  # verified 2026-07-22; injected Jira failure + target-only UI retry
 PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke  # verified 2026-07-22
 PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke  # verified 2026-07-22; live allowlist + bounded DS capture + cache + UI
 ```
@@ -327,6 +329,14 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Renderer now shows per-target attempts and verification status; the approval command performs the complete sync workflow.
 - Verification: 56 tests, workspace typecheck, production build and strengthened smoke all pass; smoke requires exactly Figma/Jira/Zdoc to be verified and visible in the execution panel.
 - Next action: inject a deterministic single-target failure and prove UI retry leaves already verified targets unchanged.
+
+### 2026-07-22 - Partial failure recovery
+
+- Added a dedicated recovery smoke mode that injects exactly one Mock Jira execution failure.
+- UI exposes per-target failure and retry; after retry, attempts are Figma 1, Jira 2, Zdoc 1.
+- The test proves Figma/Zdoc external IDs and attempts remain unchanged, then requires all three read-backs to verify.
+- Signature screenshots now include preview, partial failure, final verified state and Figma setup readiness.
+- Next action: implement deterministic demo reset and seeded external stores, then run the full path three times.
 
 ## 10. End-of-session checklist
 

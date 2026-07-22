@@ -28,7 +28,7 @@
 
 ### `P0-FND-003` Synthetic demo fixtures
 
-- **Status:** TODO
+- **Status:** IN_PROGRESS (2026-07-22)
 - **Depends on:** P0-FND-001
 - **Deliver:** meal-ordering idea, discovery sources, 3 questions/options, mock Jira/Zdoc data, design-system fixture.
 - **Acceptance:** fixture deterministic, versioned, không có production URL/PII/secret; có script reset.
@@ -344,11 +344,11 @@
 
 ### `P0-CHG-003` Multi-target execute and partial retry
 
-- **Status:** IN_PROGRESS (2026-07-22)
+- **Status:** DONE (2026-07-22)
 - **Depends on:** P0-CHG-002, P0-FIG-005, P0-MCK-002, P0-MCK-003
 - **Deliver:** sync Figma + mock Jira/Zdoc, per-target receipts/status, retry failed target.
 - **Acceptance:** một target fail không duplicate target đã pass; ít nhất hai target verified sau retry.
-- **Progress:** Figma + Mock Jira + Mock Zdoc đã execute song song qua durable outbox, hiển thị receipt/read-back status theo target và hỗ trợ retry riêng target. Còn thiếu failure-injection E2E chứng minh target đã pass không tăng attempt khi retry target lỗi.
+- **Evidence:** Figma + Mock Jira + Mock Zdoc execute qua durable outbox và hiển thị receipt/read-back status theo target. `./run.sh smoke-recovery` inject Jira failure, retries qua UI, kết thúc verified với attempts `1/2/1`; Figma/Zdoc attempts và external IDs không đổi, đồng thời lưu screenshot partial-failure.
 
 ## Epic E8 - Quality and demo
 

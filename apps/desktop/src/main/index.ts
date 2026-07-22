@@ -450,6 +450,7 @@ function createWindow(): void {
 async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
   try {
     const wait = (milliseconds: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, milliseconds))
+    const expectedFailureTarget = process.env.PM_AGENT_SMOKE_FAIL_TARGET ?? ''
     await wait(2_500)
     const initial = await window.webContents.executeJavaScript(`({
       hasApi: Boolean(window.pmAgent?.threads && window.pmAgent?.chat && window.pmAgent?.lifecycle),
@@ -494,7 +495,11 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       paymentStatus: '',
       actionsApproved: false,
       executionVerified: false,
+      executionStatus: '',
       verifiedTargets: [] as string[],
+      failedTargets: [] as string[],
+      attempts: {} as Record<string, number>,
+      externalIds: {} as Record<string, string>,
       executionPanelReady: false,
     }
     for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -508,15 +513,69 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
           paymentStatus: workspace.runState.productSpec.requirements.find((item) => item.id === 'REQ-PAYMENT')?.status ?? '',
           actionsApproved: workspace.runState.pendingActions.every((action) => action.status === 'approved'),
           executionVerified: workspace.execution?.status === 'verified',
+          executionStatus: workspace.execution?.status ?? '',
           verifiedTargets: workspace.execution?.actions
             .filter((action) => action.status === 'verified')
             .map((action) => action.target)
             .sort() ?? [],
+          failedTargets: workspace.execution?.actions
+            .filter((action) => action.status === 'failed' || action.status === 'verification_failed')
+            .map((action) => action.target)
+            .sort() ?? [],
+          attempts: Object.fromEntries(workspace.execution?.actions.map((action) => [action.target, action.attempts]) ?? []),
+          externalIds: Object.fromEntries(workspace.execution?.actions
+            .filter((action) => action.receipt)
+            .map((action) => [action.target, action.receipt.externalId]) ?? []),
           executionPanelReady: ['Figma', 'Mock Jira', 'Mock Zdoc']
             .every((label) => document.querySelector('.execution-panel')?.innerText.includes(label))
         };
       })()`) as typeof approval
-      if (approval.committed && approval.executionVerified && approval.executionPanelReady) break
+      const expectedExecutionState = expectedFailureTarget
+        ? approval.executionStatus === 'partial_failure' && approval.failedTargets.includes(expectedFailureTarget)
+        : approval.executionVerified
+      if (approval.committed && expectedExecutionState && approval.executionPanelReady) break
+    }
+    const beforeRetry = structuredClone(approval)
+    let recovery = { attempted: false, verified: !expectedFailureTarget, preservedTargets: !expectedFailureTarget }
+    if (expectedFailureTarget) {
+      const failureImage = await window.webContents.capturePage()
+      writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!.replace(/\.png$/, '-partial-failure.png'), failureImage.toPNG())
+      const retryClicked = await window.webContents.executeJavaScript(`(() => {
+        const button = [...document.querySelectorAll('.execution-panel button')]
+          .find((item) => item.title?.toLowerCase().includes(${JSON.stringify(expectedFailureTarget)}));
+        button?.click();
+        return Boolean(button);
+      })()`) as boolean
+      recovery.attempted = retryClicked
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        await wait(250)
+        approval = await window.webContents.executeJavaScript(`(async () => {
+          const [thread] = await window.pmAgent.threads.list();
+          const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
+          return {
+            committed: document.body.innerText.includes('Retry hoàn tất'),
+            specVersion: workspace.runState.productSpec.version,
+            paymentStatus: workspace.runState.productSpec.requirements.find((item) => item.id === 'REQ-PAYMENT')?.status ?? '',
+            actionsApproved: workspace.runState.pendingActions.every((action) => action.status === 'approved'),
+            executionVerified: workspace.execution?.status === 'verified',
+            executionStatus: workspace.execution?.status ?? '',
+            verifiedTargets: workspace.execution?.actions.filter((action) => action.status === 'verified').map((action) => action.target).sort() ?? [],
+            failedTargets: workspace.execution?.actions.filter((action) => action.status === 'failed' || action.status === 'verification_failed').map((action) => action.target).sort() ?? [],
+            attempts: Object.fromEntries(workspace.execution?.actions.map((action) => [action.target, action.attempts]) ?? []),
+            externalIds: Object.fromEntries(workspace.execution?.actions.filter((action) => action.receipt).map((action) => [action.target, action.receipt.externalId]) ?? []),
+            executionPanelReady: ['Figma', 'Mock Jira', 'Mock Zdoc'].every((label) => document.querySelector('.execution-panel')?.innerText.includes(label))
+          };
+        })()`) as typeof approval
+        if (approval.executionVerified && approval.committed) break
+      }
+      const preservedTargets = ['figma', 'jira', 'zdoc'].filter((target) => target !== expectedFailureTarget)
+      recovery = {
+        attempted: retryClicked,
+        verified: approval.executionVerified,
+        preservedTargets: preservedTargets.every((target) =>
+          beforeRetry.attempts[target] === approval.attempts[target]
+          && beforeRetry.externalIds[target] === approval.externalIds[target]),
+      }
     }
     await window.webContents.executeJavaScript(`document.querySelector('.integration-button')?.click()`)
     await wait(500)
@@ -553,9 +612,11 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && approval.paymentStatus === 'removed' && approval.actionsApproved
       && approval.executionVerified && approval.executionPanelReady
       && approval.verifiedTargets.join(',') === 'figma,jira,zdoc'
+      && recovery.attempted === Boolean(expectedFailureTarget)
+      && recovery.verified && recovery.preservedTargets
       && figmaSetup.hasSetupDialog && figmaSetup.runtimeReady && figmaSetup.pluginBuilt && figmaSetup.waitingForPlugin
       && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady))
-    console.log(`[smoke] ${JSON.stringify({ passed, ...initial, ...final, ...approval, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
+    console.log(`[smoke] ${JSON.stringify({ passed, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
     app.exit(passed ? 0 : 1)
   } catch (error) {
     console.error('[smoke] failed', error)
@@ -572,6 +633,8 @@ app.whenReady().then(() => {
   mockFigmaStore = new SqliteMockArtifactStore(databasePath)
   mockJira = new MockJiraConnector(new SqliteMockArtifactStore(databasePath), timestamp)
   mockZdoc = new MockZdocConnector(new SqliteMockArtifactStore(databasePath), timestamp)
+  if (process.env.PM_AGENT_SMOKE_FAIL_TARGET === 'jira') mockJira.failNextExecute()
+  if (process.env.PM_AGENT_SMOKE_FAIL_TARGET === 'zdoc') mockZdoc.failNextExecute()
   figmaIntegration = new FigmaIntegrationStore(databasePath)
   figmaRuntime = new FigmaRuntimeManager(figmaPaths)
   figmaMcp = new FigmaMcpAdapter({ binaryPath: figmaPaths.binaryPath })

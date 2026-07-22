@@ -71,11 +71,16 @@ case "$MODE" in
   build)
     exec "${PNPM[@]}" build
     ;;
-  smoke)
+  smoke|smoke-recovery)
     unset ELECTRON_RUN_AS_NODE
     "${PNPM[@]}" build
+    SMOKE_FAIL_TARGET="${PM_AGENT_SMOKE_FAIL_TARGET:-}"
+    if [[ "$MODE" == "smoke-recovery" ]]; then
+      SMOKE_FAIL_TARGET="jira"
+    fi
     PM_AGENT_USER_DATA="${TMPDIR:-/tmp}/pm-agent-smoke-$$" \
       PM_AGENT_SMOKE_CAPTURE="${TMPDIR:-/tmp}/pm-agent-smoke.png" \
+      PM_AGENT_SMOKE_FAIL_TARGET="$SMOKE_FAIL_TARGET" \
       exec "${PNPM[@]}" exec electron apps/desktop/out/main/index.js
     ;;
   test)
@@ -85,7 +90,7 @@ case "$MODE" in
     exec "${PNPM[@]}" typecheck
     ;;
   *)
-    echo "Usage: ./run.sh [setup|dev|build|test|typecheck|smoke]" >&2
+    echo "Usage: ./run.sh [setup|dev|build|test|typecheck|smoke|smoke-recovery]" >&2
     exit 2
     ;;
 esac
