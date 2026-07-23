@@ -17,7 +17,7 @@ Signature moment:
 - Competition track phù hợp nhất: Workflow Automation Agent.
 - ProductSpec là business source of truth.
 - SQLite là local execution memory/checkpoint/outbox/audit store.
-- tldraw là projection và interaction layer, không phải business database.
+- CanvasDocument/tldraw là creative visual source of truth cho nội dung chưa promote; ProductSpec là business source of truth sau khi người dùng xác nhận promotion.
 - Reasoning provider đề xuất; Agent Core sở hữu workflow, policy, state, approval, retry và verification.
 - Provider dùng native adapters và normalized events; app-owned checkpoint cho phép switch tại safe boundary.
 - Codex integration ưu tiên `codex app-server` qua stdio; remote provider state không phải nguồn resume duy nhất.
@@ -60,9 +60,13 @@ Signature moment:
 - **Completed tasks:** `P0-CAN-002` and `P0-HIS-005` guarded bidirectional canvas commands with an explicit business/presentation undo boundary.
 - **Completed task:** `P0-CHG-001` exact/semantic change resolution and persisted `NEEDS_USER_INPUT` ambiguity handling.
 - **Completed task:** `P0-CAN-003` free Board, optional managed lifecycle filters, semantic workflows, spatial selection context and guarded Dev Canvas Bridge/skill.
-- **Current task:** `P0-QA-001` critical unit and contract gate audit is `IN_PROGRESS` again.
-- **Current slice:** Map the remaining provider/history/canvas/connector requirements to executable tests, with Dev Canvas Bridge acknowledgement/idempotency tracked as hardening rather than a demo blocker.
-- **Last known repository state:** Runnable Electron app with canonical ProductSpec v1/v2 flow, deterministic impact preview, approval persistence, tldraw projection, provider adapters and a verified live Figma read connection.
+- **Completed task:** `P0-CAN-005` tldraw-first canvas agent runtime, explicit ProductSpec promotion and verified promoted-artifact execution.
+- **Completed task:** `P0-CAN-006` application-owned intent routing and receipt-confirmed bidirectional canvas collaboration.
+- **Completed task:** `P0-UI-005` guided continuation, custom answers and canvas prototypes.
+- **Completed task:** `P0-CAN-008` canvas co-creation and prototype scene transformation.
+- **Current task:** `P0-QA-001` unit and contract test gates is `IN_PROGRESS`.
+- **Current slice:** Reconcile the documented critical matrix against the 106-test suite and dedicated production smoke modes; add or record evidence for any uncovered P0 contract.
+- **Last known repository state:** Runnable Electron app with one blank-first infinite canvas per thread, typed Canvas Programs, Mock/Codex provider paths, explicit ProductSpec promotion, deterministic impact preview, approval/outbox/read-back verification and a verified live Figma read connection.
 - **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
 
@@ -84,9 +88,12 @@ Signature moment:
 
 ### Canvas
 
-- Managed shapes chỉ lưu entity ref và presentation metadata; freeform shapes remain tldraw-owned presentation data.
-- ProductSpec gets deterministic initial layout, then reconciliation preserves user positions. Semantic provider commands use IDs/kinds and renderer-owned placement, never raw JavaScript or provider coordinates.
-- Canvas interaction phát domain command; core validate rồi projection render lại.
+- Một thread mới hydrate một CanvasDocument rỗng; không tự project demo ProductSpec hoặc starter components.
+- Canvas presentation operations may auto-apply as one undoable transaction, but promotion into ProductSpec always requires preview plus explicit confirmation.
+- Provider and developer agents receive bounded normalized canvas context and return a validated Canvas Program. Script mode runs against a virtual canvas API with no filesystem, network or Electron IPC.
+- Generated coordinates belong to the scene-layout layer. Small/local graphs use Dagre; large workflows use a topology-derived wrapped journey with nearby exception lanes.
+- Canvas inspect/read-back includes bindings, viewport, selected bounds, recent changes and lint. Overlap/dangling-edge errors must block success.
+- ProductSpec/Figma/Jira/Zdoc remain guarded semantic outputs; raw canvas shapes are never sent directly to external connectors.
 
 ### Figma guard
 
@@ -267,6 +274,103 @@ Signature moment:
 - **Regression test:** `createDraftProductSpec` unit coverage, `./run.sh smoke-lifecycle`, and `./run.sh smoke-flow`; screenshot review confirms a clean three-node flow and `0 Req / 0 Screen / 0 Story`.
 - **Caveat:** Generating a rich ProductSpec from a selected option remains a separate lifecycle capability; an empty draft must not be pitched as a generated delivery spec.
 
+### BUG-014 - Nullable legacy command invalidated a valid Codex Canvas Program
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, real Codex canvas smoke.
+- **Symptom:** `chat:send` rejected an otherwise valid Canvas Program because a recognized legacy command carried `query: null`.
+- **Root cause:** Provider fixed-envelope normalization preserved malformed recognized commands and the discriminated union then parsed nullable fields as required strings.
+- **Fix:** Drop incomplete recognized legacy commands after normalization while preserving unknown command types so unsafe/unsupported commands still fail closed.
+- **Regression test:** Domain contract test covers nullable `remove_card`/connection envelopes; `./run.sh smoke-codex-canvas` parses the native response and completes verified artifacts.
+- **Caveat:** Never silently drop unknown command types; only known fixed-envelope variants may be normalized away.
+
+### BUG-015 - Canvas script worker depended on unsafe eval
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, developer script smoke.
+- **Symptom:** Worker execution failed under renderer CSP because `new Function` requires `unsafe-eval`.
+- **Root cause:** The initial sandbox used dynamic JavaScript compilation even though the exposed API was intentionally small.
+- **Fix:** Interpret the bounded `canvas.node/connect/update/remove` call subset in an isolated Blob worker; CSP permits only the worker, not eval.
+- **Regression test:** `./run.sh smoke-canvas-agent` applies a developer script, persists the shape and continues through promotion/artifact verification.
+- **Caveat:** Loops, imports and arbitrary JavaScript are intentionally unsupported; use an operations program for generated batches.
+
+### BUG-016 - Provider business command overrode explicit canvas intent
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, `P0-CAN-006` full-flow production smoke.
+- **Symptom:** `cho tôi toàn bộ flow đi` drew shapes but chat replied that no requirement could be removed, and no canvas receipt outcome was recorded.
+- **Trigger:** Mock provider interpreted `bộ` as a remove command while the application had already classified the message as an explicit draw.
+- **Root cause:** Provider `remove_card` commands were processed before the application-owned canvas intent branch. Intent routing existed in planning but did not own orchestration priority.
+- **Fix:** Only conversation intent may consume provider business-change commands; draw/edit/promote branches ignore conflicting provider commands and own their response lifecycle.
+- **Regression test:** `./run.sh smoke-canvas-agent` and `./run.sh smoke-codex-canvas` require a blank kickoff, 18-node full flow and receipt-confirmed draw message.
+- **Caveat:** New provider command families must be explicitly authorized by the routed application intent; schema validity alone is not permission.
+
+### BUG-017 - Canvas receipt outran durable snapshot persistence
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, `P0-CAN-006` real Codex production smoke.
+- **Symptom:** Chat receipt succeeded while SQLite still exposed zero canvas nodes; immediate selected edits or developer scripts could not find the just-created flow.
+- **Trigger:** Renderer applied and acknowledged a Canvas Program before the 650 ms debounced canvas save fired.
+- **Root cause:** In-memory tldraw read-back and durable CanvasDocument checkpoint were separate asynchronous paths, but chat treated the first as complete.
+- **Fix:** CanvasWorkspace now persists the exact post-apply snapshot before sending the execution receipt. Main verifies request identity and operation/read-back counts before adding the final assistant outcome.
+- **Regression test:** Both canvas-agent smokes require durable node/edge counts, selected edit persistence and developer script persistence before promotion.
+- **Caveat:** High-frequency manual pointer edits remain debounced; the immediate durability rule applies to agent program transaction boundaries.
+
+### BUG-018 - Animated camera fit was overwritten by the saved pre-animation frame
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, `P0-CAN-007` screenshot review.
+- **Symptom:** A complete workflow existed but reopened/captured at 100% zoom, showing only its first nodes; a later feedback edit could also sit beyond the visible right edge.
+- **Trigger:** Apply a large Canvas Program, animate `zoomToFit`, then save the snapshot immediately.
+- **Root cause:** tldraw camera animation had not advanced when `getSnapshot()` ran, so the durable checkpoint stored the old camera and later synchronization restored it.
+- **Fix:** Agent-owned camera fitting is immediate before checkpoint persistence. Small follow-up edits preserve the camera unless the selected result is outside the viewport, in which case the full scene is fit before saving.
+- **Regression test:** `./run.sh smoke-canvas-agent` captures the full 18-node flow plus selected feedback; reviewed output fits the scene at 27% and keeps both feedback nodes visible.
+- **Caveat:** User-triggered Fit remains animated because it is not immediately followed by an agent transaction checkpoint.
+
+### BUG-019 - Decision completion entered a silent Delivery workspace
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, manual custom discovery flow.
+- **Symptom:** After selecting the third discovery/decision input, the cards disappeared and the agent stopped without exposing the next action; a generic `Tiếp tục` response did not explain canonical state.
+- **Trigger:** Complete discovery, select any MVP option and enter `DELIVERY/ACTIVE`.
+- **Root cause:** Active reasoning was correctly hidden after the state transition, but no Delivery checkpoint replaced it. The selection handler also wrote only a generic assistant sentence and did not record the user's selection as transcript evidence.
+- **Fix:** Record the selected option as a user action, return ProductSpec counts and explicit next choices, render a persistent Delivery guide and make a generic `Tiếp tục` request report the same canonical status.
+- **Regression test:** `./run.sh smoke-lifecycle` requires custom selection evidence, `deliveryGuideReady`, `transparentMessage` and a completed Delivery state.
+- **Caveat:** ProductSpec remains a draft until a separate synthesis/promotion action; the guide does not pretend that choosing an option generated requirements.
+
+### BUG-020 - Prototype intent fell through to the generic workflow planner
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, manual request `Vẽ cho tôi prototype các màn hình`.
+- **Symptom:** The agent announced a canvas draw but produced generic process boxes or no useful screen prototype.
+- **Trigger:** Send an explicit prototype/wireframe request without listing every screen.
+- **Root cause:** Workflow and prototype shared the same draw branch; requests without parsed `gồm ...` steps always used `genericFullWorkflow`.
+- **Fix:** Add a distinct context-aware prototype planner, reserve mobile frame dimensions in scene layout, and render each semantic screen as a tldraw frame with editable low-fidelity child components and bound journey arrows.
+- **Regression test:** canvas planner/layout unit tests require 3-5 `prototype-*` screen nodes; `./run.sh smoke-lifecycle` verifies 5 frames, 35 children and a prototype-specific durable receipt.
+- **Caveat:** These are editable low-fidelity exploration frames, not strict Zalo Design System Figma output; promotion and guarded Figma generation remain separate approved steps.
+
+### BUG-021 - Prototype furniture contaminated ProductSpec promotion
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, `P0-CAN-008` promotion-boundary review.
+- **Symptom:** Scene headers and editable prototype child controls could be interpreted as business screens or requirements when promoting a canvas.
+- **Trigger:** Add prototype furniture carrying stable semantic metadata, then synthesize ProductSpec from the full CanvasDocument.
+- **Root cause:** Promotion selected every shape with a `semanticId`; presentation-only furniture also needs stable semantic IDs for reconciliation but intentionally has no business `nodeKind`.
+- **Fix:** ProductSpec synthesis and promotion provenance now include only shapes carrying both `semanticId` and `nodeKind`. Furniture keeps `visualRole` metadata for inspection and rendering without entering business state.
+- **Regression test:** `packages/canvas/src/index.test.ts` includes prototype header and child decoration fixtures and proves only semantic screens become requirements/screens.
+- **Caveat:** New business node types must define an explicit `nodeKind`; a semantic ID alone is never promotion eligibility.
+
+### BUG-022 - Agent-owned prototype selection opened an intrusive style panel
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, final `P0-CAN-008` screenshot review.
+- **Symptom:** Selecting an agent-generated prototype child opened tldraw's large default style panel over the right side of the canvas.
+- **Trigger:** Select any editable agent-owned shape while reviewing or preparing selection feedback.
+- **Root cause:** The custom UI exposed `DefaultStylePanel` for every single selection and did not distinguish freeform user shapes from generated scene furniture.
+- **Fix:** The style panel is now available only for a selected user-owned shape; generated prototype selections retain handles, Focus and chat-context actions without obscuring the scene.
+- **Regression test:** `./run.sh smoke-lifecycle` selects and edits an agent-owned prototype element; the reviewed 2880x1740 screenshot confirms the panel remains hidden.
+- **Caveat:** Generated shapes remain editable through normal canvas transforms; richer generated-component styling belongs in a compact inspector follow-up.
+
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 
 ```md
@@ -323,14 +427,15 @@ App commands đã chạy thành công:
 ./run.sh setup       # verified 2026-07-22; installs/builds app, Go runtime and Figma plugin bundle
 ./run.sh reset       # verified by shared reset path 2026-07-22; resets then opens dev app
 ./run.sh typecheck   # verified 2026-07-23
-./run.sh test        # verified 2026-07-23; 89 tests pass, 1 optional live test skipped
+./run.sh test        # verified 2026-07-23; 101 tests pass, 1 optional live test skipped
 ./run.sh build       # verified 2026-07-22
 ./run.sh smoke       # verified 2026-07-22; Mock provider + canvas
 ./run.sh smoke-recovery  # verified 2026-07-22; injected Jira failure + target-only UI retry
 ./run.sh smoke-reset # verified 2026-07-22; UI reset + three deterministic seeds + full flow
 ./run.sh smoke-canvas # verified 2026-07-22; drag/undo/delete boundary + invalid command + full flow
 ./run.sh smoke-ambiguity # verified 2026-07-22; NEEDS_USER_INPUT + no-write guard + resolved full flow
-./run.sh smoke-flow  # verified 2026-07-23; free Board + 3 semantic nodes + bound connections + persisted snapshot
+./run.sh smoke-canvas-agent  # verified 2026-07-23; draw + selected feedback + script + promotion + verified artifacts
+./run.sh smoke-codex-canvas  # verified 2026-07-23; real Codex Canvas Program + topology guard + verified artifacts
 PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke  # verified 2026-07-22
 PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke  # verified 2026-07-22; live allowlist + bounded DS capture + cache + UI
 ```
@@ -361,6 +466,7 @@ pnpm typecheck     # verified YYYY-MM-DD
 - Bundle provider SDK vào main kéo optional `ws/bufferutil` vào ESM output; externalize SDK như runtime dependencies.
 - Dùng default tldraw CDN mâu thuẫn local-first CSP; dùng `@tldraw/assets` self-hosted.
 - Clone toàn bộ `tldraw/tldraw` không cần cho SDK embedding; official package `tldraw` + `@tldraw/assets` nhỏ hơn, versioned và đúng quick-start. Chỉ clone monorepo nếu sửa upstream SDK hoặc chạy examples/source development.
+- Fit một graph lớn bằng Dagre thuần tạo strip rộng hơn 4,000 canvas units và zoom 16%; giữ Dagre cho graph nhỏ/local edit, còn graph lớn cần main-journey wrapping và exception lanes.
 
 Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví dụ native SQLite packaging, Figma bridge mutation semantics, tldraw serialization hoặc Electron IPC issue. Mỗi entry cần nêu cách nhận biết và phương án thay thế đã chọn.
 
@@ -522,6 +628,54 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Removed meal-ordering ProductSpec contamination from normal threads; the seeded fixture remains exclusive to the deterministic demo thread.
 - Verification: workspace typecheck, 89 tests + 1 optional live skip, lifecycle/canvas production smokes and `./run.sh smoke-flow` pass; final screenshot reviewed at 1520x940.
 - Next action: resume `P0-QA-001`, then add durable bridge command acknowledgement/idempotency under a follow-up hardening ticket.
+
+### 2026-07-23 - Tldraw-first canvas agent runtime
+
+- Removed the Board/Discover/Decide/Deliver/Change tab surface and implicit ProductSpec projection; every normal thread starts with one empty infinite tldraw canvas.
+- Added typed Canvas Programs, normalized inspect/read-back context, atomic renderer apply, deterministic explicit-draw fallback and a no-eval virtual script worker.
+- Chat and the developer bridge now share operations/script semantics; bridge program calls can wait for a renderer apply/read-back receipt.
+- `Chốt flow này thành MVP` creates an immutable ProductSpec promotion preview. Confirmation commits v2, preflights Figma/Mock Jira/Mock Zdoc, asks for a second write approval and verifies all target read-backs.
+- Real Codex smoke found and fixed nullable legacy-command normalization; provider output missing topology is labeled `provider_augmented` and completed deterministically.
+- Verification: 93 tests + 1 optional live skip, workspace typecheck, `smoke-lifecycle`, `smoke-canvas-agent` and `smoke-codex-canvas` pass; signature remove-payment and connector verification remain green.
+- Next action: continue `P0-QA-001` release-gate audit and package/rehearsal work.
+
+### 2026-07-23 - Intent-gated and receipt-confirmed canvas collaboration
+
+- Added application-owned Vietnamese intent routing so ordinary product conversation cannot mutate canvas and provider commands cannot change a draw/edit/promote request into a business action.
+- Explicit full-flow requests use recent conversation context; the ride-booking demo produces 18 nodes, 19 semantic connections and key exception/retry branches.
+- Vague edits without a selected or named target ask for clarification and preserve the snapshot. Selected edits receive normalized bounds and place additions near the target.
+- Chat canvas programs carry request IDs. Renderer saves the post-apply snapshot before receipt; main verifies the request and read-back before writing exact node/connection outcomes.
+- Recorded the explicit `Sync selection/region with chat` control and dirty-canvas awareness as follow-up scope.
+- Verification: 97 tests + 1 optional live skip, workspace typecheck, Mock `smoke-canvas-agent` and real Codex `smoke-codex-canvas` pass through promotion and verified artifacts.
+- Next action: resume `P0-QA-001` release-gate audit while keeping this bidirectional flow green.
+
+### 2026-07-23 - Scene-aware visual canvas
+
+- Confirmed the installed `tldraw-offline` skill, shared helper set and Codex agent config. Its useful transferable patterns are raw shape/binding inspection, stable IDs, viewport/selection context, high-level arrangement, screenshot review and lint-before-completion.
+- Added renderer-owned scene layout with `@dagrejs/dagre`, collision avoidance against semantic and freeform shapes, stable reconciliation and topology-aware wrapped journeys for large flows.
+- Canvas context now carries bindings, viewport, selected bounds, recent changes and lints. Overlap/dangling-edge errors prevent a false success receipt.
+- Added distinct screen/process/decision/exception visual grammar, labeled semantic arrows, scene health/re-layout/fit controls and a compact seven-tool tldraw workbench. Single-shape style editing remains available; intrusive multi-selection style UI is hidden.
+- Fixed camera/checkpoint ordering and conditionally refit offscreen feedback. Final 2880x1740 screenshot shows the complete ride flow, nearby exception paths and selected feedback at 27% without node overlap.
+- Verification: 101 tests + 1 optional live skip, workspace typecheck, production build and full `./run.sh smoke-canvas-agent` pass through ProductSpec promotion and verified Figma/Mock Jira/Mock Zdoc artifacts.
+- Next action: resume `P0-QA-001`; retain screenshot/lint checks in every canvas release gate.
+
+### 2026-07-23 - Guided Delivery and editable canvas prototypes
+
+- Discovery and decision cards now expose `Khác` with bounded free text; custom input is normalized by Agent Core and remains provider-independent.
+- Selecting an MVP records the user action, reports exact ProductSpec status and opens a Delivery guide with user-flow, prototype and ProductSpec continuations.
+- Explicit prototype requests no longer share the generic workflow fallback. Context-aware planning creates 3-5 semantic screens as movable tldraw frames with editable child controls and bound transitions.
+- Prototype receipts distinguish screen frames from workflow nodes and only confirm after snapshot persistence plus read-back.
+- Verification: 105 tests + 1 optional live skip, boundaries, workspace typecheck, production build and `./run.sh smoke-lifecycle` pass. Reviewed 2880x1740 output shows 5 non-overlapping meal-ordering frames, 35 child elements and a visible Delivery guide.
+- Next action: continue `P0-QA-001` critical-matrix reconciliation and keep the custom lifecycle/prototype smoke green.
+
+### 2026-07-23 - Canvas co-creation and prototype scene transformation
+
+- Replaced repeated generic wireframe rows with five distinct editable meal-ordering screens, scene framing, locked-scope context and a compact two-row journey that fits at 47%.
+- Added Overview, Focus selection, manual-dirty status and explicit Sync. Sync checkpoints the exact tldraw state, sends bounded canvas/selection context into chat and never mutates ProductSpec implicitly.
+- Added visible reasoning, apply, checkpoint and read-back activity so canvas work is no longer a black box. Selection feedback can prefill chat from the selected canvas element.
+- Separated scene furniture from promotable business nodes and hid the intrusive style panel for generated prototype selections.
+- Verification: 106 tests + 1 optional live skip, workspace typecheck, production build and full `./run.sh smoke-lifecycle` pass. Smoke proves custom decision -> five-screen prototype -> pointer edit -> dirty state -> selected feedback -> Sync receipt -> unchanged ProductSpec -> verified artifact path; final 2880x1740 screenshot reviewed.
+- Next action: continue `P0-QA-001` critical-matrix reconciliation and retain the two-way canvas smoke as a release gate.
 
 ## 10. End-of-session checklist
 

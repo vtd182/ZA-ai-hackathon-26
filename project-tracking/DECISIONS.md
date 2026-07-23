@@ -18,13 +18,29 @@ Mỗi quyết định dùng trạng thái `Proposed`, `Accepted`, `Superseded` h
 - **Reason:** Figma tạo bằng chứng trực quan mạnh và cho phép thể hiện Zalo Design System guard. Jira/Zdoc thật tăng setup/risk và có thể vi phạm ràng buộc không dùng production/internal systems.
 - **Consequence:** Mock phải giữ connector semantics thật gồm preflight, execute, receipt, read-back, verify, idempotency và failure injection.
 
-## ADR-003 - ProductSpec là source of truth duy nhất
+## ADR-003 - ProductSpec là business source of truth
 
 - **Status:** Accepted
 - **Date:** 2026-07-22
-- **Decision:** ProductSpec lưu business state; tldraw, Figma, Jira và Zdoc là projections/artifacts.
+- **Decision:** ProductSpec lưu business state đã được xác nhận; CanvasDocument lưu creative visual state trước và sau promotion. Figma, Jira và Zdoc là guarded artifacts.
 - **Reason:** Cần consistency, traceability và deterministic change impact.
-- **Consequence:** Không đọc raw canvas/Figma/Jira như canonical state; external edit chỉ trở thành state sau một reconciliation flow riêng ngoài MVP.
+- **Consequence:** Agent được đọc và sửa raw canvas như một workspace sáng tạo, nhưng canvas chỉ trở thành business state qua promotion preview + confirmation. External edits vẫn cần reconciliation riêng.
+
+## ADR-015 - Tldraw-first collaboration and Canvas Program tools
+
+- **Status:** Accepted
+- **Date:** 2026-07-23
+- **Decision:** Primary surface là một infinite tldraw canvas không có lifecycle tabs. Provider hoặc developer agent thao tác qua application-owned `inspect -> apply/runScript -> readBack` tools; lifecycle chỉ tồn tại trong RunState/timeline.
+- **Reason:** Workflow, prototype, sketch và vùng feedback không cùng một schema cố định. Canvas cần giữ tính sáng tạo của tldraw trong khi business promotion và external writes vẫn có guard rõ ràng.
+- **Consequence:** Presentation writes có thể auto-apply và undo; ProductSpec promotion cần confirmation; scripts chạy trong bounded virtual runtime không có filesystem/network/IPC; explicit draw intent có deterministic fallback để demo không phụ thuộc model output.
+
+## ADR-016 - Application-owned canvas intent and receipt-confirmed chat
+
+- **Status:** Accepted
+- **Date:** 2026-07-23
+- **Decision:** Agent Core routes each message as conversation, draw, scoped edit, ambiguous edit or promotion before consuming provider actions. Canvas success messages require a matching request ID, durable snapshot save and normalized read-back receipt.
+- **Reason:** A provider can over-eagerly draw or misclassify Vietnamese text, while renderer execution can fail or outpace debounced persistence. Neither condition may produce a false “đã cập nhật canvas” response.
+- **Consequence:** Provider Canvas Programs are ignored for non-canvas intents; vague edits require selection or an identified node; renderer persists before acknowledgement; the final assistant outcome reports verified node/connection counts. Explicit selection/region sync remains a follow-up UX control, not a second source of canvas truth.
 
 ## ADR-004 - Figma guard deterministic
 
@@ -113,6 +129,36 @@ Mỗi quyết định dùng trạng thái `Proposed`, `Accepted`, `Superseded` h
 - **Decision:** Paginate/virtualize history-chat, hydrate một active canvas, batch stream/patch persistence và chạy layout/impact ngoài React hot path.
 - **Reason:** Long-running chat và tldraw snapshots có thể gây startup chậm, renderer churn và SQLite write amplification.
 - **Consequence:** Performance budgets và 500-message/500-shape fixture là release gate có đo đạc.
+
+## ADR-015 - Scene-aware canvas layout and verification
+
+- **Status:** Accepted
+- **Date:** 2026-07-23
+- **Decision:** Provider và deterministic planner chỉ mô tả semantic nodes/edges; canvas layer sở hữu generated coordinates, stable-ID reconciliation, collision avoidance, graph arrangement, camera fit và visual lint.
+- **Reason:** tldraw là creative scene, không chỉ là renderer. Model-owned coordinates gây overlap, layer drift và output khó đọc; tool success cũng không chứng minh scene usable.
+- **Alternatives:** Giữ hardcoded grid; cho model sinh absolute coordinates; dùng raw tldraw snapshot làm reasoning contract.
+- **Consequence:** Dagre xử lý graph nhỏ/local edit; graph lớn dùng topology-derived wrapped journey và exception lanes. Canvas context phải mang bindings, viewport/selection geometry, recent changes và lint. Actionable lint chặn success receipt, trong khi developer scripts vẫn có thể dùng explicit coordinates có chủ ý.
+- **Validation:** 101 tests + 1 optional live skip, workspace typecheck, full `smoke-canvas-agent` and reviewed 2880x1740 flow screenshot.
+
+## ADR-016 - Delivery continuation and prototypes are app-owned projections
+
+- **Status:** Accepted
+- **Date:** 2026-07-23
+- **Decision:** Canonical RunState determines which continuation UI is active. After decision, the app exposes explicit Delivery actions; prototype intent maps to semantic screen nodes rendered as editable tldraw frame compositions.
+- **Reason:** Provider prose alone left users without an observable next step, while treating prototypes as workflow boxes discarded the creative and bidirectional value of the canvas.
+- **Alternatives:** Keep continuation entirely in free chat; encode prototype visuals as provider-authored JavaScript; treat every screen as one generic geo node.
+- **Consequence:** Custom answers and decisions cross an app-owned validated boundary. Renderer owns frame composition, coordinates and visual lint; provider/planner owns semantic screen intent. Prototype canvas output remains exploratory and distinct from approved strict-guard Figma generation.
+- **Validation:** 105 tests + 1 optional live skip, workspace typecheck, production build and `smoke-lifecycle` with custom inputs, visible Delivery guide, 5 frames, 35 editable children and durable receipt.
+
+## ADR-017 - Canvas presentation, chat context and ProductSpec promotion are separate boundaries
+
+- **Status:** Accepted
+- **Date:** 2026-07-23
+- **Decision:** Direct tldraw edits mutate only the CanvasDocument and mark it dirty. Explicit Sync first checkpoints the exact snapshot, then sends bounded canvas and selection context into chat without changing ProductSpec. Only semantic shapes with both `semanticId` and `nodeKind` may enter an explicit ProductSpec promotion preview.
+- **Reason:** A creative prototype contains labels, chrome, cards and annotations that are useful for collaboration but are not business requirements. Treating every visual element as domain state contaminates ProductSpec; silently reading every pointer change also creates cost, latency and unpredictable agent behavior.
+- **Alternatives:** Automatically invoke the provider after every edit; promote every shape carrying metadata; keep canvas and chat entirely disconnected.
+- **Consequence:** The user controls when manual work becomes reasoning context, can address a selected region directly, and sees a dirty/synced state. Scene furniture remains editable and inspectable but is excluded from business promotion. Future automatic sync may be added as a deliberate mode over the same checkpoint contract.
+- **Validation:** 106 tests + 1 optional live skip, workspace typecheck, production build and `smoke-lifecycle` proving pointer edit -> dirty state -> selected feedback -> Sync receipt while ProductSpec remains v1.
 
 ## Decision template
 

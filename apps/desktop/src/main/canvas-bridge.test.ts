@@ -17,11 +17,26 @@ describe('CanvasBridge', () => {
       providerId: 'mock', modelId: 'deterministic-v1', updatedAt: '2026-07-23T00:00:00.000Z',
       lastMessage: null, canvasSnapshot: null, messages: [], messageNextCursor: null,
     }
-    const bridge = new CanvasBridge({
+    let bridge!: CanvasBridge
+    bridge = new CanvasBridge({
       homePath: home,
       listThreads: () => [thread],
       getThread: () => thread,
       dispatch: (threadId, commands) => dispatched.push({ threadId, commands }),
+      dispatchProgram: (threadId, batchId, program) => {
+        dispatched.push({ threadId, program })
+        queueMicrotask(() => bridge.acknowledge({
+          schemaVersion: 1,
+          receiptId: `receipt:${batchId}`,
+          batchId,
+          threadId,
+          source: 'developer',
+          appliedOperationCount: program.operations.length,
+          shapeCount: 2,
+          createdShapeIds: ['shape:start', 'shape:done'],
+          at: '2026-07-23T00:00:00.000Z',
+        }))
+      },
     })
     await bridge.start()
     try {
@@ -39,6 +54,25 @@ describe('CanvasBridge', () => {
       })
       expect(response.status).toBe(202)
       expect(dispatched).toHaveLength(1)
+
+      const programResponse = await fetch(`${base}/api/threads/THREAD-1/programs`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${descriptor.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ program: {
+          schemaVersion: 1,
+          mode: 'operations',
+          summary: 'Onboarding',
+          script: null,
+          operations: [
+            { op: 'create_node', id: 'register', label: 'Đăng ký', kind: 'screen' },
+            { op: 'create_node', id: 'verify', label: 'Xác thực', kind: 'screen' },
+            { op: 'connect', id: 'register-verify', fromId: 'register', toId: 'verify' },
+          ],
+        } }),
+      })
+      expect(programResponse.status).toBe(200)
+      expect(await programResponse.json()).toMatchObject({ appliedOperationCount: 3, shapeCount: 2 })
+      expect(dispatched).toHaveLength(2)
     } finally {
       bridge.stop()
     }

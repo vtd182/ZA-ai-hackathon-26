@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { FigmaSetupStatus } from './figma-setup'
 import type { ApproveChangeOutput, CanvasCommandOutput, CanvasGestureCommand, ChangePreview, LifecycleWorkspaceState, PlannedAction } from './lifecycle'
 import type { ProductSpec } from './product-spec'
+import { canvasProgramJsonSchema, canvasProgramSchema, emptyCanvasProgram, normalizeCanvasProgram, type CanvasDocumentContext, type CanvasExecutionFailure, type CanvasExecutionReceipt, type CanvasProgram, type CanvasPromotionPreview } from './canvas-program'
 
 export * from './design-system'
 export * from './artifact-plan'
@@ -13,6 +14,7 @@ export * from './lifecycle'
 export * from './mock-artifact'
 export * from './product-spec'
 export * from './state-machine'
+export * from './canvas-program'
 
 export const workflowViews = ['discover', 'decide', 'deliver', 'change'] as const
 export type WorkflowView = (typeof workflowViews)[number]
@@ -66,6 +68,7 @@ const phaseResultBase = {
   schemaVersion: z.literal(1),
   message: z.string().min(1),
   commands: z.array(providerCommandSchema),
+  canvasProgram: canvasProgramSchema.optional(),
 }
 
 export const discoveryReasoningResultSchema = z.object({
@@ -190,12 +193,16 @@ export interface SendChatInput {
   threadId: string
   content: string
   selection?: CanvasSelectionContext
+  canvas?: CanvasDocumentContext
 }
 
 export interface SendChatOutput {
   userMessage: ChatMessage
   assistantMessage: ChatMessage
   commands: ProviderCommand[]
+  canvasProgram: CanvasProgram
+  canvasProgramSource: 'provider' | 'provider_augmented' | 'deterministic_fallback' | 'none'
+  canvasRequestId: string | null
   changePreview?: ChangePreview
 }
 
@@ -203,6 +210,14 @@ export interface ExternalCanvasCommandBatch {
   threadId: string
   batchId: number
   commands: ProviderCommand[]
+}
+
+export interface ExternalCanvasProgramBatch {
+  threadId: string
+  batchId: number
+  requestId?: string
+  program: CanvasProgram
+  source: CanvasExecutionReceipt['source']
 }
 
 export interface ConfigureProviderInput {
@@ -247,8 +262,11 @@ export interface DesktopApi {
   }
   canvas: {
     save(threadId: string, snapshot: unknown): Promise<void>
+    recordExecution(receipt: CanvasExecutionReceipt): Promise<ChatMessage | null>
+    recordFailure(failure: CanvasExecutionFailure): Promise<ChatMessage | null>
     proposeCommand(threadId: string, command: CanvasGestureCommand): Promise<CanvasCommandOutput>
     onExternalCommands(listener: (batch: ExternalCanvasCommandBatch) => void): () => void
+    onExternalProgram(listener: (batch: ExternalCanvasProgramBatch) => void): () => void
   }
   lifecycle: {
     getWorkspace(threadId: string): Promise<LifecycleWorkspaceState>
@@ -256,7 +274,11 @@ export interface DesktopApi {
     rejectChange(threadId: string): Promise<ApproveChangeOutput>
     retryAction(threadId: string, target: PlannedAction['target']): Promise<ApproveChangeOutput>
     advanceDecision(threadId: string, answers: Record<string, string>): Promise<LifecycleWorkspaceState>
-    selectDecision(threadId: string, optionId: string): Promise<LifecycleWorkspaceState>
+    selectDecision(threadId: string, optionId: string, customTitle?: string): Promise<LifecycleWorkspaceState>
+    previewPromotion(threadId: string, canvas: CanvasDocumentContext): Promise<CanvasPromotionPreview>
+    commitPromotion(threadId: string, payloadHash: string): Promise<LifecycleWorkspaceState>
+    approveArtifacts(threadId: string): Promise<ApproveChangeOutput>
+    rejectArtifacts(threadId: string): Promise<ApproveChangeOutput>
   }
   figma: {
     status(): Promise<FigmaSetupStatus>
@@ -358,12 +380,13 @@ export function reasoningJsonSchemaForPhase(phase: WorkflowView): Record<string,
   return {
     type: 'object',
     additionalProperties: false,
-    required: ['schemaVersion', 'phase', 'message', 'commands', 'phaseData'],
+    required: ['schemaVersion', 'phase', 'message', 'commands', 'canvasProgram', 'phaseData'],
     properties: {
       schemaVersion: { type: 'integer', const: 1 },
       phase: { type: 'string', const: phase },
       message: { type: 'string' },
       commands: commandJsonSchema,
+      canvasProgram: canvasProgramJsonSchema,
       phaseData: phaseDataJsonSchemas[phase],
     },
   }
@@ -416,15 +439,13 @@ function normalizeProviderCommandEnvelope(value: unknown, expectedPhase: Workflo
       const toId = nonEmptyString(command.toId)
       if (fromId && toId && fromId !== toId) {
         commands.push({ type: 'connect_canvas_nodes', fromId, toId, ...(label ? { label } : {}) })
-      } else {
-        commands.push(raw)
       }
-    } else if (command.type !== 'switch_view') {
+    } else if (!['add_card', 'remove_card', 'focus_card', 'switch_view', 'create_canvas_node', 'connect_canvas_nodes'].includes(String(command.type))) {
       commands.push(raw)
     }
   }
 
-  return { ...result, commands }
+  return { ...result, commands, canvasProgram: normalizeCanvasProgram(result.canvasProgram) ?? emptyCanvasProgram }
 }
 
 export function extractJson(text: string): unknown {

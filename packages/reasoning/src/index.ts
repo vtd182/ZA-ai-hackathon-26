@@ -8,6 +8,7 @@ import {
   parsePhaseReasoningResult,
   reasoningJsonSchemaForPhase,
   type CanvasSelectionContext,
+  type CanvasDocumentContext,
   type ChatMessage,
   type ProviderProbe,
   type PhaseReasoningResult,
@@ -24,6 +25,7 @@ export interface ReasoningRequest {
   message: string
   recentMessages: ChatMessage[]
   selection?: CanvasSelectionContext
+  canvas?: CanvasDocumentContext
   remoteRef: string | null
 }
 
@@ -72,13 +74,15 @@ const anthropicCapabilities: ProviderCapabilities = { structuredOutput: true, st
 const systemPolicy = `Bạn là reasoning provider cho PM Lifecycle Agent.
 Mục tiêu: giúp PM biến ý tưởng thành ProductSpec có traceability và thay đổi scope có kiểm soát.
 Chỉ trả về JSON đúng schema được cung cấp. Không dùng markdown.
-Mỗi command luôn có đủ type, label, query, view, nodeId, nodeKind, fromId, toId; field không áp dụng phải là null.
+Mỗi legacy command luôn có đủ type, label, query, view, nodeId, nodeKind, fromId, toId; field không áp dụng phải là null.
+Mỗi response luôn có canvasProgram. Dùng mode operations để vẽ/sửa canvas, mode script chỉ khi lặp hoặc bố cục phức tạp, và mode none khi không cần đổi canvas.
+Mỗi canvas operation luôn có đủ op, id, label, kind, fromId, toId, color, x, y; field không áp dụng phải là null.
 Luôn trả phase đúng phase hiện tại và phaseData đúng schema phase được cung cấp.
 Các lệnh canvas chỉ là đề xuất hiển thị; không tuyên bố đã ghi Figma, Jira hay Zdoc.
 Trả lời bằng tiếng Việt, ngắn gọn, nêu outcome và bước quyết định tiếp theo.
 Khi người dùng yêu cầu bỏ một scope, dùng remove_card. Khi yêu cầu thêm, dùng add_card.
 Khi yêu cầu xem một vùng lifecycle, dùng switch_view. Khi muốn tìm/nhấn mạnh entity, dùng focus_card.
-Khi người dùng muốn brainstorm, vẽ workflow hoặc prototype, dùng nhiều create_canvas_node rồi connect_canvas_nodes bằng nodeId ổn định. Không đặt lifecycle view cho các node tự do.`
+Khi người dùng muốn brainstorm, vẽ workflow hoặc prototype, canvasProgram phải tạo đúng các node người dùng nêu và nối chúng bằng ID ổn định. Không thay bằng một flow mẫu chung. Canvas presentation được tự do dùng tọa độ; ProductSpec và Figma không nhận raw tọa độ này.`
 
 function buildPrompt(request: ReasoningRequest): string {
   const transcript = request.recentMessages
@@ -91,7 +95,10 @@ function buildPrompt(request: ReasoningRequest): string {
       .map((item) => `${item.entityId ?? item.shapeId}:${item.label}`)
       .join(' | ') || request.selection.entityId}`
     : 'Canvas không có entity được chọn.'
-  return `${systemPolicy}\n\nPhase hiện tại: ${request.phase}\n${selection}\n\nLịch sử gần đây:\n${transcript}\n\nYêu cầu mới:\n${request.message}`
+  const canvas = request.canvas
+    ? `Canvas revision ${request.canvas.revision}, ${request.canvas.shapes.length} shapes: ${request.canvas.shapes.slice(0, 40).map((shape) => `${shape.semanticId ?? shape.id}:${shape.label || shape.type}`).join(' | ') || 'trống'}`
+    : 'Canvas chưa có read-back context.'
+  return `${systemPolicy}\n\nPhase hiện tại: ${request.phase}\n${selection}\n${canvas}\n\nLịch sử gần đây:\n${transcript}\n\nYêu cầu mới:\n${request.message}`
 }
 
 function parseProviderText(text: string, phase: WorkflowView): PhaseReasoningResult {

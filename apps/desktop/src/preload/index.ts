@@ -1,5 +1,5 @@
 import electron from 'electron'
-import type { ConfigureProviderInput, DesktopApi, ExternalCanvasCommandBatch, SendChatInput } from '@pm-agent/domain'
+import type { ConfigureProviderInput, DesktopApi, ExternalCanvasCommandBatch, ExternalCanvasProgramBatch, SendChatInput } from '@pm-agent/domain'
 
 const { contextBridge, ipcRenderer } = electron
 
@@ -14,11 +14,18 @@ const api: DesktopApi = {
   },
   canvas: {
     save: (threadId, snapshot) => ipcRenderer.invoke('canvas:save', threadId, snapshot),
+    recordExecution: (receipt) => ipcRenderer.invoke('canvas:record-execution', receipt),
+    recordFailure: (failure) => ipcRenderer.invoke('canvas:record-failure', failure),
     proposeCommand: (threadId, command) => ipcRenderer.invoke('canvas:propose-command', threadId, command),
     onExternalCommands: (listener) => {
       const handler = (_event: Electron.IpcRendererEvent, batch: ExternalCanvasCommandBatch): void => listener(batch)
       ipcRenderer.on('canvas:external-commands', handler)
       return () => ipcRenderer.removeListener('canvas:external-commands', handler)
+    },
+    onExternalProgram: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, batch: ExternalCanvasProgramBatch): void => listener(batch)
+      ipcRenderer.on('canvas:external-program', handler)
+      return () => ipcRenderer.removeListener('canvas:external-program', handler)
     },
   },
   lifecycle: {
@@ -27,7 +34,11 @@ const api: DesktopApi = {
     rejectChange: (threadId) => ipcRenderer.invoke('lifecycle:reject-change', threadId),
     retryAction: (threadId, target) => ipcRenderer.invoke('lifecycle:retry-action', threadId, target),
     advanceDecision: (threadId, answers) => ipcRenderer.invoke('lifecycle:advance-decision', threadId, answers),
-    selectDecision: (threadId, optionId) => ipcRenderer.invoke('lifecycle:select-decision', threadId, optionId),
+    selectDecision: (threadId, optionId, customTitle) => ipcRenderer.invoke('lifecycle:select-decision', threadId, optionId, customTitle),
+    previewPromotion: (threadId, canvas) => ipcRenderer.invoke('lifecycle:preview-promotion', threadId, canvas),
+    commitPromotion: (threadId, payloadHash) => ipcRenderer.invoke('lifecycle:commit-promotion', threadId, payloadHash),
+    approveArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:approve-artifacts', threadId),
+    rejectArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:reject-artifacts', threadId),
   },
   figma: {
     status: () => ipcRenderer.invoke('figma:status'),

@@ -9,27 +9,26 @@ The primary demo remains PO chat -> collaborative canvas -> approved ProductSpec
 ```text
 Codex / Claude skill
   -> 127.0.0.1 + per-launch bearer token
-  -> validated semantic CanvasCommand batch
-  -> Electron main dispatch
-  -> active renderer + tldraw
-  -> debounced CanvasDocument checkpoint
+  -> inspect / apply operations / run virtual script
+  -> Electron main validates and dispatches
+  -> active renderer CanvasService + tldraw
+  -> normalized read-back + CanvasDocument checkpoint
 ```
 
-The bridge never exposes arbitrary JavaScript, filesystem access, provider credentials, connector calls, approval decisions or direct ProductSpec mutation. ProductSpec-backed shapes continue through guarded domain commands.
+The bridge accepts a bounded JavaScript-call subset only for `canvas.node/connect/update/remove`. A worker interprets these calls without `eval`/`Function` and has no filesystem, network, Node, Electron IPC, provider credentials, connector calls, approval decisions or direct ProductSpec mutation. ProductSpec promotion and artifact writes stay in Agent Core.
 
 ## Current API
 
 - `GET /api/threads`: bounded active thread summaries.
-- `GET /api/threads/:id/canvas`: thread identity and latest persisted tldraw snapshot.
-- `POST /api/threads/:id/commands`: 1-100 validated semantic commands; opens the target thread and applies them on its free canvas.
+- `GET /api/threads/:id/canvas`: bounded normalized canvas context; raw snapshot is available only in explicit diagnostic mode.
+- `POST /api/threads/:id/programs`: validated operation program; opens the target thread, applies one undoable transaction and returns an execution acknowledgement/read-back receipt.
+- `POST /api/threads/:id/scripts`: bounded virtual-API script with timeout and operation limit; returns the same receipt contract.
+- `POST /api/threads/:id/commands`: compatibility alias while older skills migrate to programs.
 
 The descriptor is `~/.pm-lifecycle-agent/canvas-bridge.json`, mode `0600`, and is deleted on clean quit. The server binds only to `127.0.0.1` on an ephemeral port.
 
 ## Next hardening
 
-- Persist command inbox and idempotency key before renderer dispatch so commands survive a renderer restart.
-- Return apply acknowledgement with canvas checkpoint ID instead of HTTP `202` only.
-- Add bounded normalized shape reads instead of requiring agents to inspect raw snapshot records.
-- Add screenshot capture and lint endpoints without arbitrary code execution.
+- Persist program inbox and idempotency key before renderer dispatch so work survives a renderer restart.
+- Add region screenshot capture and visual lint endpoints.
 - Add explicit user toggle and visible bridge status before packaging.
-

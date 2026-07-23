@@ -46,6 +46,28 @@ describe('reasoning result contract', () => {
     }, 'discover')).toThrow()
   })
 
+  it('drops recognized legacy commands whose nullable fields do not form a command', () => {
+    const result = parsePhaseReasoningResult({
+      schemaVersion: 1,
+      phase: 'discover',
+      message: 'Canvas program remains usable.',
+      commands: [
+        { type: 'remove_card', label: null, query: null, view: null, nodeId: null, nodeKind: null, fromId: null, toId: null },
+        { type: 'connect_canvas_nodes', label: null, query: null, view: null, nodeId: null, nodeKind: null, fromId: null, toId: null },
+      ],
+      canvasProgram: {
+        schemaVersion: 1,
+        mode: 'operations',
+        summary: 'Flow',
+        script: null,
+        operations: [{ op: 'create_node', id: 'register', label: 'Đăng ký', kind: 'screen', fromId: null, toId: null, color: null, x: null, y: null }],
+      },
+      phaseData: { questions: [], assumptions: [] },
+    }, 'discover')
+    expect(result.commands).toEqual([])
+    expect(result.canvasProgram?.operations).toHaveLength(1)
+  })
+
   it('extracts fenced JSON', () => {
     expect(extractJson('```json\n{"message":"ok","commands":[]}\n```')).toEqual({
       message: 'ok',

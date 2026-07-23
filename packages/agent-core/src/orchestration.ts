@@ -13,6 +13,26 @@ export interface ReasoningCheckpoint {
   createdAt: string
 }
 
+export const customDecisionOptionId = 'CUSTOM'
+
+type ClarificationQuestion = Extract<PhaseReasoningResult, { phase: 'discover' }>['phaseData']['questions'][number]
+
+export function normalizeClarificationAnswers(
+  questions: ClarificationQuestion[],
+  answers: Record<string, string>,
+): Record<string, string> {
+  if (questions.length === 0) throw new Error('Discovery checkpoint không có clarification')
+  const normalized: Record<string, string> = {}
+  for (const question of questions) {
+    const answer = answers[question.id]?.trim() ?? ''
+    if (answer.length < 1 || answer.length > 240) {
+      throw new Error(`Câu trả lời cho ${question.id} phải có từ 1 đến 240 ký tự`)
+    }
+    normalized[question.id] = answer
+  }
+  return normalized
+}
+
 export function advanceReasoningPhase(
   state: RunState,
   untrustedResult: unknown,
@@ -36,9 +56,14 @@ export function selectDecisionOption(
   decisionResult: unknown,
   optionId: string,
   selectedAt: string,
+  customTitle?: string,
 ): RunState {
   const result = parsePhaseReasoningResult(decisionResult, 'decide')
-  if (result.phase !== 'decide' || !result.phaseData.options.some((option) => option.id === optionId)) {
+  const customOption = optionId === customDecisionOptionId
+  const normalizedCustomTitle = customTitle?.trim() ?? ''
+  const validCustomOption = customOption && normalizedCustomTitle.length >= 2 && normalizedCustomTitle.length <= 200
+  if (result.phase !== 'decide'
+    || (!validCustomOption && !result.phaseData.options.some((option) => option.id === optionId))) {
     throw new Error(`Decision option does not exist: ${optionId}`)
   }
   return transitionRunState(state, 'SELECT_OPTION', selectedAt)

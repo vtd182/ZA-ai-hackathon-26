@@ -1,4 +1,5 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { legacyCommandsToCanvasProgram } from '@pm-agent/canvas'
 import {
   Archive,
   Bot,
@@ -8,11 +9,15 @@ import {
   ChevronRight,
   CircleAlert,
   ExternalLink,
+  FileText,
   FolderOpen,
   GitCompareArrows,
+  LayoutTemplate,
   LoaderCircle,
+  MessageSquareText,
   Plus,
   RefreshCw,
+  Route,
   RotateCcw,
   Search,
   Send,
@@ -23,13 +28,15 @@ import {
 } from 'lucide-react'
 import type {
   CanvasSelectionContext,
-  CanvasGestureCommand,
+  CanvasDocumentContext,
+  CanvasExecutionReceipt,
+  CanvasProgram,
+  CanvasPromotionPreview,
   ChangePreview,
   ChatMessage,
   FigmaSetupStatus,
   ExecutionSummary,
   LifecycleWorkspaceState,
-  ProviderCommand,
   ProviderProbe,
   ProviderProfile,
   ThreadDetail,
@@ -37,6 +44,8 @@ import type {
   PlannedAction,
   PhaseReasoningResult,
 } from '@pm-agent/domain'
+
+const noCanvasProgram: CanvasProgram = { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null }
 
 const CanvasWorkspace = lazy(async () => {
   const module = await import('./CanvasWorkspace')
@@ -56,6 +65,11 @@ function errorText(error: unknown): string {
   return 'Đã xảy ra lỗi không xác định'
 }
 
+function isPromotionIntent(value: string): boolean {
+  const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  return /(chot|xac nhan|promote).*(flow|canvas|mvp|productspec)|chot flow/.test(normalized)
+}
+
 export function App(): React.JSX.Element {
   const [threads, setThreads] = useState<ThreadSummary[]>([])
   const [activeThread, setActiveThread] = useState<ThreadDetail | null>(null)
@@ -72,8 +86,10 @@ export function App(): React.JSX.Element {
   const [pendingPaidProvider, setPendingPaidProvider] = useState<ProviderProfile | null>(null)
   const [figmaStatus, setFigmaStatus] = useState<FigmaSetupStatus | null>(null)
   const [selection, setSelection] = useState<CanvasSelectionContext | undefined>()
+  const [canvasContext, setCanvasContext] = useState<CanvasDocumentContext | undefined>()
   const [lifecycleWorkspace, setLifecycleWorkspace] = useState<LifecycleWorkspaceState | null>(null)
-  const [commandBatch, setCommandBatch] = useState<{ id: number; commands: ProviderCommand[] }>({ id: 0, commands: [] })
+  const [promotionPreview, setPromotionPreview] = useState<CanvasPromotionPreview | null>(null)
+  const [programBatch, setProgramBatch] = useState<{ id: number; requestId?: string; program: CanvasProgram; source: CanvasExecutionReceipt['source'] }>({ id: 0, program: noCanvasProgram, source: 'provider' })
 
   const refreshThreads = useCallback(async (query = search) => {
     const next = await window.pmAgent.threads.list(query)
@@ -92,7 +108,9 @@ export function App(): React.JSX.Element {
       setActiveThread(detail)
       setLifecycleWorkspace(workspace)
       setSelection(undefined)
-      setCommandBatch({ id: 0, commands: [] })
+      setCanvasContext(undefined)
+      setPromotionPreview(null)
+      setProgramBatch({ id: 0, program: noCanvasProgram, source: 'provider' })
     } catch (nextError) {
       setError(errorText(nextError))
     } finally {
@@ -127,7 +145,8 @@ export function App(): React.JSX.Element {
         setActiveThread(detail)
         setLifecycleWorkspace(workspace)
         setSelection(undefined)
-        setCommandBatch({ id: batch.batchId, commands: batch.commands })
+        const program = legacyCommandsToCanvasProgram(batch.commands)
+        if (program) setProgramBatch({ id: batch.batchId, program, source: 'developer' })
         await refreshThreads()
       } catch (nextError) {
         setError(errorText(nextError))
@@ -136,6 +155,13 @@ export function App(): React.JSX.Element {
       }
     })()
   }), [refreshThreads])
+
+  useEffect(() => window.pmAgent.canvas.onExternalProgram((batch) => {
+    void (async () => {
+      if (activeThread?.id !== batch.threadId) await openThread(batch.threadId)
+      setProgramBatch({ id: batch.batchId, ...(batch.requestId ? { requestId: batch.requestId } : {}), program: batch.program, source: batch.source })
+    })().catch((nextError) => setError(errorText(nextError)))
+  }), [activeThread?.id, openThread])
 
   useEffect(() => {
     if (!figmaSetupOpen) return
@@ -159,7 +185,9 @@ export function App(): React.JSX.Element {
       setActiveThread(detail)
       setLifecycleWorkspace(workspace)
       setSelection(undefined)
-      setCommandBatch({ id: 0, commands: [] })
+      setCanvasContext(undefined)
+      setPromotionPreview(null)
+      setProgramBatch({ id: 0, program: noCanvasProgram, source: 'provider' })
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
@@ -194,7 +222,11 @@ export function App(): React.JSX.Element {
     }
   }
 
-  const sendMessage = async (content: string): Promise<void> => {
+  const sendMessage = async (
+    content: string,
+    canvasOverride?: CanvasDocumentContext,
+    selectionOverride?: CanvasSelectionContext,
+  ): Promise<void> => {
     if (!activeThread || sending || !content.trim()) return
     const optimistic: ChatMessage = {
       id: `optimistic-${Date.now()}`,
@@ -207,10 +239,13 @@ export function App(): React.JSX.Element {
     setSending(true)
     setError(null)
     try {
+      const effectiveSelection = selectionOverride ?? selection
+      const effectiveCanvas = canvasOverride ?? canvasContext
       const result = await window.pmAgent.chat.send({
         threadId: activeThread.id,
         content: content.trim(),
-        ...(selection ? { selection } : {}),
+        ...(effectiveSelection ? { selection: effectiveSelection } : {}),
+        ...(effectiveCanvas ? { canvas: effectiveCanvas } : {}),
       })
       const [detail, workspace] = await Promise.all([
         window.pmAgent.threads.get(activeThread.id),
@@ -218,7 +253,15 @@ export function App(): React.JSX.Element {
       ])
       setActiveThread(detail)
       setLifecycleWorkspace(workspace)
-      setCommandBatch({ id: Date.now(), commands: result.commands })
+      setProgramBatch({
+        id: Date.now(),
+        ...(result.canvasRequestId ? { requestId: result.canvasRequestId } : {}),
+        program: result.canvasProgram,
+        source: result.canvasProgramSource === 'none' ? 'provider' : result.canvasProgramSource,
+      })
+      if (isPromotionIntent(content) && canvasContext && canvasContext.shapes.length > 0) {
+        setPromotionPreview(await window.pmAgent.lifecycle.previewPromotion(activeThread.id, canvasContext))
+      }
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
@@ -252,7 +295,6 @@ export function App(): React.JSX.Element {
       const result = await window.pmAgent.lifecycle.approveChange(activeThread.id)
       setLifecycleWorkspace(result)
       setActiveThread(await window.pmAgent.threads.get(activeThread.id))
-      setCommandBatch({ id: Date.now(), commands: [{ type: 'switch_view', view: 'change' }] })
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
@@ -269,7 +311,6 @@ export function App(): React.JSX.Element {
       const result = await window.pmAgent.lifecycle.rejectChange(activeThread.id)
       setLifecycleWorkspace(result)
       setActiveThread(await window.pmAgent.threads.get(activeThread.id))
-      setCommandBatch({ id: Date.now(), commands: [{ type: 'switch_view', view: 'deliver' }] })
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
@@ -294,6 +335,41 @@ export function App(): React.JSX.Element {
     }
   }
 
+  const commitPromotion = async (): Promise<void> => {
+    if (!activeThread || !promotionPreview || approving) return
+    setApproving(true)
+    setError(null)
+    try {
+      const workspace = await window.pmAgent.lifecycle.commitPromotion(activeThread.id, promotionPreview.payloadHash)
+      setLifecycleWorkspace(workspace)
+      setPromotionPreview(null)
+      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setApproving(false)
+    }
+  }
+
+  const decideArtifacts = async (decision: 'approve' | 'reject'): Promise<void> => {
+    if (!activeThread || approving) return
+    setApproving(true)
+    setError(null)
+    try {
+      const workspace = decision === 'approve'
+        ? await window.pmAgent.lifecycle.approveArtifacts(activeThread.id)
+        : await window.pmAgent.lifecycle.rejectArtifacts(activeThread.id)
+      setLifecycleWorkspace(workspace)
+      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setApproving(false)
+    }
+  }
+
   const advanceDecision = async (answers: Record<string, string>): Promise<void> => {
     if (!activeThread || sending) return
     setSending(true)
@@ -302,7 +378,6 @@ export function App(): React.JSX.Element {
       const workspace = await window.pmAgent.lifecycle.advanceDecision(activeThread.id, answers)
       setLifecycleWorkspace(workspace)
       setActiveThread(await window.pmAgent.threads.get(activeThread.id))
-      setCommandBatch({ id: Date.now(), commands: [{ type: 'switch_view', view: 'decide' }] })
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
@@ -311,15 +386,14 @@ export function App(): React.JSX.Element {
     }
   }
 
-  const selectDecision = async (optionId: string): Promise<void> => {
+  const selectDecision = async (optionId: string, customTitle?: string): Promise<void> => {
     if (!activeThread || sending) return
     setSending(true)
     setError(null)
     try {
-      const workspace = await window.pmAgent.lifecycle.selectDecision(activeThread.id, optionId)
+      const workspace = await window.pmAgent.lifecycle.selectDecision(activeThread.id, optionId, customTitle)
       setLifecycleWorkspace(workspace)
       setActiveThread(await window.pmAgent.threads.get(activeThread.id))
-      setCommandBatch({ id: Date.now(), commands: [{ type: 'switch_view', view: 'deliver' }] })
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
@@ -328,31 +402,7 @@ export function App(): React.JSX.Element {
     }
   }
 
-  const proposeCanvasCommand = useCallback(async (command: CanvasGestureCommand): Promise<void> => {
-    if (!activeThread || approving) return
-    if (typeof window.pmAgent.canvas.proposeCommand !== 'function') {
-      setError('Electron runtime đang dùng preload cũ. Hãy thoát hẳn ứng dụng rồi chạy lại ./run.sh reset.')
-      return
-    }
-    setApproving(true)
-    setError(null)
-    try {
-      const workspace = await window.pmAgent.canvas.proposeCommand(activeThread.id, command)
-      setLifecycleWorkspace(workspace)
-      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
-      setCommandBatch({ id: Date.now(), commands: [{ type: 'switch_view', view: 'change' }] })
-      await refreshThreads()
-    } catch (nextError) {
-      setError(errorText(nextError))
-    } finally {
-      setApproving(false)
-    }
-  }, [activeThread, approving, refreshThreads])
-
   const activeProfile = profiles.find((profile) => profile.id === activeThread?.providerId)
-  const projectedProductSpec = lifecycleWorkspace?.runState.phase === 'IDEA_INTAKE'
-    ? undefined
-    : lifecycleWorkspace?.runState.productSpec
 
   const resetDemo = async (): Promise<void> => {
     setLoading(true)
@@ -363,7 +413,9 @@ export function App(): React.JSX.Element {
       setActiveThread(result.thread)
       setLifecycleWorkspace(result.workspace)
       setSelection(undefined)
-      setCommandBatch({ id: 0, commands: [] })
+      setCanvasContext(undefined)
+      setPromotionPreview(null)
+      setProgramBatch({ id: 0, program: noCanvasProgram, source: 'provider' })
       setThreads(await window.pmAgent.threads.list())
       setResetOpen(false)
     } catch (nextError) {
@@ -472,14 +524,36 @@ export function App(): React.JSX.Element {
                 key={activeThread.id}
                 threadId={activeThread.id}
                 snapshot={activeThread.canvasSnapshot}
-                commandBatch={commandBatch}
-                productSpec={projectedProductSpec}
-                changePreview={lifecycleWorkspace?.preview ?? undefined}
-                changeEntityIds={lifecycleWorkspace?.preview?.affectedEntityIds
-                  ?? lifecycleWorkspace?.runState.pendingActions.flatMap((action) => action.entityIds)
-                  ?? []}
-                onSelectionChange={setSelection}
-                onGestureProposal={(command) => void proposeCanvasCommand(command)}
+                programBatch={programBatch}
+                agentBusy={sending}
+                onContextChange={(context, nextSelection) => {
+                  setCanvasContext(context)
+                  setSelection(nextSelection)
+                }}
+                onExecution={async (receipt) => {
+                  await window.pmAgent.canvas.recordExecution(receipt)
+                  if (activeThread?.id === receipt.threadId) {
+                    setActiveThread(await window.pmAgent.threads.get(receipt.threadId))
+                    await refreshThreads()
+                  }
+                }}
+                onExecutionError={async (failure) => {
+                  await window.pmAgent.canvas.recordFailure(failure)
+                  if (activeThread?.id === failure.threadId) {
+                    setActiveThread(await window.pmAgent.threads.get(failure.threadId))
+                    await refreshThreads()
+                  }
+                }}
+                onSync={async (context, nextSelection) => {
+                  await sendMessage(
+                    nextSelection
+                      ? `Sync canvas với chat và đọc vùng đang chọn: ${nextSelection.label}`
+                      : 'Sync canvas với chat và tóm tắt scene hiện tại',
+                    context,
+                    nextSelection,
+                  )
+                }}
+                onError={setError}
               />
             </Suspense>
           ) : (
@@ -503,6 +577,10 @@ export function App(): React.JSX.Element {
         execution={lifecycleWorkspace?.execution ?? undefined}
         reasoning={lifecycleWorkspace?.reasoning ?? undefined}
         productSpec={lifecycleWorkspace?.runState.productSpec}
+        deliveryActive={lifecycleWorkspace?.runState.phase === 'DELIVERY' && lifecycleWorkspace.runState.status === 'ACTIVE'}
+        canvasItemCount={canvasContext?.shapes.filter((shape) => shape.semanticId && shape.nodeKind).length ?? 0}
+        promotionPreview={promotionPreview ?? undefined}
+        artifactActions={lifecycleWorkspace?.runState.pendingIntent ? [] : lifecycleWorkspace?.runState.pendingActions ?? []}
         disabled={!activeThread}
         onSend={sendMessage}
         onStop={stopMessage}
@@ -512,6 +590,10 @@ export function App(): React.JSX.Element {
         onRetry={retryAction}
         onAdvanceDecision={advanceDecision}
         onSelectDecision={selectDecision}
+        onCommitPromotion={commitPromotion}
+        onCancelPromotion={() => setPromotionPreview(null)}
+        onApproveArtifacts={() => decideArtifacts('approve')}
+        onRejectArtifacts={() => decideArtifacts('reject')}
       />
 
       {settingsProfile && (
@@ -684,6 +766,10 @@ function ChatPanel({
   execution,
   reasoning,
   productSpec,
+  deliveryActive,
+  canvasItemCount,
+  promotionPreview,
+  artifactActions,
   disabled,
   onSend,
   onStop,
@@ -693,6 +779,10 @@ function ChatPanel({
   onRetry,
   onAdvanceDecision,
   onSelectDecision,
+  onCommitPromotion,
+  onCancelPromotion,
+  onApproveArtifacts,
+  onRejectArtifacts,
 }: {
   messages: ChatMessage[]
   hasEarlierMessages: boolean
@@ -704,6 +794,10 @@ function ChatPanel({
   execution?: ExecutionSummary
   reasoning?: PhaseReasoningResult
   productSpec?: import('@pm-agent/domain').ProductSpec
+  deliveryActive: boolean
+  canvasItemCount: number
+  promotionPreview?: CanvasPromotionPreview
+  artifactActions: PlannedAction[]
   disabled: boolean
   onSend(content: string): Promise<void>
   onStop(): Promise<void>
@@ -712,9 +806,14 @@ function ChatPanel({
   onReject(): Promise<void>
   onRetry(target: PlannedAction['target']): Promise<void>
   onAdvanceDecision(answers: Record<string, string>): Promise<void>
-  onSelectDecision(optionId: string): Promise<void>
+  onSelectDecision(optionId: string, customTitle?: string): Promise<void>
+  onCommitPromotion(): Promise<void>
+  onCancelPromotion(): void
+  onApproveArtifacts(): Promise<void>
+  onRejectArtifacts(): Promise<void>
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
+  const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const canSend = !disabled && !sending && draft.trim().length > 0
 
   const submit = async (): Promise<void> => {
@@ -732,8 +831,15 @@ function ChatPanel({
       </div>
       {selection && (
         <div className="selection-chip">
-          <span>Đang chọn</span>
-          <strong>{selection.label.replace('\n', ' · ')}</strong>
+          <div><span>Context canvas</span><strong>{selection.label.replace('\n', ' · ')}</strong></div>
+          <button
+            type="button"
+            title="Chat về vùng đang chọn"
+            onClick={() => {
+              setDraft(`Về ${selection.label.replace('\n', ' · ')}: `)
+              requestAnimationFrame(() => composerRef.current?.focus())
+            }}
+          ><MessageSquareText size={15} /></button>
         </div>
       )}
       {productSpec && <ProductSpecInspector productSpec={productSpec} selection={selection} />}
@@ -755,6 +861,35 @@ function ChatPanel({
         )}
       </div>
       {preview && <ChangePreviewPanel preview={preview} approving={approving} onApprove={onApprove} onReject={onReject} />}
+      {promotionPreview && (
+        <section className="promotion-panel" aria-label="ProductSpec promotion preview">
+          <header><strong>Chốt thành ProductSpec v{promotionPreview.productSpec.version}</strong><span>{promotionPreview.sourceShapeIds.length} canvas nodes</span></header>
+          <div className="spec-metrics">
+            <span><b>{promotionPreview.productSpec.requirements.length}</b> Req</span>
+            <span><b>{promotionPreview.productSpec.screens.length}</b> Screen</span>
+            <span><b>{promotionPreview.productSpec.stories.length}</b> Story</span>
+          </div>
+          <p>{promotionPreview.productSpec.title}</p>
+          <small>{promotionPreview.assumptions[0]}</small>
+          <footer>
+            <button className="secondary-button" disabled={approving} onClick={onCancelPromotion}>Hủy</button>
+            <button className="primary-button" disabled={approving} onClick={() => void onCommitPromotion()}>Xác nhận</button>
+          </footer>
+        </section>
+      )}
+      {!promotionPreview && artifactActions.some((action) => action.status === 'pending_approval') && (
+        <section className="promotion-panel artifact-plan-panel" aria-label="Artifact plan approval">
+          <header><strong>Artifact plan</strong><span>Immutable preflight</span></header>
+          <div className="artifact-targets">
+            {artifactActions.map((action) => <span key={action.id}>{action.target === 'jira' ? 'Mock Jira' : action.target === 'zdoc' ? 'Mock Zdoc' : 'Figma'}</span>)}
+          </div>
+          <small>Mỗi target sẽ được ghi qua outbox, sau đó read-back và verify độc lập.</small>
+          <footer>
+            <button className="secondary-button" disabled={approving} onClick={() => void onRejectArtifacts()}>Hủy writes</button>
+            <button className="primary-button" disabled={approving} onClick={() => void onApproveArtifacts()}>Duyệt & tạo</button>
+          </footer>
+        </section>
+      )}
       {clarification && !preview && (
         <section className="ambiguity-panel" aria-label="Change clarification required">
           <CircleAlert size={18} />
@@ -770,8 +905,17 @@ function ChatPanel({
           onSelect={onSelectDecision}
         />
       )}
+      {deliveryActive && productSpec && !preview && !promotionPreview && (
+        <DeliveryGuide
+          productSpec={productSpec}
+          canvasItemCount={canvasItemCount}
+          busy={sending}
+          onSend={onSend}
+        />
+      )}
       <div className="composer">
         <textarea
+          ref={composerRef}
           value={draft}
           disabled={disabled}
           placeholder="Nhập ý tưởng hoặc điều khiển canvas..."
@@ -790,6 +934,45 @@ function ChatPanel({
         )}
       </div>
     </aside>
+  )
+}
+
+function DeliveryGuide({
+  productSpec,
+  canvasItemCount,
+  busy,
+  onSend,
+}: {
+  productSpec: import('@pm-agent/domain').ProductSpec
+  canvasItemCount: number
+  busy: boolean
+  onSend(content: string): Promise<void>
+}): React.JSX.Element {
+  const requirements = productSpec.requirements.filter((item) => item.status !== 'removed').length
+  return (
+    <section className="delivery-guide" aria-label="Delivery next steps">
+      <header>
+        <div><strong>Delivery workspace</strong><span>ProductSpec v{productSpec.version} · {productSpec.status}</span></div>
+        <CheckCircle2 size={17} />
+      </header>
+      <div className="delivery-status">
+        <span><b>{requirements}</b> Req</span>
+        <span><b>{productSpec.screens.length}</b> Screen</span>
+        <span><b>{canvasItemCount}</b> Canvas</span>
+      </div>
+      <p>Chọn đầu ra tiếp theo. Agent sẽ báo trước việc đang làm và xác nhận sau khi đọc lại canvas.</p>
+      <div className="delivery-actions">
+        <button disabled={busy} onClick={() => void onSend('Vẽ user flow MVP dựa trên phương án đã chọn')}>
+          <Route size={16} /><span><strong>User flow</strong><small>Luồng và nhánh chính</small></span>
+        </button>
+        <button disabled={busy} onClick={() => void onSend('Vẽ prototype low-fidelity các màn hình MVP dựa trên phương án đã chọn')}>
+          <LayoutTemplate size={16} /><span><strong>Prototype</strong><small>3–5 màn hình chỉnh được</small></span>
+        </button>
+        <button disabled={busy} onClick={() => void onSend('Tiếp tục hoàn thiện ProductSpec: chỉ ra scope, giả định và điểm còn thiếu')}>
+          <FileText size={16} /><span><strong>ProductSpec</strong><small>Bổ sung scope còn thiếu</small></span>
+        </button>
+      </div>
+    </section>
   )
 }
 
@@ -826,10 +1009,18 @@ function PhaseReasoningPanel({
   reasoning: Extract<PhaseReasoningResult, { phase: 'discover' | 'decide' }>
   busy: boolean
   onAdvance(answers: Record<string, string>): Promise<void>
-  onSelect(optionId: string): Promise<void>
+  onSelect(optionId: string, customTitle?: string): Promise<void>
 }): React.JSX.Element {
   const [answers, setAnswers] = useState<Record<string, string>>({})
-  useEffect(() => setAnswers({}), [reasoning.phase])
+  const [customAnswers, setCustomAnswers] = useState<Record<string, boolean>>({})
+  const [customDecision, setCustomDecision] = useState('')
+  const [customDecisionOpen, setCustomDecisionOpen] = useState(false)
+  useEffect(() => {
+    setAnswers({})
+    setCustomAnswers({})
+    setCustomDecision('')
+    setCustomDecisionOpen(false)
+  }, [reasoning])
   if (reasoning.phase === 'decide') {
     return (
       <section className="phase-reasoning-panel" aria-label="Decision options">
@@ -842,11 +1033,37 @@ function PhaseReasoningPanel({
               <small>{option.tradeoff}</small>
             </button>
           ))}
+          <button
+            type="button"
+            className={customDecisionOpen ? 'custom-option selected' : 'custom-option'}
+            disabled={busy}
+            onClick={() => setCustomDecisionOpen(true)}
+          >
+            <span>Khác</span>
+            <strong>Đề xuất phương án riêng</strong>
+            <small>Mô tả hướng MVP phù hợp với bối cảnh của bạn.</small>
+          </button>
+          {customDecisionOpen && (
+            <div className="custom-decision-input">
+              <input
+                autoFocus
+                maxLength={200}
+                value={customDecision}
+                placeholder="Ví dụ: MVP chỉ dành cho pantry nội bộ..."
+                onChange={(event) => setCustomDecision(event.target.value)}
+              />
+              <button
+                className="primary-button"
+                disabled={busy || customDecision.trim().length < 2}
+                onClick={() => void onSelect('CUSTOM', customDecision.trim())}
+              >Chọn hướng này</button>
+            </div>
+          )}
         </div>
       </section>
     )
   }
-  const complete = reasoning.phaseData.questions.every((question) => Boolean(answers[question.id]))
+  const complete = reasoning.phaseData.questions.every((question) => Boolean(answers[question.id]?.trim()))
   return (
     <section className="phase-reasoning-panel" aria-label="Clarification questions">
       <header><strong>Clarification</strong><span>{reasoning.phaseData.questions.length}/3 câu hỏi</span></header>
@@ -860,10 +1077,31 @@ function PhaseReasoningPanel({
                   type="button"
                   className={answers[question.id] === option ? 'selected' : ''}
                   key={option}
-                  onClick={() => setAnswers((current) => ({ ...current, [question.id]: option }))}
+                  onClick={() => {
+                    setCustomAnswers((current) => ({ ...current, [question.id]: false }))
+                    setAnswers((current) => ({ ...current, [question.id]: option }))
+                  }}
                 >{option}</button>
               ))}
+              <button
+                type="button"
+                className={customAnswers[question.id] ? 'selected' : ''}
+                onClick={() => {
+                  setCustomAnswers((current) => ({ ...current, [question.id]: true }))
+                  setAnswers((current) => ({ ...current, [question.id]: '' }))
+                }}
+              >Khác</button>
             </div>
+            {customAnswers[question.id] && (
+              <input
+                className="custom-answer-input"
+                autoFocus
+                maxLength={240}
+                value={answers[question.id] ?? ''}
+                placeholder="Nhập câu trả lời của bạn"
+                onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))}
+              />
+            )}
           </fieldset>
         ))}
       </div>

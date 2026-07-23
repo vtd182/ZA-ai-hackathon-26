@@ -78,7 +78,7 @@ case "$MODE" in
   build)
     exec "${PNPM[@]}" build
     ;;
-  smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas|smoke-ambiguity|smoke-flow)
+  smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas|smoke-ambiguity|smoke-flow|smoke-canvas-agent|smoke-codex-canvas)
     unset ELECTRON_RUN_AS_NODE
     "${PNPM[@]}" build
     SMOKE_FAIL_TARGET="${PM_AGENT_SMOKE_FAIL_TARGET:-}"
@@ -98,16 +98,17 @@ case "$MODE" in
       SMOKE_REJECT="1"
     fi
     SMOKE_CANVAS="${PM_AGENT_SMOKE_CANVAS:-0}"
-    if [[ "$MODE" == "smoke-canvas" ]]; then
-      SMOKE_CANVAS="1"
-    fi
     SMOKE_AMBIGUITY="${PM_AGENT_SMOKE_AMBIGUITY:-0}"
     if [[ "$MODE" == "smoke-ambiguity" ]]; then
       SMOKE_AMBIGUITY="1"
     fi
     SMOKE_FLOW="${PM_AGENT_SMOKE_FLOW:-0}"
-    if [[ "$MODE" == "smoke-flow" ]]; then
+    if [[ "$MODE" == "smoke-canvas" || "$MODE" == "smoke-flow" || "$MODE" == "smoke-canvas-agent" || "$MODE" == "smoke-codex-canvas" ]]; then
       SMOKE_FLOW="1"
+    fi
+    SMOKE_CANVAS_PROVIDER="${PM_AGENT_SMOKE_CANVAS_PROVIDER:-}"
+    if [[ "$MODE" == "smoke-codex-canvas" ]]; then
+      SMOKE_CANVAS_PROVIDER="codex-local"
     fi
     PM_AGENT_USER_DATA="${TMPDIR:-/tmp}/pm-agent-smoke-$$" \
       PM_AGENT_SMOKE_CAPTURE="${TMPDIR:-/tmp}/pm-agent-smoke.png" \
@@ -118,6 +119,7 @@ case "$MODE" in
       PM_AGENT_SMOKE_CANVAS="$SMOKE_CANVAS" \
       PM_AGENT_SMOKE_AMBIGUITY="$SMOKE_AMBIGUITY" \
       PM_AGENT_SMOKE_FLOW="$SMOKE_FLOW" \
+      PM_AGENT_SMOKE_CANVAS_PROVIDER="$SMOKE_CANVAS_PROVIDER" \
       exec "${PNPM[@]}" exec electron apps/desktop/out/main/index.js
     ;;
   test)
@@ -127,7 +129,7 @@ case "$MODE" in
     exec "${PNPM[@]}" typecheck
     ;;
   *)
-    echo "Usage: ./run.sh [setup|dev|reset|build|test|typecheck|smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas|smoke-ambiguity|smoke-flow]" >&2
+    echo "Usage: ./run.sh [setup|dev|reset|build|test|typecheck|smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas|smoke-ambiguity|smoke-flow|smoke-canvas-agent|smoke-codex-canvas]" >&2
     exit 2
     ;;
 esac

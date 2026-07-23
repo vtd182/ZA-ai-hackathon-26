@@ -2,13 +2,14 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
-import { providerCommandSchema, type ProviderCommand, type ThreadDetail, type ThreadSummary } from '@pm-agent/domain'
+import { canvasProgramSchema, providerCommandSchema, type CanvasExecutionReceipt, type CanvasProgram, type ProviderCommand, type ThreadDetail, type ThreadSummary } from '@pm-agent/domain'
 
 interface CanvasBridgeOptions {
   homePath: string
   listThreads(): ThreadSummary[]
   getThread(threadId: string): ThreadDetail
   dispatch(threadId: string, commands: ProviderCommand[]): void
+  dispatchProgram(threadId: string, batchId: number, program: CanvasProgram): void
 }
 
 function sendJson(response: ServerResponse, status: number, value: unknown): void {
@@ -32,6 +33,7 @@ export class CanvasBridge {
   private readonly token = randomBytes(32).toString('base64url')
   private readonly descriptorPath: string
   private server: Server | null = null
+  private readonly pending = new Map<number, (receipt: CanvasExecutionReceipt) => void>()
 
   constructor(private readonly options: CanvasBridgeOptions) {
     this.descriptorPath = join(options.homePath, '.pm-lifecycle-agent', 'canvas-bridge.json')
@@ -66,6 +68,25 @@ export class CanvasBridge {
     }
   }
 
+  acknowledge(receipt: CanvasExecutionReceipt): void {
+    if (receipt.batchId === undefined) return
+    this.pending.get(receipt.batchId)?.(receipt)
+    this.pending.delete(receipt.batchId)
+  }
+
+  private waitForReceipt(batchId: number): Promise<CanvasExecutionReceipt | null> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(batchId)
+        resolve(null)
+      }, 5_000)
+      this.pending.set(batchId, (receipt) => {
+        clearTimeout(timer)
+        resolve(receipt)
+      })
+    })
+  }
+
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     try {
       const url = new URL(request.url ?? '/', 'http://127.0.0.1')
@@ -98,6 +119,21 @@ export class CanvasBridge {
         const commands = providerCommandSchema.array().min(1).max(100).parse(payload.commands)
         this.options.dispatch(threadId, commands)
         sendJson(response, 202, { accepted: commands.length, threadId })
+        return
+      }
+      const programMatch = url.pathname.match(/^\/api\/threads\/([^/]+)\/(programs|scripts)$/)
+      if (request.method === 'POST' && programMatch) {
+        const threadId = decodeURIComponent(programMatch[1]!)
+        this.options.getThread(threadId)
+        const payload = await readJson(request) as { program?: unknown; script?: unknown }
+        const program = programMatch[2] === 'scripts'
+          ? canvasProgramSchema.parse({ schemaVersion: 1, mode: 'script', summary: 'Developer canvas script', operations: [], script: payload.script })
+          : canvasProgramSchema.parse(payload.program)
+        const batchId = Date.now()
+        const receiptPromise = this.waitForReceipt(batchId)
+        this.options.dispatchProgram(threadId, batchId, program)
+        const receipt = await receiptPromise
+        sendJson(response, receipt ? 200 : 202, receipt ?? { accepted: program.mode === 'operations' ? program.operations.length : 1, threadId, batchId, acknowledgement: 'pending' })
         return
       }
       sendJson(response, 404, { error: 'not_found' })

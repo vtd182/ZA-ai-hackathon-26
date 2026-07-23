@@ -183,6 +183,18 @@ export class LifecycleStore {
     return state
   }
 
+  commitPromotedSpec(stateInput: RunState): RunState {
+    const state = runStateSchema.parse(stateInput)
+    const transaction = this.db.transaction(() => {
+      this.insertSpecVersion(state.threadId, state.productSpec, state.lastCheckpointAt)
+      for (const action of state.pendingActions) this.upsertAction(action)
+      this.updateRun(state)
+      this.insertCheckpoint(state, state.lastCheckpointAt)
+    })
+    transaction()
+    return state
+  }
+
   saveReasoningCheckpoint(stateInput: RunState, checkpointInput: PersistedReasoningCheckpoint): RunState {
     const state = runStateSchema.parse(stateInput)
     const result = phaseReasoningResultSchema.parse(checkpointInput.result)

@@ -4,8 +4,9 @@
 
 ```text
 Electron Renderer (React + tldraw)
+  CanvasService + script worker
              |
-       typed IPC only
+       typed IPC/events
              |
 Electron Main / Local Core
   |              |                 |
@@ -16,7 +17,7 @@ history/run  native adapters      |       |       |
 
 Renderer không được truy cập filesystem, SQLite, secret hoặc connector process trực tiếp. Preload chỉ expose allowlisted typed commands/events.
 
-Developer agents use the guarded loopback Canvas Bridge described in `DEV_CANVAS_BRIDGE.md`. It accepts semantic presentation commands only; arbitrary JavaScript and direct ProductSpec/connector access are not exposed.
+Developer agents use the guarded loopback Canvas Bridge described in `DEV_CANVAS_BRIDGE.md`. It exposes the same normalized canvas inspect/apply/run-script/read-back contract as chat. Scripts target a virtual canvas API; filesystem, network, Electron IPC and direct ProductSpec/connector access are not exposed.
 
 ## 2. Package boundaries đề xuất
 
@@ -39,7 +40,7 @@ fixtures/zalo-design-system
 | `agent-core` | Workflow, policies, approvals, outbox, orchestration, verification | UI state, provider-specific protocol |
 | `reasoning` | Provider contract, mappers, mock/Codex adapters | Canonical business state |
 | `connectors` | Execute/read-back adapter và normalized receipt | Approval decision, business workflow |
-| `canvas` | Projection, shapes, domain command translation, layout | ProductSpec persistence |
+| `canvas` | Canvas Program schemas, normalized inspection, deterministic planning, promotion input | ProductSpec persistence, provider protocol |
 | `persistence` | Repositories, migration, transaction | Domain decisions |
 | `desktop` | UX, IPC composition, lifecycle | Raw secret access trong renderer |
 
@@ -57,17 +58,42 @@ reasoning <- desktop composition root
 
 Provider/history/canvas detail nằm trong `PROVIDER_ARCHITECTURE.md` và `UI_HISTORY_AND_PERFORMANCE.md`.
 
-## 3. Canonical data flow
+## 3. Dual source-of-truth model
+
+- `CanvasDocument` is the creative visual source of truth: workflows, sketches, prototype maps, annotations, circles and agent/user presentation edits.
+- `ProductSpec` is the confirmed business source of truth: requirements, screens, stories, decisions and traceability used for impact analysis and artifact planning.
+- SQLite owns thread history, checkpoints, receipts and both version streams.
+- Figma, Mock Jira and Mock Zdoc are external guarded artifacts, never canonical state.
+
+A raw canvas does not silently become a ProductSpec. Promotion is a first-class preview/confirm transaction with an immutable payload hash.
+
+## 4. Canonical data flows
+
+### Creative canvas loop
 
 ```text
-User intent
-  -> append message to app-owned ConversationThread
-  -> Agent Core builds ReasoningRequest from RunState/checkpoint
-  -> active ProviderSegment streams normalized events
-  -> Provider returns schema-validated proposal
-  -> Core applies deterministic domain command
-  -> ProductSpec/RunState transaction commits
-  -> Canvas and previews project from committed state
+User message or developer skill
+  -> application-owned intent router (conversation/draw/edit/clarify/promote)
+  -> bounded CanvasContext (selection/region + nearby shapes) only when canvas work is allowed
+  -> provider proposes a CanvasProgram; provider commands cannot override the routed intent
+  -> Agent Core validates policy/schema and adds deterministic fallback if required
+  -> Canvas layout owns generated coordinates, reconciles stable semantic IDs and avoids occupied user content
+  -> CanvasService applies operations or runs a sandboxed virtual-API script
+  -> one tldraw undo transaction + durable CanvasDocument checkpoint
+  -> normalized scene read-back (shapes + bindings + viewport/selection + recent changes)
+  -> topology/collision lint plus receipt/request and operation-count verification
+  -> concise final chat outcome/audit event
+```
+
+Ordinary product conversation never mutates the canvas, even when a provider proposes drawing. An explicit draw request must produce visible canvas output even when the model omits or malforms its program. A vague edit without a selected or explicitly named target returns clarification. The fallback derives labels and topology from user text; it is labeled as deterministic, not provider-generated. Chat may show a pending state while work runs, but it cannot claim success before durable save plus read-back.
+
+### Business and artifact loop
+
+```text
+Canvas + chat context
+  -> synthesize ProductSpec promotion preview
+  -> user confirms immutable payload hash
+  -> ProductSpec version/RunState transaction commits
   -> User approves PlannedAction
   -> Outbox stores approved action
   -> Connector executes and returns receipt
@@ -76,9 +102,9 @@ User intent
   -> ArtifactMapping and verification status commit
 ```
 
-Không có bước nào cho phép model hoặc Figma/tldraw trở thành source of truth.
+The provider proposes; application code validates, applies, reads back and records. Canvas presentation writes do not need artifact approval, but ProductSpec promotion and every external write do.
 
-## 4. Contract tối thiểu
+## 5. Contract tối thiểu
 
 ### Reasoning provider
 
@@ -92,6 +118,21 @@ interface ReasoningProvider {
 ```
 
 Mọi result được parse bằng Zod discriminated union theo `phase` và `schemaVersion`.
+
+### Canvas service
+
+```ts
+interface CanvasService {
+  inspect(scope: CanvasInspectScope): CanvasContext;
+  apply(program: CanvasProgram): Promise<CanvasExecutionReceipt>;
+  runScript(script: string): Promise<CanvasExecutionReceipt>;
+  readBack(receiptId: string): CanvasReadBack;
+}
+```
+
+`CanvasProgram` supports validated operations and a bounded JavaScript-call subset against a virtual API (`canvas.node/connect/update/remove`). The worker interprets calls instead of using `eval`/`Function`; execution has time, operation-count and payload-size limits and is atomic from the user undo perspective. Coordinates are allowed for canvas presentation, but never flow unvalidated into Figma recipes.
+
+Generated coordinates belong to the canvas layout layer, not the provider planner. Small graphs and local edits use directed Dagre layout anchored to existing semantic nodes. Large workflows extract a main journey, wrap it into readable serpentine bands and place exception nodes in nearby lanes. Occupancy includes freeform user shapes, so a new generated scene cannot silently cover an old sketch. Renderer read-back emits overlap, dangling-edge and disconnected-node lint; actionable errors block success acknowledgement.
 
 Provider SDK types và opaque thread/interaction IDs không được đi qua interface này. Xem `PROVIDER_ARCHITECTURE.md` cho segment/handoff/capability contract.
 
@@ -120,7 +161,7 @@ draft -> pending_approval -> approved -> queued -> executing
 
 Chỉ action `approved` mới được đưa vào outbox. Approval gắn với payload hash; payload thay đổi làm approval mất hiệu lực.
 
-## 5. Figma as Zalo Design System Guard
+## 6. Figma as Zalo Design System Guard
 
 ### Input model
 
@@ -167,9 +208,9 @@ Postflight phải verify:
 - expected node count/flow edges đúng;
 - không có forbidden raw style.
 
-Model không sinh absolute x/y. Layout recipe nhận semantic hierarchy và tính frame/spacing deterministic.
+Canvas/model coordinates stop at the creative surface. The Figma artifact planner receives promoted semantic hierarchy only and computes its own deterministic layout; raw tldraw shapes or scripts never enter the connector.
 
-## 6. Jira và Zdoc mock fidelity
+## 7. Jira và Zdoc mock fidelity
 
 Mock không chỉ trả `success: true`. Mỗi mock connector cần:
 
@@ -183,7 +224,7 @@ Mock không chỉ trả `success: true`. Mỗi mock connector cần:
 
 Nhờ vậy connector thật có thể thay vào mà không đổi orchestration/UI.
 
-## 7. Persistence model
+## 8. Persistence model
 
 P0 tables tối thiểu:
 
@@ -212,12 +253,12 @@ History list/message queries phải paginated; chỉ hydrate CanvasDocument củ
 
 Transaction boundaries:
 
-- Domain command + ProductSpec version + events commit cùng transaction.
+- ProductSpec promotion + ProductSpec version + events commit cùng transaction.
 - Approval + payload hash + outbox insert commit cùng transaction.
 - Receipt lưu trước verification để retry/recover sau crash.
 - Verification update không xóa receipt cũ.
 
-## 8. Change impact algorithm
+## 9. Change impact algorithm
 
 1. Parse request thành `ChangeIntent` có target entity, operation và reason.
 2. Resolve target bằng exact ID trước, semantic match sau; ambiguity phải hỏi user.
@@ -231,22 +272,24 @@ Transaction boundaries:
 
 P0 dùng deterministic graph traversal. LLM chỉ giúp parse/semantic resolve và giải thích.
 
-## 9. Security and competition constraints
+## 10. Security and competition constraints
 
 - Chỉ dùng fixture, sandbox file/page/project và dữ liệu synthetic.
 - Không kết nối production Jira/Zdoc; mock phải hiển thị nhãn `Mock` rõ ràng.
 - Figma target phải nằm trong explicit allowlist.
 - Secret lưu Keychain hoặc process environment cho dev; không ghi SQLite/log/source.
 - Renderer dùng context isolation; không expose arbitrary shell/file access.
+- Canvas scripts execute in an isolated worker against a virtual API with no `fetch`, WebSocket, filesystem, shell, Node or Electron IPC capability.
 - Log redaction cho token, authorization header, email, phone và user identifier.
 - Write cần approval; delete/destructive action ngoài MVP.
 
-## 10. Failure semantics
+## 11. Failure semantics
 
 | Failure | Trạng thái | Recovery |
 | --- | --- | --- |
 | Provider unavailable | `TOOL_UNAVAILABLE` | Chạy deterministic fixture mode |
 | Schema invalid | `FAILED_VALIDATION` | Không mutate state; log metadata đã redact |
+| Canvas script invalid/timeout | `FAILED_VALIDATION` | Abort transaction; canvas remains unchanged |
 | Connector unavailable trước execute | `QUEUED` | Retry từ outbox |
 | Crash sau external write | `VERIFYING` | Dùng receipt/idempotency search rồi read-back |
 | Một target fail khi change sync | `PARTIAL_FAILURE` | Giữ target thành công, retry target fail |

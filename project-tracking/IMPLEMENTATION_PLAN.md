@@ -34,7 +34,9 @@ MVP được đánh giá thành công khi người xem thấy rõ ba điều:
 - Provider Registry, normalized events, canonical handoff và safe switching.
 - Mock reasoning provider deterministic; Codex App Server là local adapter ưu tiên.
 - Hackathon release cần ít nhất hai provider chạy end-to-end: Mock + một real provider. Bốn adapter Codex/OpenAI/Gemini/Anthropic đều có task và cùng conformance contract.
-- tldraw có 4 view: Discover, Decide, Deliver, Change.
+- tldraw là một infinite creative canvas; lifecycle nằm trong RunState/timeline, không khóa canvas bằng view tabs.
+- Agent có normalized canvas inspect/apply/run-script/read-back tools; explicit draw intent có deterministic fallback.
+- Canvas-to-ProductSpec là promotion preview/confirm, không phải implicit projection.
 - SQLite persist được RunState, ProductSpec, approval, action và receipt.
 - Jira/Zdoc connector mock có behavior gần thật: stable external ID, idempotency, read-back và injected failure.
 - Figma connector tạo user-flow/low-fi từ component registry đã allowlist.
@@ -108,25 +110,25 @@ Exit criteria:
 - Double-click approve hoặc retry không tạo duplicate.
 - Unit test cover invalid transition, schema rejection, no-write-before-approval.
 
-### M2 - Canvas projection and traceability
+### M2 - Tldraw-first collaboration and traceability
 
-**Outcome:** người dùng nhìn và thao tác được lifecycle trên tldraw mà không phá source of truth.
+**Outcome:** PO và agent cùng sáng tạo trên một canvas tự do, sau đó chốt phần cần thiết thành ProductSpec mà không phá business source of truth.
 
 Work:
 
-- Custom shapes: Idea, Evidence, Question, Solution, Requirement, Screen, Story, Dependency.
+- Standard tldraw shapes plus semantic metadata for workflows, prototype screens, notes and connections.
 - Mỗi thread hydrate đúng một CanvasDocument; inactive canvases được serialize/unmount.
-- Deterministic layout cho Discover/Decide/Deliver/Change.
-- Projection ProductSpec -> canvas shape refs.
-- Domain commands cho select option, mark decision, request change.
-- Selection trên canvas đồng bộ inspector; không cho shape mutate business fields trực tiếp.
+- CanvasService inspect/apply/runScript/read-back with one undo boundary per agent update.
+- Selection and enclosing annotation feed bounded context to chat.
+- Explicit draw requests receive a deterministic semantic fallback if provider output is absent.
+- Promotion preview/confirm synthesizes a validated ProductSpec before artifact planning.
 
 Exit criteria:
 
-- Cùng ProductSpec luôn tạo cùng layout/entity refs.
-- Canvas reload không thay ID hoặc mất relationship.
+- Same Canvas Program produces stable semantic refs and connections.
+- Canvas reload không thay ID, mất relationship hoặc tự thêm starter components.
 - Thread A/B không rò state/canvas sang nhau; chat và canvas đều phát domain command.
-- Test chứng minh tldraw store không phải business database.
+- Test chứng minh raw canvas không mutate ProductSpec trước promotion confirmation.
 
 ### M3 - Figma Design System Guard
 

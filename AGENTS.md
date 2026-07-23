@@ -28,9 +28,9 @@ If these conflict, follow the source-of-truth order in `project-tracking/README.
 - ProductSpec is the business source of truth.
 - SQLite is the local execution/history/checkpoint store.
 - The reasoning provider proposes structured actions; Agent Core owns state, policy, approval, execution, retry and verification.
-- tldraw and Figma are projections. Neither is a business database.
+- CanvasDocument/tldraw is the creative visual source of truth; ProductSpec is confirmed business truth. Figma remains a guarded artifact, never a business database.
 - Every conversation thread owns exactly one canvas document. Turns create canvas checkpoints, not new canvases.
-- Chat and direct canvas gestures both emit validated domain commands.
+- Chat and developer skills emit validated Canvas Programs; direct canvas gestures update presentation state. ProductSpec promotion and business changes use explicit validated domain commands.
 - Every external write requires approval tied to an immutable payload hash.
 - Tool success is not verification. Verify with read-back state.
 - Provider switching occurs only at safe checkpoints using a canonical handoff package.

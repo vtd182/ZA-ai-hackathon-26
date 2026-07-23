@@ -16,30 +16,49 @@ Use the helper from this skill directory. It reloads the descriptor for every re
 ```bash
 ./pm-canvas.sh GET /api/threads
 ./pm-canvas.sh GET /api/threads/THREAD_ID/canvas
-./pm-canvas.sh POST /api/threads/THREAD_ID/commands '{"commands":[...]}'
+./pm-canvas.sh POST /api/threads/THREAD_ID/programs '{"program":{...}}'
+./pm-canvas.sh POST /api/threads/THREAD_ID/scripts '{"script":"canvas.node(...)"}'
 ```
 
-## Semantic commands
+## Canvas programs
 
 Create nodes first, then connect them in the same batch:
 
 ```json
 {
-  "commands": [
-    { "type": "create_canvas_node", "nodeId": "request", "label": "Nhận yêu cầu", "nodeKind": "process" },
-    { "type": "create_canvas_node", "nodeId": "valid", "label": "Đủ dữ liệu?", "nodeKind": "decision" },
-    { "type": "connect_canvas_nodes", "fromId": "request", "toId": "valid", "label": "phân tích" }
-  ]
+  "program": {
+    "schemaVersion": 1,
+    "mode": "operations",
+    "summary": "Request validation flow",
+    "script": null,
+    "operations": [
+      { "op": "create_node", "id": "request", "label": "Nhận yêu cầu", "kind": "process" },
+      { "op": "create_node", "id": "valid", "label": "Đủ dữ liệu?", "kind": "decision" },
+      { "op": "connect", "id": "request-valid", "fromId": "request", "toId": "valid", "label": "phân tích" }
+    ]
+  }
 }
 ```
 
-Allowed `nodeKind` values are `note`, `process`, `decision`, and `screen`. Keep `nodeId` stable across edits so a follow-up updates the same visual object. A batch can contain at most 100 commands.
+Allowed kinds are `note`, `process`, `decision`, and `screen`. Keep IDs stable so a follow-up updates the same visual object. A program can contain at most 200 operations.
+
+Omit coordinates for normal workflows. The app will arrange the semantic graph, avoid occupied user content and keep local edits near their referenced node. Use explicit coordinates only when spatial placement itself is intentional; developer-source positions are preserved.
+
+For generated layouts, use the virtual script API. It intentionally accepts only direct `canvas.node/connect/update/remove` calls, not loops, imports or arbitrary JavaScript:
+
+```js
+canvas.node("register", "Đăng ký", "screen")
+canvas.node("verify", "Xác thực", "screen")
+canvas.connect("register-verify", "register", "verify")
+canvas.update("verify", {"color":"blue"})
+```
+
+The response is an apply/read-back receipt with visual lint evidence. Treat HTTP `202` as queued, not verified. Before reporting completion, inspect again and confirm there are no overlap or dangling-edge errors.
 
 ## Boundaries
 
 - This bridge controls free canvas presentation only. It does not mutate ProductSpec.
-- ProductSpec-backed shapes remain guarded; deletion creates a change proposal in the app.
-- Never call Figma, Jira, Zdoc, filesystem, or shell through canvas commands.
+- ProductSpec promotion and every external artifact write remain guarded in the app.
+- The script worker has no network, filesystem, Node, Electron IPC or connector capability.
 - Do not edit SQLite or tldraw snapshots directly.
 - Read the target thread before drawing and verify by reading its canvas again after the app saves it.
-

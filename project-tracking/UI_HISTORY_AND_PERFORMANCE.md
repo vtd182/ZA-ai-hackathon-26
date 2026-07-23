@@ -7,13 +7,15 @@ The app is a work surface, not a landing page:
 ```text
 ┌──────────────┬──────────────────────────────────┬─────────────────────┐
 │ History      │ Active free canvas               │ Chat / Inspector    │
-│ search       │ Board + optional lifecycle       │ messages            │
-│ recent runs  │ filters                          │ approvals           │
+│ search       │ infinite tldraw surface          │ messages            │
+│ recent runs  │ workflows · sketches · feedback │ approvals           │
 │ archived     │                                  │ entity detail       │
 ├──────────────┴──────────────────────────────────┴─────────────────────┤
 │ provider · phase · connector health · save/sync/verification status  │
 └──────────────────────────────────────────────────────────────────────┘
 ```
+
+The center is one unconstrained infinite tldraw canvas. There is no Board/Discover/Decide/Deliver/Change tab bar; lifecycle appears as compact thread status and audit timeline only.
 
 Responsive behavior:
 
@@ -36,7 +38,7 @@ Project
        -> many ProviderSegments
 ```
 
-Opening an old history item restores its latest committed ProductSpec, workflow state, provider segment summary and canvas checkpoint. Continuing creates a new turn in the same thread/canvas.
+Opening an old history item restores its latest canvas checkpoint, committed ProductSpec, workflow state and provider segment summary. Continuing creates a new turn in the same thread/canvas. A new thread always opens a truly empty canvas.
 
 P1 branching creates a new thread and canvas cloned from a selected checkpoint; it never rewrites the original history.
 
@@ -98,45 +100,48 @@ A thread is still resumable when its previous provider is unavailable. Provider-
 
 ### Chat to canvas
 
-User input such as “bỏ payment khỏi MVP” follows:
+User input such as “vẽ workflow onboarding gồm đăng ký, xác thực và hoàn tất” follows:
 
 ```text
 message
-  -> reasoning proposal
-  -> schema validation
-  -> DomainCommand preview
-  -> impact computation
-  -> ProductSpec mutation only after required decision/approval
-  -> canvas projection update
+  -> app-owned conversation/draw/edit/promote intent
+  -> bounded selection/region/canvas context when allowed
+  -> CanvasProgram proposal
+  -> validation + deterministic explicit-draw fallback
+  -> apply/runScript as one undoable canvas transaction
+  -> durable canvas checkpoint + normalized read-back
+  -> request/receipt verification + concise final chat outcome
 ```
 
-Supported P0 commands:
+Supported P0 canvas tools:
 
-- add/update/remove scope entity;
-- select solution option;
-- focus/highlight entity or impact set;
-- switch Discover/Decide/Deliver/Change view;
-- request artifact preview;
-- approve/reject a planned write.
-- create semantic workflow/prototype nodes and bound connections on the free board.
+- inspect full canvas, selection or bounded region;
+- create/update/delete shapes and semantic nodes;
+- bind/connect nodes and arrange a workflow or prototype map;
+- run the bounded JavaScript-call subset (`canvas.node/connect/update/remove`) in an isolated virtual-API worker;
+- read back normalized shapes, bounds and connections;
+- checkpoint and undo the whole agent update.
 
-`Board` is the default freeform workspace and hides managed ProductSpec projections. Discover/Decide/Deliver/Change reveal the relevant managed projection while keeping every user/agent-created freeform shape visible and in place.
+The provider is not asked to choose a lifecycle view. Lifecycle reasoning may suggest a next business action in chat, but it cannot constrain what the canvas may contain.
+Ordinary product chat remains non-mutating. A vague canvas edit without a selection or named target asks for clarification. A pending canvas message is replaced by an exact outcome only after apply, durable save and read-back succeed.
 
 ### Canvas to chat/domain
 
 Canvas gestures emit semantic commands:
 
-- selecting a shape sets `CanvasSelectionContext` for the next message;
-- dragging between lanes proposes a priority/scope command;
-- connecting entities proposes a relationship command;
-- deleting a business shape opens a change preview rather than deleting state immediately;
+- selecting shapes or drawing an enclosing annotation sets bounded `CanvasContext` for the next message;
+- manual edits are immediately visible to the next inspect/read-back call;
+- “chốt flow này” creates a ProductSpec promotion preview and asks for confirmation;
+- confirmed ProductSpec shapes use guarded business commands when changed through the inspector;
 - viewport-only pan/zoom remains presentation state and does not enter ProductSpec.
+
+Follow-up: evaluate an explicit `Sync selection/region with chat` control and a dirty-canvas indicator. It should snapshot the chosen context for the next turn without making manual drawing dependent on an AI call.
 
 The chat transcript records concise domain outcomes, approvals and failures. High-frequency pointer events are never logged as chat messages.
 
 ## 6. Undo and checkpoints
 
-- Presentation undo/redo is local to tldraw until it emits a domain command.
+- Presentation undo/redo is local to tldraw; one agent CanvasProgram is one undo boundary.
 - Business undo is implemented as a new inverse domain command/ProductSpec version.
 - Save a thread checkpoint at stage boundaries, decisions, approvals, verified actions and app close.
 - Canvas snapshot every stage boundary or after a patch threshold; compact old patches asynchronously.
@@ -158,7 +163,7 @@ The chat transcript records concise domain outcomes, approvals and failures. Hig
 - Batch token/message deltas at approximately one animation frame or 30-50 ms.
 - Do not persist every token; flush message chunks on interval and terminal events.
 - Keep streaming text state separate from committed message state.
-- Memoize canvas projections by ProductSpec version and view mode.
+- Memoize normalized canvas inspection by snapshot revision and selection bounds.
 - Compute deterministic layout/impact in a worker when entity count crosses a threshold.
 - Apply canvas patches in batches; do not reconstruct the entire tldraw store for one highlight.
 - IPC payloads are typed, paginated and bounded.
@@ -207,4 +212,5 @@ Add telemetry around these boundaries and record actual demo-machine measurement
 3. Continue thread A using a different provider; messages and canvas remain continuous.
 4. Select a requirement on canvas and ask chat to remove it; selection context scopes the proposal.
 5. Drag a requirement to removed scope; change preview appears before business mutation.
-6. Load 500-message history and 500-shape fixture without blocking renderer.
+6. Explicitly promote selected flow, inspect ProductSpec preview, confirm it, then continue through guarded Figma planning.
+7. Load 500-message history and 500-shape fixture without blocking renderer.

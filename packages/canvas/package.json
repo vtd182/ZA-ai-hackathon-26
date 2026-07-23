@@ -4,8 +4,13 @@
   "private": true,
   "type": "module",
   "exports": "./src/index.ts",
-  "scripts": { "typecheck": "tsc --noEmit" },
-  "dependencies": { "@pm-agent/domain": "workspace:*" },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "3.0.0",
+    "@pm-agent/domain": "workspace:*"
+  },
   "devDependencies": {
     "@pm-agent/fixture-meal-ordering": "workspace:*",
     "typescript": "7.0.2"

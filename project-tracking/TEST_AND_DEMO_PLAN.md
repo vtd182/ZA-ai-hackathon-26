@@ -28,9 +28,13 @@ Test theo risk và boundary:
 | `T-PRV-02` | Switch Mock -> real provider | Integration | Cùng thread/canvas; segment và handoff persisted |
 | `T-PRV-03` | Switch khi stream/write in flight | Unit | Bị chặn đến safe checkpoint |
 | `T-PRV-04` | Provider unavailable khi resume | E2E | Local history/canvas mở; có thể chọn provider khác |
-| `T-CAN-01` | Cùng ProductSpec render hai lần | Unit/visual | Stable refs, positions và edges |
-| `T-CAN-02` | Canvas shape edit business field | Unit | Bị chặn hoặc chuyển thành domain command |
-| `T-CAN-03` | Chat command dùng selected shape context | Integration | Proposal scope đúng entity; cần preview/approval |
+| `T-CAN-01` | Exact onboarding draw prompt | Unit/E2E | 3 requested nodes, 2 bound edges and read-back receipt |
+| `T-CAN-02` | Canvas Program operation/script | Unit/integration | One validated undoable transaction; no network/IPC capability |
+| `T-CAN-03` | Chat uses selected/enclosed context | Integration | Update is scoped to normalized region and visible on read-back |
+| `T-CAN-04` | Canvas promotion preview/confirm | Integration | No ProductSpec mutation before confirmation; valid version after confirm |
+| `T-CAN-05` | Real Codex structured canvas response | Smoke | Native response parses and produces a valid Canvas Program |
+| `T-CAN-06` | Ordinary kickoff then explicit full-flow draw | Unit/E2E | Kickoff keeps canvas blank; explicit draw persists connected flow and finalizes chat only after receipt |
+| `T-CAN-07` | Ambiguous and selected-context edits | Unit/E2E | No-target edit does not mutate; selected edit is positioned near its target and read-back confirmed |
 | `T-FIG-01` | Allowed component/token | Unit | Preflight pass |
 | `T-FIG-02` | Unknown/deprecated component | Unit | Block trước write |
 | `T-FIG-03` | Raw style hoặc wrong sandbox target | Unit | Block với compliance issue |
@@ -102,35 +106,33 @@ Expected change:
 
 ## 5. Demo script (target 5-6 minutes)
 
-### 0:00-0:35 - Problem and promise
+### 0:00-0:35 - Blank collaborative workspace
 
-Mở History, resume nhanh một thread fixture để chứng minh local history/canvas, rồi tạo/reset demo thread. Nói ngắn: một PM thường phải gom context, quyết định scope, viết PRD, dựng flow và backlog; khi scope đổi, các artifact lệch nhau. Agent này biến idea thành kickoff package có kiểm soát và giữ chúng đồng bộ.
+Create a new thread and show a genuinely blank infinite canvas. Say briefly: this is a shared thinking surface first; lifecycle and artifact automation sit behind it rather than dictating its shape.
 
-### 0:35-1:25 - Agentic discovery
+### 0:35-1:35 - Agent draws and reads back
 
-- Submit meal-ordering idea.
-- Cho thấy findings có source/relevance/confidence.
-- Trả lời tối đa ba clarification questions.
-- Nhấn mạnh fixture/sandbox để tuân thủ dữ liệu cuộc thi.
+- Send `Vẽ workflow onboarding người dùng gồm đăng ký, xác thực và màn hình hoàn tất`.
+- Show the three requested nodes and connections appearing on canvas.
+- Select or circle `xác thực`, ask to add OTP, retry and an error branch; show the scoped update.
+- Manually move/edit one shape, then ask the agent what changed to prove two-way read-back.
 
-### 1:25-2:15 - Decision
+### 1:35-2:20 - Promote what matters
 
-- So sánh Minimal/Balanced/Ambitious.
-- Chọn Balanced.
-- Cho thấy decision rationale và ProductSpec được tạo sau quyết định.
-- Chỉ ra provider hiện tại và segment status; history/canvas vẫn thuộc app.
+- Send `Chốt flow này thành MVP`.
+- Review the ProductSpec proposal synthesized from canvas + chat, including unresolved assumptions.
+- Confirm promotion; point out that canvas presentation was free, while business state required explicit confirmation.
 
-### 2:15-3:15 - Traceability and guarded artifacts
+### 2:20-3:25 - Guarded artifacts
 
-- Chuyển Deliver view: Requirement -> Screen -> Story -> Dependency.
 - Mở artifact preview, chỉ ra `Figma`, `Mock Jira`, `Mock Zdoc` rõ ràng.
 - Mở Figma compliance report: resolved component/token, warning/error count, manifest version.
 - Approve, execute và read-back verify; không gọi success ngay sau write.
 
-### 3:15-4:45 - Signature moment
+### 3:25-4:50 - Signature change moment
 
 - Nhập `Bỏ payment khỏi MVP`.
-- Change view highlight payment requirement, screen, story, wallet dependency và affected route.
+- Impact inspector highlights payment requirement, screen, story, wallet dependency and affected route without changing the canvas mode.
 - Hiển thị before/after + planned target updates.
 - Approve change.
 - ProductSpec tăng version; Figma + ít nhất một mock artifact read-back verified.
