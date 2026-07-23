@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { approveActions, createImpactPreview, rejectActions } from '@pm-agent/agent-core'
-import { transitionRunState, type ChangeIntent } from '@pm-agent/domain'
+import { createDraftProductSpec, parseProductSpec, transitionRunState, type ChangeIntent } from '@pm-agent/domain'
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
 import { HistoryStore, LifecycleStore, OutboxStore } from './index'
 
@@ -13,6 +13,46 @@ afterEach(() => {
 })
 
 describe('LifecycleStore', () => {
+  it('atomically replaces only an empty v1 draft with a synthesized ProductSpec', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pm-agent-lifecycle-synthesis-'))
+    cleanup.push(directory)
+    const filename = join(directory, 'app.db')
+    const history = new HistoryStore(filename)
+    const thread = history.createThread()
+    const store = new LifecycleStore(filename)
+    const timestamp = '2026-07-22T02:00:00.000Z'
+    const draft = createDraftProductSpec(thread.id, timestamp)
+    const initial = store.initializeRun(thread.id, 'RUN-SYNTHESIS', draft, timestamp, 'IDEA_INTAKE')
+    const synthesized = parseProductSpec({
+      ...draft,
+      title: 'Synthesized MVP',
+      requirements: [{
+        id: 'REQ-START', kind: 'requirement', title: 'Start', description: 'Start the journey',
+        priority: 'must', status: 'in_scope', acceptanceCriteria: ['Journey starts'], dependsOn: [],
+      }],
+      screens: [{
+        id: 'SCREEN-START', kind: 'screen', title: 'Start', purpose: 'Start the journey',
+        requirementIds: ['REQ-START'], designSystemRoles: ['app-header', 'primary-button'],
+      }],
+      stories: [{
+        id: 'STORY-START', kind: 'story', title: 'Start journey',
+        requirementIds: ['REQ-START'], acceptanceCriteria: ['Journey starts'],
+      }],
+      relationships: [
+        { id: 'REL-START-SCREEN', type: 'DESIGNED_BY', source: { kind: 'requirement', id: 'REQ-START' }, target: { kind: 'screen', id: 'SCREEN-START' } },
+        { id: 'REL-START-STORY', type: 'IMPLEMENTS', source: { kind: 'requirement', id: 'REQ-START' }, target: { kind: 'story', id: 'STORY-START' } },
+      ],
+      updatedAt: timestamp,
+    })
+    const next = { ...initial, phase: 'DELIVERY' as const, productSpec: synthesized }
+
+    expect(store.commitSynthesizedSpec(next).productSpec.title).toBe('Synthesized MVP')
+    expect(store.getSpecVersion(thread.id, 1)?.requirements).toHaveLength(1)
+    expect(() => store.commitSynthesizedSpec(next)).toThrow(/empty thread draft/)
+    store.close()
+    history.close()
+  })
+
   it('persists ambiguity without a preview, action or ProductSpec mutation', () => {
     const directory = mkdtempSync(join(tmpdir(), 'pm-agent-lifecycle-ambiguity-'))
     cleanup.push(directory)

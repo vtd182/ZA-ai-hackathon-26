@@ -1,11 +1,13 @@
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { existsSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
-import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, changeIntentFromCanvasCommand, createHandoffPackage, createImpactPreview, customDecisionOptionId, executeConnectorAction, normalizeClarificationAnswers, rejectActions, resolveRemovalChangeIntent, selectDecisionOption } from '@pm-agent/agent-core'
+import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, changeIntentFromCanvasCommand, createHandoffPackage, createImpactPreview, customDecisionOptionId, executeConnectorAction, normalizeClarificationAnswers, rejectActions, resolveRemovalChangeIntent, selectDecisionOption, synthesizeProductSpecFromDecision } from '@pm-agent/agent-core'
 import { canvasProgramCovers, classifyCanvasInteraction, legacyCommandsToCanvasProgram, planExplicitCanvasRequest, synthesizeProductSpecFromCanvas } from '@pm-agent/canvas'
 import {
+  createFixtureFallbackDesignSystemContext,
   createFigmaArtifactPlan,
+  createLivePrimitiveFallbackManifest,
   createMockJiraPlan,
   createMockZdocPlan,
   FigmaMcpAdapter,
@@ -16,6 +18,7 @@ import {
   MockJiraConnector,
   MockZdocConnector,
   normalizeFigmaDesignSystemContext,
+  renderProductSpecMarkdown,
   SqliteMockArtifactStore,
 } from '@pm-agent/connectors'
 import type {
@@ -97,7 +100,7 @@ function normalizeIntentText(value: string): string {
 function deliveryStatusMessage(productSpec: ProductSpec, selectedOption?: string): string {
   const requirements = productSpec.requirements.filter((item) => item.status !== 'removed').length
   const prefix = selectedOption ? `Đã khóa phương án “${selectedOption}”. ` : ''
-  return `${prefix}Delivery đang hoạt động với ProductSpec v${productSpec.version} ${productSpec.status}: ${requirements} requirement, ${productSpec.screens.length} screen, ${productSpec.stories.length} story. Bước tiếp theo: chọn vẽ user flow, dựng prototype low-fidelity, hoặc tiếp tục bổ sung ProductSpec trước khi tạo artifact.`
+  return `${prefix}Đã tổng hợp ProductSpec v${productSpec.version} từ chính cuộc hội thoại: ${requirements} requirement, ${productSpec.screens.length} screen, ${productSpec.stories.length} story. Bước tiếp theo: review flow/prototype trên canvas hoặc tạo kickoff package gồm Figma, PRD.md và backlog mock.`
 }
 
 function canvasReceiptMessage(program: CanvasProgram, receipt: CanvasExecutionReceipt, kind: 'draw' | 'edit'): string {
@@ -234,13 +237,21 @@ interface FigmaExecutionContext {
   target: FigmaTargetBinding
   manifest: DesignSystemManifest
   connectorMode: 'live' | 'mock'
+  planMode: 'strict' | 'free'
 }
 
 function figmaExecutionContext(): FigmaExecutionContext {
   const target = figmaIntegration.getActiveTarget()
   const context = target ? figmaIntegration.getContext(target.targetHash) : null
   if (target && context) {
-    return { target, manifest: context.manifest, connectorMode: context.mode === 'live' ? 'live' : 'mock' }
+    return context.mode === 'live'
+      ? { target, manifest: context.manifest, connectorMode: 'live', planMode: 'strict' }
+      : {
+          target,
+          manifest: createLivePrimitiveFallbackManifest(context.manifest),
+          connectorMode: 'live',
+          planMode: 'free',
+        }
   }
   return {
     target: {
@@ -254,7 +265,46 @@ function figmaExecutionContext(): FigmaExecutionContext {
     },
     manifest: syntheticZaloDesignSystem,
     connectorMode: 'mock',
+    planMode: 'strict',
   }
+}
+
+function artifactActionsFor(state: RunState, spec: ProductSpec): PlannedAction[] {
+  const entityIds = [
+    ...spec.requirements.map((entity) => entity.id),
+    ...spec.screens.map((entity) => entity.id),
+    ...spec.stories.map((entity) => entity.id),
+  ]
+  if (entityIds.length === 0) throw new Error('ProductSpec chưa có scope để tạo artifact')
+  return (['figma', 'jira', 'zdoc'] as const).map((target) => ({
+    schemaVersion: 1,
+    id: `action:${state.id}:spec:v${spec.version}:${target}`,
+    runId: state.id,
+    target,
+    operation: 'create',
+    entityIds,
+    payload: {},
+    payloadHash: 'pending-preflight',
+    status: 'pending_approval',
+  }))
+}
+
+function markdownArtifactPath(spec: ProductSpec): string {
+  const slug = spec.title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 72) || 'product-spec'
+  return join(app.getPath('userData'), 'exports', `${slug}-v${spec.version}.md`)
+}
+
+function exportMarkdownArtifact(spec: ProductSpec): string {
+  const path = markdownArtifactPath(spec)
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, renderProductSpecMarkdown(spec), 'utf8')
+  return path
 }
 
 async function prepareExecutableActions(state: RunState, spec: ProductSpec): Promise<PlannedAction[]> {
@@ -267,8 +317,8 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
     runId: state.id,
     threadId: state.threadId,
     actionId: figmaAction.id,
-    idempotencyKey: `figma:${state.id}:v${spec.version}`,
-  })
+    idempotencyKey: `figma:${state.id}:spec-v${spec.version}:recipe-v2`,
+  }, figmaContext.planMode)
   const figmaConnector = figmaContext.connectorMode === 'live'
     ? new FigmaMcpArtifactConnector(figmaMcp, figmaContext.manifest, figmaContext.target)
     : new MockFigmaArtifactConnector(figmaContext.manifest, figmaContext.target, { store: mockFigmaStore })
@@ -296,6 +346,7 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
   return [
     executable(figmaAction, 'figma_design_system_plan', figmaPreflight.planHash, figmaPlan, {
       connectorMode: figmaContext.connectorMode,
+      guardMode: figmaContext.planMode,
       manifest: figmaContext.manifest,
     }),
     executable(jiraAction, 'mock_jira_plan', jiraPreflight.planHash, jiraPreflight.plan),
@@ -330,6 +381,7 @@ async function executeRun(threadId: string, target?: PlannedAction['target']): P
 
   const summary = outbox.summary(state.id)
   if (summary.status === 'verified') {
+    exportMarkdownArtifact(state.productSpec)
     state = transitionRunState(state, 'START_VERIFICATION', timestamp())
     state = transitionRunState(state, 'VERIFY_SUCCESS', timestamp())
   } else {
@@ -378,8 +430,18 @@ async function allowFigmaTarget(sessionId: string, forceCapture: boolean): Promi
 
   const cached = forceCapture ? null : figmaIntegration.getContext(target.targetHash)
   if (!cached) {
-    const capture = await figmaMcp.captureDesignSystem(target)
-    figmaIntegration.saveContext(normalizeFigmaDesignSystemContext(capture, target, syntheticZaloDesignSystem, timestamp()))
+    try {
+      const capture = await figmaMcp.captureDesignSystem(target)
+      figmaIntegration.saveContext(normalizeFigmaDesignSystemContext(capture, target, syntheticZaloDesignSystem, timestamp()))
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Unknown live capture error'
+      figmaIntegration.saveContext(createFixtureFallbackDesignSystemContext(
+        target,
+        syntheticZaloDesignSystem,
+        `Không thể hoàn tất live component-map capture trong ngân sách demo (${detail}); dùng synthetic fixture guard có nhãn.`,
+        timestamp(),
+      ))
+    }
   }
   return figmaStatus()
 }
@@ -484,22 +546,7 @@ function registerIpc(): void {
     const current = workspaceFor(threadId).runState
     if (preview.productSpec.version !== current.productSpec.version + 1) throw new Error('ProductSpec đã thay đổi; hãy preview promotion lại')
     const at = timestamp()
-    const entityIds = [
-      ...preview.productSpec.requirements.map((entity) => entity.id),
-      ...preview.productSpec.screens.map((entity) => entity.id),
-      ...preview.productSpec.stories.map((entity) => entity.id),
-    ]
-    const baseActions: PlannedAction[] = (['figma', 'jira', 'zdoc'] as const).map((target) => ({
-      schemaVersion: 1,
-      id: `action:${current.id}:promote:v${preview.productSpec.version}:${target}`,
-      runId: current.id,
-      target,
-      operation: 'create',
-      entityIds,
-      payload: {},
-      payloadHash: 'pending-preflight',
-      status: 'pending_approval',
-    }))
+    const baseActions = artifactActionsFor(current, preview.productSpec)
     const promoted = {
       ...current,
       phase: 'DELIVERY',
@@ -513,8 +560,28 @@ function registerIpc(): void {
     const executableActions = await prepareExecutableActions(promoted, preview.productSpec)
     lifecycle.commitPromotedSpec({ ...promoted, pendingActions: executableActions })
     history.setThreadPhase(threadId, 'deliver')
-    history.addMessage(threadId, 'assistant', `Đã xác nhận ProductSpec v${preview.productSpec.version} từ ${preview.sourceShapeIds.length} canvas nodes. Figma, Mock Jira và Mock Zdoc đã preflight; hãy duyệt immutable artifact plan trước khi ghi.`)
+    history.addMessage(threadId, 'assistant', `Đã xác nhận ProductSpec v${preview.productSpec.version} từ ${preview.sourceShapeIds.length} canvas nodes. Figma, PRD Markdown và backlog mock đã preflight; hãy duyệt immutable artifact plan trước khi tạo.`)
     promotionPreviews.delete(threadId)
+    return workspaceFor(threadId)
+  })
+  ipcMain.handle('lifecycle:prepare-artifacts', async (_event, threadId: string) => {
+    const workspace = workspaceFor(threadId)
+    const state = workspace.runState
+    if (state.phase !== 'DELIVERY' || state.status !== 'ACTIVE') {
+      throw new Error('Kickoff package chỉ có thể chuẩn bị tại Delivery checkpoint')
+    }
+    if (state.productSpec.requirements.length === 0) throw new Error('ProductSpec chưa có scope để tạo kickoff package')
+    const at = timestamp()
+    const staged = {
+      ...state,
+      status: 'WAITING_FOR_APPROVAL',
+      pendingIntent: null,
+      pendingActions: artifactActionsFor(state, state.productSpec),
+      lastCheckpointAt: at,
+    } satisfies RunState
+    const executableActions = await prepareExecutableActions(staged, staged.productSpec)
+    lifecycle.savePreview({ ...staged, pendingActions: executableActions })
+    history.addMessage(threadId, 'assistant', 'Kickoff package đã preflight: Figma guard, PRD Markdown và backlog mock. Hãy kiểm tra target rồi duyệt tạo.')
     return workspaceFor(threadId)
   })
   ipcMain.handle('lifecycle:approve-artifacts', async (_event, threadId: string) => {
@@ -528,7 +595,7 @@ function registerIpc(): void {
     lifecycle.commitApprovedChange(approvedState, approved.approvals)
     const executed = await executeRun(threadId)
     const message = executed.execution?.status === 'verified'
-      ? 'ProductSpec artifacts đã được ghi và read-back verified trên Figma, Mock Jira và Mock Zdoc.'
+      ? `Kickoff package đã verified: Figma, backlog mock và PRD Markdown tại ${markdownArtifactPath(executed.runState.productSpec)}.`
       : 'Artifact execution chưa hoàn tất; xem trạng thái từng target để retry.'
     history.addMessage(threadId, 'assistant', message)
     return { ...executed, message }
@@ -545,6 +612,11 @@ function registerIpc(): void {
     const message = 'Đã giữ ProductSpec nhưng hủy artifact writes; không connector nào được gọi.'
     history.addMessage(threadId, 'assistant', message)
     return { ...workspaceFor(threadId), message }
+  })
+  ipcMain.handle('lifecycle:show-document', (_event, threadId: string) => {
+    const path = markdownArtifactPath(workspaceFor(threadId).runState.productSpec)
+    if (!existsSync(path)) throw new Error('PRD Markdown chưa được tạo')
+    shell.showItemInFolder(path)
   })
   ipcMain.handle('lifecycle:approve-change', async (_event, threadId: string) => {
     const workspace = workspaceFor(threadId)
@@ -660,8 +732,19 @@ function registerIpc(): void {
     if (!option && optionId !== customDecisionOptionId) throw new Error('Phương án không tồn tại')
     const selectedTitle = option?.title ?? customTitle?.trim()
     if (!selectedTitle) throw new Error('Phương án không tồn tại')
-    const next = selectDecisionOption(workspace.runState, decision, optionId, timestamp(), customTitle)
-    lifecycle.saveRunState(next)
+    const selectedAt = timestamp()
+    const transitioned = selectDecisionOption(workspace.runState, decision, optionId, selectedAt, customTitle)
+    const productSpec = synthesizeProductSpecFromDecision({
+      current: workspace.runState.productSpec,
+      threadTitle: history.getThread(threadId).title,
+      messages: history.recentMessages(threadId),
+      decision,
+      selectedOptionId: optionId,
+      ...(customTitle ? { customTitle } : {}),
+      selectedAt,
+    })
+    const next = { ...transitioned, productSpec }
+    lifecycle.commitSynthesizedSpec(next)
     history.setThreadPhase(threadId, 'deliver')
     history.addMessage(threadId, 'user', `Đã chọn phương án: ${selectedTitle}`)
     history.addMessage(threadId, 'assistant', deliveryStatusMessage(next.productSpec, selectedTitle))
@@ -1122,7 +1205,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
             const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
             return {
               confirmed: detail.messages.some((message) => message.role === 'assistant' && message.content.includes('Đã đọc canvas vào chat context')),
-              preserved: workspace.runState.productSpec.version === 1 && workspace.runState.productSpec.requirements.length === 0
+              preserved: workspace.runState.productSpec.version === 1 && workspace.runState.productSpec.requirements.length >= 3
             };
           })()`) as { confirmed: boolean; preserved: boolean }
           lifecycleFlow.canvasSyncConfirmed = syncState.confirmed
@@ -1275,6 +1358,28 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       })()`)
     }
 
+    const figmaLive = {
+      required: process.env.PM_AGENT_FIGMA_LIVE === '1',
+      targetAllowed: false,
+      contextReady: false,
+      contextMode: '',
+      liveReceipt: false,
+    }
+    if (figmaLive.required) {
+      for (let attempt = 0; attempt < 90; attempt += 1) {
+        await wait(500)
+        const liveStatus = await window.webContents.executeJavaScript(`(async () => {
+          const status = await window.pmAgent.figma.start();
+          const session = status.sessions.find((item) => item.sessionId === status.activeSession) ?? status.sessions[0];
+          return session ? window.pmAgent.figma.allowTarget(session.sessionId) : status;
+        })()`)
+        figmaLive.targetAllowed = Boolean(liveStatus.target)
+        figmaLive.contextReady = Boolean(liveStatus.designSystem)
+        figmaLive.contextMode = liveStatus.designSystem?.mode ?? ''
+        if (figmaLive.targetAllowed && figmaLive.contextReady) break
+      }
+    }
+
     await window.webContents.executeJavaScript(`(() => {
       const input = document.querySelector('.composer textarea');
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
@@ -1341,8 +1446,10 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       attempts: {} as Record<string, number>,
       externalIds: {} as Record<string, string>,
       executionPanelReady: false,
+      documentReady: false,
     }
-    for (let attempt = 0; attempt < 60; attempt += 1) {
+    const approvalAttempts = figmaLive.required ? 240 : 60
+    for (let attempt = 0; attempt < approvalAttempts; attempt += 1) {
       await wait(250)
       approval = await window.webContents.executeJavaScript(`(async () => {
         const [thread] = await window.pmAgent.threads.list();
@@ -1366,7 +1473,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
           externalIds: Object.fromEntries(workspace.execution?.actions
             .filter((action) => action.receipt)
             .map((action) => [action.target, action.receipt.externalId]) ?? []),
-          executionPanelReady: ['Figma', 'Mock Jira', 'Mock Zdoc']
+          executionPanelReady: ['Figma', 'Backlog mock', 'PRD Markdown']
             .every((label) => document.querySelector('.execution-panel')?.innerText.includes(label))
         };
       })()`) as typeof approval
@@ -1375,6 +1482,8 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
         : approval.executionVerified
       if (approval.committed && expectedExecutionState && approval.executionPanelReady) break
     }
+    approval.documentReady = existsSync(markdownArtifactPath(workspaceFor(history.listThreads()[0]!.id).runState.productSpec))
+    figmaLive.liveReceipt = Boolean(approval.externalIds.figma && !approval.externalIds.figma.startsWith('MOCK-FIGMA-'))
     const beforeRetry = structuredClone(approval)
     let recovery = { attempted: false, verified: !expectedFailureTarget, preservedTargets: !expectedFailureTarget }
     if (expectedFailureTarget) {
@@ -1610,9 +1719,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
           || document.querySelector('.figma-setup-dialog')?.innerText.includes('Figma đã kết nối')
       };
     })()`) as { hasSetupDialog: boolean; runtimeReady: boolean; pluginBuilt: boolean; waitingForPlugin: boolean }
-    const figmaLive = { required: process.env.PM_AGENT_FIGMA_LIVE === '1', targetAllowed: false, contextReady: false, contextMode: '' }
     if (figmaLive.required) {
-      await window.webContents.executeJavaScript(`document.querySelector('.allow-target-button')?.click()`)
       for (let attempt = 0; attempt < 90; attempt += 1) {
         await wait(500)
         const liveStatus = await window.webContents.executeJavaScript(`window.pmAgent.figma.status()`)
@@ -1652,12 +1759,12 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && final.hasPreview && !final.pending && !final.hasError
       && approval.committed && approval.specVersion === 2
       && approval.paymentStatus === 'removed' && approval.actionsApproved
-      && approval.executionVerified && approval.executionPanelReady
+      && approval.executionVerified && approval.executionPanelReady && approval.documentReady
       && approval.verifiedTargets.join(',') === 'figma,jira,zdoc'
       && recovery.attempted === Boolean(expectedFailureTarget)
       && recovery.verified && recovery.preservedTargets
       && figmaSetup.hasSetupDialog && figmaSetup.runtimeReady && figmaSetup.pluginBuilt && figmaSetup.waitingForPlugin
-      && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady))
+      && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady && figmaLive.liveReceipt))
     console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, lifecycleFlow, rejection, canvasGesture, ambiguity, semanticFlow, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
     app.exit(passed ? 0 : 1)
   } catch (error) {

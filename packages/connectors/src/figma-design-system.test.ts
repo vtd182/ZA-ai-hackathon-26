@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DesignSystemManifest, FigmaDesignSystemCapture, FigmaTargetBinding } from '@pm-agent/domain'
-import { normalizeFigmaDesignSystemContext } from './figma-design-system'
+import { createFixtureFallbackDesignSystemContext, createLivePrimitiveFallbackManifest, normalizeFigmaDesignSystemContext } from './figma-design-system'
 
 const target: FigmaTargetBinding = {
   schemaVersion: 1,
@@ -63,5 +63,28 @@ describe('normalizeFigmaDesignSystemContext', () => {
     expect(context.manifest).toEqual(fallback)
     expect(context.liveSummary).toMatchObject({ componentCount: 0, paintStyleCount: 1, textStyleCount: 1, textNodeCount: 1 })
     expect(context.fallbackReason).toContain('synthetic fixture guard')
+  })
+
+  it('removes fixture component keys before a free-mode live Figma write', () => {
+    const manifest = createLivePrimitiveFallbackManifest(fallback)
+
+    expect(manifest.components).toEqual([])
+    expect(manifest.tokens).toEqual(fallback.tokens)
+    expect(manifest.sourceLabel).toContain('live primitive fallback')
+    expect(manifest.fingerprint).not.toBe(fallback.fingerprint)
+  })
+
+  it('records an explicit fallback when live capture exceeds its budget', () => {
+    const context = createFixtureFallbackDesignSystemContext(
+      target,
+      fallback,
+      'Live capture timed out; using a labeled synthetic fixture guard.',
+      '2026-07-22T13:00:00.000Z',
+    )
+
+    expect(context.mode).toBe('fixture_fallback')
+    expect(context.target).toEqual(target)
+    expect(context.liveSummary.warnings).toContain('Live capture timed out; using a labeled synthetic fixture guard.')
+    expect(context.fallbackReason).toContain('timed out')
   })
 })

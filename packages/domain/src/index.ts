@@ -277,8 +277,10 @@ export interface DesktopApi {
     selectDecision(threadId: string, optionId: string, customTitle?: string): Promise<LifecycleWorkspaceState>
     previewPromotion(threadId: string, canvas: CanvasDocumentContext): Promise<CanvasPromotionPreview>
     commitPromotion(threadId: string, payloadHash: string): Promise<LifecycleWorkspaceState>
+    prepareArtifacts(threadId: string): Promise<LifecycleWorkspaceState>
     approveArtifacts(threadId: string): Promise<ApproveChangeOutput>
     rejectArtifacts(threadId: string): Promise<ApproveChangeOutput>
+    showDocument(threadId: string): Promise<void>
   }
   figma: {
     status(): Promise<FigmaSetupStatus>

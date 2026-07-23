@@ -99,6 +99,18 @@ func TestPlanLifecycleDesignSystemScreensStrictSuccess(t *testing.T) {
 	}
 }
 
+func TestLifecyclePreflightUsesCrossRuntimeCanonicalHash(t *testing.T) {
+	plan, manifest, target := lifecyclePreflightFixture()
+	preflight, err := planLifecycleDesignSystemScreens(plan, manifest, target)
+	if err != nil {
+		t.Fatalf("preflight failed: %v", err)
+	}
+	const expected = "2bd759c906081e21a6c24d7be8ac475306452d969c516e284cda321596fa4b61"
+	if preflight.PlanHash != expected {
+		t.Fatalf("canonical plan hash changed: %s", preflight.PlanHash)
+	}
+}
+
 func TestPlanLifecycleDesignSystemScreensBlocksBeforeRuntimeWrites(t *testing.T) {
 	plan, manifest, target := lifecyclePreflightFixture()
 	manifest.Components = manifest.Components[:1]

@@ -19,7 +19,17 @@ const metadataNode = (base: any) => {
 };
 
 const containerNode = (type: string) => {
-  const node: any = metadataNode({ id: `${type.toLowerCase()}:${nextId++}`, name: type, type, children: [], parent: null });
+  const node: any = metadataNode({
+    id: `${type.toLowerCase()}:${nextId++}`,
+    name: type,
+    type,
+    children: [],
+    parent: null,
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+  });
   node.appendChild = (child: any) => {
     child.parent = node;
     node.children.push(child);
@@ -69,6 +79,7 @@ beforeEach(() => {
   commitCount = 0;
   page = containerNode("PAGE");
   page.id = "0:1";
+  page.selection = [];
   const component: any = metadataNode({
     id: "component:menu",
     key: "component/menu",
@@ -86,6 +97,9 @@ beforeEach(() => {
     },
     createSection: () => containerNode("SECTION"),
     createFrame: () => containerNode("FRAME"),
+    createText: () => metadataNode({ id: `text:${nextId++}`, name: "Text", type: "TEXT", parent: null }),
+    loadFontAsync: async () => {},
+    viewport: { scrollAndZoomIntoView: () => {} },
     importComponentByKeyAsync: async () => { throw new Error("not published"); },
     commitUndo: () => { commitCount += 1; },
   };

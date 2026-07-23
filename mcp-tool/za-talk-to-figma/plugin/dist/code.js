@@ -1227,7 +1227,6 @@ var __async = (__this, __arguments, generator) => {
     }
   });
   const metadataKey = "za-pm-lifecycle";
-  const maxScannedNodes = 5e3;
   const readMetadata = (node) => {
     const raw = node.getPluginData(metadataKey);
     if (!raw) return null;
@@ -1241,19 +1240,9 @@ var __async = (__this, __arguments, generator) => {
   const writeMetadata = (node, metadata) => {
     node.setPluginData(metadataKey, JSON.stringify(metadata));
   };
-  const walkPage = (page) => {
-    const found = [];
-    const queue = [...page.children];
-    while (queue.length > 0 && found.length < maxScannedNodes) {
-      const node = queue.shift();
-      found.push(node);
-      if ("children" in node) queue.push(...node.children);
-    }
-    return found;
-  };
   const findArtifactRoot = (page, idempotencyKey) => {
     var _a;
-    return (_a = walkPage(page).find((node) => {
+    return (_a = page.children.find((node) => {
       const metadata = readMetadata(node);
       return (metadata == null ? void 0 : metadata.kind) === "artifact_root" && metadata.idempotencyKey === idempotencyKey;
     })) != null ? _a : null;
@@ -1279,8 +1268,69 @@ var __async = (__this, __arguments, generator) => {
     }
   });
   const flattenEdges = (screens) => screens.flatMap((screen) => Array.isArray(screen.prototypeEdges) ? screen.prototypeEdges : []);
+  const solid = (r, g, b) => ({
+    type: "SOLID",
+    color: { r: r / 255, g: g / 255, b: b / 255 }
+  });
+  const readableLabel = (slotKey) => String(slotKey != null ? slotKey : "Component").replace(/^\d+-/, "").split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+  const appendText = (parent, characters, fontSize, color) => __async(null, null, function* () {
+    yield figma.loadFontAsync({ family: "Inter", style: "Regular" });
+    const text = figma.createText();
+    text.fontName = { family: "Inter", style: "Regular" };
+    text.fontSize = fontSize;
+    text.characters = characters;
+    text.fills = [color];
+    parent.appendChild(text);
+    return text;
+  });
+  const styleScreen = (frame) => {
+    frame.fills = [solid(255, 255, 255)];
+    frame.strokes = [solid(210, 220, 225)];
+    frame.strokeWeight = 1;
+    frame.cornerRadius = 20;
+    frame.clipsContent = true;
+  };
+  const createFallbackSlot = (slot) => __async(null, null, function* () {
+    var _a;
+    const fallback = figma.createFrame();
+    const key = String((_a = slot.slotKey) != null ? _a : "");
+    const isPrimary = key.includes("primary-button");
+    const isStatus = key.includes("status-message") || key.includes("pickup-code");
+    const isHeader = key.includes("app-header");
+    fallback.name = `Fallback · ${key}`;
+    fallback.resize(328, isHeader ? 52 : 64);
+    fallback.layoutMode = "VERTICAL";
+    fallback.primaryAxisSizingMode = "FIXED";
+    fallback.counterAxisSizingMode = "FIXED";
+    fallback.paddingTop = 16;
+    fallback.paddingRight = 16;
+    fallback.paddingBottom = 16;
+    fallback.paddingLeft = 16;
+    fallback.cornerRadius = isPrimary ? 10 : 8;
+    fallback.strokes = isPrimary ? [] : [solid(210, 220, 225)];
+    fallback.strokeWeight = 1;
+    fallback.fills = [isPrimary ? solid(0, 104, 225) : isStatus ? solid(230, 248, 240) : isHeader ? solid(232, 242, 255) : solid(248, 250, 251)];
+    yield appendText(
+      fallback,
+      readableLabel(key),
+      isPrimary ? 14 : 13,
+      isPrimary ? solid(255, 255, 255) : isStatus ? solid(18, 112, 78) : solid(35, 49, 56)
+    );
+    return fallback;
+  });
+  const artifactX = (page) => {
+    const rightEdge = page.children.reduce((right, node) => {
+      if (!("x" in node) || !("width" in node)) return right;
+      return Math.max(right, node.x + node.width);
+    }, 0);
+    return rightEdge + 240;
+  };
+  const focusArtifact = (node) => {
+    figma.currentPage.selection = [node];
+    figma.viewport.scrollAndZoomIntoView([node]);
+  };
   const applyArtifact = (params) => __async(null, null, function* () {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const resolvedPlan = params.preflightPlan;
     const source = resolvedPlan == null ? void 0 : resolvedPlan.source;
     const planHash = typeof params.planHash === "string" ? params.planHash : "";
@@ -1299,11 +1349,12 @@ var __async = (__this, __arguments, generator) => {
       if (existingMetadata.planHash !== planHash) {
         throw new Error(`IDEMPOTENCY_CONFLICT: ${idempotencyKey} already exists with another plan hash`);
       }
+      focusArtifact(existing);
       return __spreadProps(__spreadValues({}, readArtifact(page, idempotencyKey)), { idempotent: true });
     }
     const root = figma.createSection();
     root.name = `PM Lifecycle · ${String((_b = metadata.specId) != null ? _b : "Artifact")} · v${String((_c = metadata.specVersion) != null ? _c : "")}`;
-    root.x = 0;
+    root.x = artifactX(page);
     root.y = 0;
     page.appendChild(root);
     writeMetadata(root, __spreadProps(__spreadValues({}, metadata), {
@@ -1327,6 +1378,7 @@ var __async = (__this, __arguments, generator) => {
         frame.paddingRight = 16;
         frame.paddingBottom = 24;
         frame.paddingLeft = 16;
+        styleScreen(frame);
         root.appendChild(frame);
         writeMetadata(frame, __spreadProps(__spreadValues({}, metadata), {
           kind: "screen",
@@ -1334,6 +1386,10 @@ var __async = (__this, __arguments, generator) => {
           requirementIds: screen.requirementIds,
           planHash
         }));
+        const title = yield appendText(frame, String((_e = screen.name) != null ? _e : screen.screenId), 20, solid(25, 36, 43));
+        title.name = "Screen title";
+        const purpose = yield appendText(frame, String((_f = screen.purpose) != null ? _f : ""), 12, solid(94, 110, 118));
+        purpose.name = "Screen purpose";
         const screenSlots = resolvedSlots.filter((slot) => slot.screenId === screen.screenId);
         for (const slot of screenSlots) {
           let node;
@@ -1341,10 +1397,7 @@ var __async = (__this, __arguments, generator) => {
             const component = yield localComponentByKey(slot.componentKey);
             node = component.createInstance();
           } else if (source.mode === "free" && slot.resolution === "primitive_fallback") {
-            const fallback = figma.createFrame();
-            fallback.name = `Fallback · ${String(slot.slotKey)}`;
-            fallback.resize(328, 56);
-            node = fallback;
+            node = yield createFallbackSlot(slot);
           } else {
             throw new Error(`STRICT_PLAN_VIOLATION: unresolved slot ${String(slot.slotKey)}`);
           }
@@ -1355,15 +1408,16 @@ var __async = (__this, __arguments, generator) => {
             screenId: screen.screenId,
             requirementIds: screen.requirementIds,
             slotKey: slot.slotKey,
-            componentKey: (_e = slot.componentKey) != null ? _e : null,
-            semanticRole: (_f = slot.semanticRole) != null ? _f : null,
+            componentKey: (_g = slot.componentKey) != null ? _g : null,
+            semanticRole: (_h = slot.semanticRole) != null ? _h : null,
             primitiveFallback: slot.resolution === "primitive_fallback",
             planHash
           }));
         }
       }
-      root.resizeWithoutConstraints(Math.max(420, screens.length * 420), 840);
+      root.resizeWithoutConstraints(Math.max(420, screens.length * 420), 900);
       writeMetadata(root, __spreadProps(__spreadValues({}, readMetadata(root)), { prototypeEdges: flattenEdges(screens) }));
+      focusArtifact(root);
       figma.commitUndo();
       return __spreadProps(__spreadValues({}, readArtifact(page, idempotencyKey)), { idempotent: false });
     } catch (error) {

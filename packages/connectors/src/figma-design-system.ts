@@ -170,3 +170,49 @@ export function normalizeFigmaDesignSystemContext(
     capturedAt,
   })
 }
+
+export function createFixtureFallbackDesignSystemContext(
+  target: FigmaTargetBinding,
+  fixture: DesignSystemManifest,
+  reason: string,
+  capturedAt = new Date().toISOString(),
+): FigmaDesignSystemContext {
+  return figmaDesignSystemContextSchema.parse({
+    schemaVersion: 1,
+    target,
+    mode: 'fixture_fallback',
+    manifest: fixture,
+    liveSummary: {
+      sourceRootId: target.pageId,
+      sourceRootName: target.pageName,
+      componentCount: 0,
+      componentSetCount: 0,
+      paintStyleCount: 0,
+      textStyleCount: 0,
+      variableCollectionCount: 0,
+      textNodeCount: 0,
+      warnings: [reason],
+    },
+    fallbackReason: reason,
+    capturedAt,
+  })
+}
+
+export function createLivePrimitiveFallbackManifest(fixture: DesignSystemManifest): DesignSystemManifest {
+  const components: DesignSystemManifest['components'] = []
+  const fingerprintPayload = {
+    sourceLabel: `${fixture.sourceLabel} · live primitive fallback`,
+    components,
+    tokens: fixture.tokens,
+    forbiddenRawStyles: fixture.forbiddenRawStyles,
+  }
+  const fingerprint = createHash('sha256').update(stableStringify(fingerprintPayload as JsonValue)).digest('hex')
+  return designSystemManifestSchema.parse({
+    ...fixture,
+    id: `${fixture.id}-live-primitives`,
+    version: `${fixture.version}-live-primitives`,
+    sourceLabel: `${fixture.sourceLabel} · live primitive fallback`,
+    fingerprint,
+    components,
+  })
+}

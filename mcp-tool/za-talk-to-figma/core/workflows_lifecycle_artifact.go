@@ -278,7 +278,15 @@ func hashLifecycleResolvedPlan(plan lifecycleResolvedPlan) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	digest := sha256.Sum256(payload)
+	var canonical interface{}
+	if err := json.Unmarshal(payload, &canonical); err != nil {
+		return "", err
+	}
+	canonicalPayload, err := json.Marshal(canonical)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(canonicalPayload)
 	return hex.EncodeToString(digest[:]), nil
 }
 
@@ -537,11 +545,10 @@ func planLifecycleDesignSystemScreens(plan lifecycleArtifactPlan, manifest lifec
 		ResolvedTokens:      resolvedTokens,
 		EstimatedOperations: len(plan.Screens) + len(resolvedSlots) + edgeCount,
 	}
-	payload, err := json.Marshal(resolvedPlan)
+	planHash, err := hashLifecycleResolvedPlan(resolvedPlan)
 	if err != nil {
-		return lifecyclePreflightResult{}, fmt.Errorf("marshal resolved lifecycle plan: %w", err)
+		return lifecyclePreflightResult{}, fmt.Errorf("hash resolved lifecycle plan: %w", err)
 	}
-	digest := sha256.Sum256(payload)
 	allowed := true
 	for _, issue := range issues {
 		if issue.Severity == "error" {
@@ -558,5 +565,5 @@ func planLifecycleDesignSystemScreens(plan lifecycleArtifactPlan, manifest lifec
 		}
 		return issues[i].EntityID < issues[j].EntityID
 	})
-	return lifecyclePreflightResult{Allowed: allowed, Plan: resolvedPlan, PlanHash: hex.EncodeToString(digest[:]), Issues: issues}, nil
+	return lifecyclePreflightResult{Allowed: allowed, Plan: resolvedPlan, PlanHash: planHash, Issues: issues}, nil
 }

@@ -37,8 +37,10 @@ const api: DesktopApi = {
     selectDecision: (threadId, optionId, customTitle) => ipcRenderer.invoke('lifecycle:select-decision', threadId, optionId, customTitle),
     previewPromotion: (threadId, canvas) => ipcRenderer.invoke('lifecycle:preview-promotion', threadId, canvas),
     commitPromotion: (threadId, payloadHash) => ipcRenderer.invoke('lifecycle:commit-promotion', threadId, payloadHash),
+    prepareArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:prepare-artifacts', threadId),
     approveArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:approve-artifacts', threadId),
     rejectArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:reject-artifacts', threadId),
+    showDocument: (threadId) => ipcRenderer.invoke('lifecycle:show-document', threadId),
   },
   figma: {
     status: () => ipcRenderer.invoke('figma:status'),

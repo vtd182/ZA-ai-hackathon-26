@@ -71,9 +71,9 @@ type dsAdoptionSummary struct {
 }
 
 type dsRecipeSlot struct {
-	Key           string
-	Label         string
-	RequiredRoles []string
+	Key            string
+	Label          string
+	RequiredRoles  []string
 	PreferredRoles []string
 }
 
@@ -410,16 +410,16 @@ func applyDesignSystemScreen(ctx context.Context, runtime *Runtime, args map[str
 	}
 
 	return map[string]any{
-		"screenIntent":           intent,
-		"sourceRoot":             bundle.SourceRoot,
-		"targetRoot":             rootFrame,
-		"nodesCreated":           createdNodes,
-		"componentsInstantiated": instantiated,
-		"fallbacksUsed":          fallbacks,
+		"screenIntent":             intent,
+		"sourceRoot":               bundle.SourceRoot,
+		"targetRoot":               rootFrame,
+		"nodesCreated":             createdNodes,
+		"componentsInstantiated":   instantiated,
+		"fallbacksUsed":            fallbacks,
 		"missingComponentMappings": uniqueStrings(missingMappings),
-		"adoptionSummary":        adoptionSummary,
-		"executionReports":       reports,
-		"designSystemWarnings":   bundle.Warnings,
+		"adoptionSummary":          adoptionSummary,
+		"executionReports":         reports,
+		"designSystemWarnings":     bundle.Warnings,
 	}, nil
 }
 
@@ -449,9 +449,9 @@ func auditDesignSystemAdoption(ctx context.Context, runtime *Runtime, rootNodeID
 
 	summary := summarizeDesignSystemAdoption(root)
 	return map[string]any{
-		"rootNodeId":       rootNodeID,
-		"summary":          summary,
-		"executionReport":  result.Report,
+		"rootNodeId":      rootNodeID,
+		"summary":         summary,
+		"executionReport": result.Report,
 	}, nil
 }
 
@@ -502,10 +502,10 @@ func fetchSmartNodeSummary(ctx context.Context, runtime *Runtime, nodeID, sessio
 
 func fetchSourceDesignSystemNodes(ctx context.Context, runtime *Runtime, nodeID, sessionID string) ([]dsScannedNode, ExecutionReport, error) {
 	params := map[string]interface{}{
-		"nodeId":    nodeID,
-		"types":     []interface{}{"COMPONENT", "COMPONENT_SET"},
-		"maxVisited": 1500.0,
-		"maxTimeMs":  9000.0,
+		"nodeId":     nodeID,
+		"types":      []interface{}{"COMPONENT", "COMPONENT_SET"},
+		"maxVisited": 350.0,
+		"maxTimeMs":  2000.0,
 	}
 	if sessionID != "" {
 		params["sessionId"] = sessionID
@@ -529,8 +529,8 @@ func fetchSourceDesignSystemNodes(ctx context.Context, runtime *Runtime, nodeID,
 func fetchSourceTextNodes(ctx context.Context, runtime *Runtime, nodeID, sessionID string) ([]dsTextNode, ExecutionReport, error) {
 	params := map[string]interface{}{
 		"nodeId":     nodeID,
-		"maxVisited": 1500.0,
-		"maxTimeMs":  9000.0,
+		"maxVisited": 250.0,
+		"maxTimeMs":  1200.0,
 	}
 	if sessionID != "" {
 		params["sessionId"] = sessionID
@@ -670,21 +670,21 @@ func scoreDesignComponentMatch(roles []string, slot dsRecipeSlot) int {
 func createDesignSystemScreenRoot(ctx context.Context, runtime *Runtime, parentID, intent, sessionID string) (map[string]any, []ExecutionReport, error) {
 	screenName := "DS Screen / " + intentToTitle(intent)
 	params := map[string]interface{}{
-		"name":                   screenName,
-		"parentId":               parentID,
-		"width":                  360.0,
-		"height":                 480.0,
-		"fillColor":              "#FFFFFF",
-		"layoutMode":             "VERTICAL",
-		"paddingTop":             24.0,
-		"paddingRight":           24.0,
-		"paddingBottom":          24.0,
-		"paddingLeft":            24.0,
-		"itemSpacing":            16.0,
-		"counterAxisSizingMode":  "FIXED",
-		"primaryAxisSizingMode":  "AUTO",
-		"counterAxisAlignItems":  "MIN",
-		"primaryAxisAlignItems":  "MIN",
+		"name":                  screenName,
+		"parentId":              parentID,
+		"width":                 360.0,
+		"height":                480.0,
+		"fillColor":             "#FFFFFF",
+		"layoutMode":            "VERTICAL",
+		"paddingTop":            24.0,
+		"paddingRight":          24.0,
+		"paddingBottom":         24.0,
+		"paddingLeft":           24.0,
+		"itemSpacing":           16.0,
+		"counterAxisSizingMode": "FIXED",
+		"primaryAxisSizingMode": "AUTO",
+		"counterAxisAlignItems": "MIN",
+		"primaryAxisAlignItems": "MIN",
 	}
 	if sessionID != "" {
 		params["sessionId"] = sessionID

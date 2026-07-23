@@ -352,6 +352,22 @@ export function App(): React.JSX.Element {
     }
   }
 
+  const prepareArtifacts = async (): Promise<void> => {
+    if (!activeThread || approving) return
+    setApproving(true)
+    setError(null)
+    try {
+      const workspace = await window.pmAgent.lifecycle.prepareArtifacts(activeThread.id)
+      setLifecycleWorkspace(workspace)
+      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setApproving(false)
+    }
+  }
+
   const decideArtifacts = async (decision: 'approve' | 'reject'): Promise<void> => {
     if (!activeThread || approving) return
     setApproving(true)
@@ -592,8 +608,12 @@ export function App(): React.JSX.Element {
         onSelectDecision={selectDecision}
         onCommitPromotion={commitPromotion}
         onCancelPromotion={() => setPromotionPreview(null)}
+        onPrepareArtifacts={prepareArtifacts}
         onApproveArtifacts={() => decideArtifacts('approve')}
         onRejectArtifacts={() => decideArtifacts('reject')}
+        onShowDocument={async () => {
+          if (activeThread) await window.pmAgent.lifecycle.showDocument(activeThread.id)
+        }}
       />
 
       {settingsProfile && (
@@ -781,8 +801,10 @@ function ChatPanel({
   onSelectDecision,
   onCommitPromotion,
   onCancelPromotion,
+  onPrepareArtifacts,
   onApproveArtifacts,
   onRejectArtifacts,
+  onShowDocument,
 }: {
   messages: ChatMessage[]
   hasEarlierMessages: boolean
@@ -809,8 +831,10 @@ function ChatPanel({
   onSelectDecision(optionId: string, customTitle?: string): Promise<void>
   onCommitPromotion(): Promise<void>
   onCancelPromotion(): void
+  onPrepareArtifacts(): Promise<void>
   onApproveArtifacts(): Promise<void>
   onRejectArtifacts(): Promise<void>
+  onShowDocument(): Promise<void>
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
@@ -879,11 +903,11 @@ function ChatPanel({
       )}
       {!promotionPreview && artifactActions.some((action) => action.status === 'pending_approval') && (
         <section className="promotion-panel artifact-plan-panel" aria-label="Artifact plan approval">
-          <header><strong>Artifact plan</strong><span>Immutable preflight</span></header>
+          <header><strong>Kickoff package</strong><span>Immutable preflight</span></header>
           <div className="artifact-targets">
-            {artifactActions.map((action) => <span key={action.id}>{action.target === 'jira' ? 'Mock Jira' : action.target === 'zdoc' ? 'Mock Zdoc' : 'Figma'}</span>)}
+            {artifactActions.map((action) => <span key={action.id}>{action.target === 'jira' ? 'Backlog mock' : action.target === 'zdoc' ? 'PRD.md' : 'Figma'}</span>)}
           </div>
-          <small>Mỗi target sẽ được ghi qua outbox, sau đó read-back và verify độc lập.</small>
+          <small>Figma được guard và read-back. PRD được xuất local; backlog vẫn là mock cho tới khi có MCP.</small>
           <footer>
             <button className="secondary-button" disabled={approving} onClick={() => void onRejectArtifacts()}>Hủy writes</button>
             <button className="primary-button" disabled={approving} onClick={() => void onApproveArtifacts()}>Duyệt & tạo</button>
@@ -896,7 +920,7 @@ function ChatPanel({
           <div><strong>Cần xác định target</strong><span>{clarification}</span></div>
         </section>
       )}
-      {execution && <ExecutionPanel execution={execution} busy={approving} onRetry={onRetry} />}
+      {execution && <ExecutionPanel execution={execution} busy={approving} onRetry={onRetry} onShowDocument={onShowDocument} />}
       {reasoning && (reasoning.phase === 'discover' || reasoning.phase === 'decide') && (
         <PhaseReasoningPanel
           reasoning={reasoning}
@@ -911,6 +935,7 @@ function ChatPanel({
           canvasItemCount={canvasItemCount}
           busy={sending}
           onSend={onSend}
+          onPrepareArtifacts={onPrepareArtifacts}
         />
       )}
       <div className="composer">
@@ -942,11 +967,13 @@ function DeliveryGuide({
   canvasItemCount,
   busy,
   onSend,
+  onPrepareArtifacts,
 }: {
   productSpec: import('@pm-agent/domain').ProductSpec
   canvasItemCount: number
   busy: boolean
   onSend(content: string): Promise<void>
+  onPrepareArtifacts(): Promise<void>
 }): React.JSX.Element {
   const requirements = productSpec.requirements.filter((item) => item.status !== 'removed').length
   return (
@@ -970,6 +997,9 @@ function DeliveryGuide({
         </button>
         <button disabled={busy} onClick={() => void onSend('Tiếp tục hoàn thiện ProductSpec: chỉ ra scope, giả định và điểm còn thiếu')}>
           <FileText size={16} /><span><strong>ProductSpec</strong><small>Bổ sung scope còn thiếu</small></span>
+        </button>
+        <button className="delivery-package-action" disabled={busy || requirements === 0} onClick={() => void onPrepareArtifacts()}>
+          <FolderOpen size={16} /><span><strong>Tạo kickoff package</strong><small>Figma · PRD.md · backlog mock</small></span>
         </button>
       </div>
     </section>
@@ -1158,12 +1188,14 @@ function ExecutionPanel({
   execution,
   busy,
   onRetry,
+  onShowDocument,
 }: {
   execution: ExecutionSummary
   busy: boolean
   onRetry(target: PlannedAction['target']): Promise<void>
+  onShowDocument(): Promise<void>
 }): React.JSX.Element {
-  const labels: Record<PlannedAction['target'], string> = { figma: 'Figma', jira: 'Mock Jira', zdoc: 'Mock Zdoc' }
+  const labels: Record<PlannedAction['target'], string> = { figma: 'Figma', jira: 'Backlog mock', zdoc: 'PRD Markdown' }
   return (
     <section className={`execution-panel ${execution.status}`} aria-label="Artifact execution status">
       <header>
@@ -1186,6 +1218,11 @@ function ExecutionPanel({
           )
         })}
       </div>
+      {execution.status === 'verified' && (
+        <button className="document-open-button" onClick={() => void onShowDocument()}>
+          <FolderOpen size={15} /> Mở PRD.md
+        </button>
+      )}
     </section>
   )
 }

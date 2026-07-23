@@ -17,7 +17,7 @@ Verified characteristics from source/docs:
   - `audit_design_system_adoption`
 - Read/write tools include local components, styles, variables, component instantiation, layout, page and prototype operations.
 - Go tests and plugin TypeScript typecheck currently pass in this workspace.
-- Plugin serializer contract drift is resolved: 253 tests pass and rich paints remain available for DS audit fidelity.
+- Plugin serializer contract drift is resolved: 256 tests pass and rich paints remain available for DS audit fidelity.
 
 ## 2. Current gaps for PM Lifecycle Agent
 
@@ -211,7 +211,7 @@ Before create/update:
 
 ## 11. Verification commands
 
-Verified on 2026-07-22:
+Verified on 2026-07-23:
 
 ```text
 cd mcp-tool/za-talk-to-figma && go test ./...
@@ -245,4 +245,36 @@ PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke
 - raw document/capture payloads are not persisted;
 - explicit `fixture_fallback` when the live source has no relevant component mappings.
 
-The connected public framework duplicate currently exposes paint/text evidence but no relevant components in the allowlisted page subtree. This is not treated as live DS compliance. The UI shows `Synthetic fixture guard`, while the next implementation item remains generic semantic planning followed by strict zero-write preflight.
+The connected public framework duplicate currently exposes no usable component map in the bounded allowlisted scan. This is not treated as live DS compliance. The UI shows `Synthetic fixture guard`; generic semantic planning, strict zero-write preflight and a separate labeled live primitive path are implemented.
+
+## 13. Current live demo behavior
+
+The complete approved path is now implemented and verified:
+
+1. Agent Core creates a semantic screen recipe from the committed ProductSpec.
+2. The app pins an exact live Figma session/file/page and persists the target hash.
+3. A bounded component-map capture selects either strict live mapping or a labeled `fixture_fallback`.
+4. Fixture fallback removes all fixture component keys and executes a `mode=free` primitive plan against the live page.
+5. The user approves the immutable plan hash before the outbox dispatches it.
+6. The plugin creates a direct page-level artifact section, screen frames and slot metadata without overlapping existing page content.
+7. The connector independently reads the artifact by idempotency metadata and audits target, plan, screens, slots, requirements and edges.
+
+The public framework file currently demonstrates **live Figma write with synthetic primitive fallback**, not production Zalo Design System compliance. Strict compliance is available only when the allowlisted source yields usable live component-role mappings.
+
+Performance and hash rules discovered during live verification:
+
+- resolved plan hashes use recursively canonicalized JSON in both Go and TypeScript;
+- component/text discovery uses bounded node/time budgets and records an explicit fallback reason when exhausted;
+- lifecycle artifact roots are direct page children, so idempotency lookup never traverses the full design tree;
+- compositor recipe revisions belong in the idempotency namespace to avoid collisions with artifacts rendered by older recipes.
+
+Latest evidence on 2026-07-23:
+
+```text
+cd mcp-tool/za-talk-to-figma && go test ./...
+cd mcp-tool/za-talk-to-figma/plugin && bun run typecheck && bun test && bun run build
+PM_AGENT_FIGMA_LIVE=1 pnpm exec vitest run packages/connectors/src/figma-mcp.live.test.ts
+PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke
+```
+
+The app smoke completed with a non-mock Figma node receipt, independent verification, Mock Jira/Mock Zdoc receipts and a generated Markdown PRD.

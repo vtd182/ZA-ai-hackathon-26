@@ -112,11 +112,12 @@
 
 ### `P0-AGT-006` Decision to ProductSpec synthesis
 
-- **Status:** TODO
+- **Status:** DONE (2026-07-23)
 - **Depends on:** P0-AGT-002, P0-DOM-003, P0-CAN-003
 - **Deliver:** convert the selected option plus clarified idea into a validated thread-specific ProductSpec v1 with requirements, screens, stories, dependencies, decisions and traceability relationships.
 - **Acceptance:** a normal empty-draft thread reaches Delivery with a non-placeholder ProductSpec derived from its own messages/decision; malformed or untraceable synthesis cannot replace the draft; canvas and Figma planner consume the committed spec without fixture data.
 - **Priority note:** This closes the main non-demo path `chat -> canvas -> decision -> Figma`; the deterministic meal-ordering thread remains only a demo fixture.
+- **Evidence:** deterministic domain-aware synthesis creates validated requirements, screens, stories, dependencies, decisions and relationships from the thread's idea/clarifications/selected option. SQLite replaces only an untouched empty v1 draft atomically. Unit/persistence tests and `./run.sh smoke-lifecycle` prove the synthesized spec survives canvas Sync and produces five editable prototype frames.
 
 ## Epic E3 - Persistence
 
@@ -415,14 +416,15 @@
 
 ### `P0-QA-001` Unit and contract test gates
 
-- **Status:** IN_PROGRESS (resumed 2026-07-23 after P0-CAN-008)
+- **Status:** IN_PROGRESS (resumed 2026-07-23)
 - **Depends on:** all P0 domain/core/connectors
 - **Deliver:** coverage cho invariants, transitions, impact, approval, idempotency, connector parity.
 - **Acceptance:** critical test matrix gồm provider/history/canvas/connector trong `TEST_AND_DEMO_PLAN.md` pass.
-- **Current slice:** reconcile the documented critical matrix against the 105-test suite and dedicated production smoke modes; add or record evidence for any uncovered P0 contract.
+- **Current slice:** reconcile the documented critical matrix against the 112-test suite and dedicated production smoke modes; add or record evidence for any uncovered P0 contract.
 - **Progress:** lifecycle production smoke now also proves a newly created `IDEA_INTAKE` thread switches ThreadDetail/workspace atomically, has a null snapshot and contains zero canonical canvas shapes before the first message.
 - **Progress:** active reasoning is now phase/status-gated; lifecycle smoke proves decision options disappear after the first valid selection and duplicate selection is idempotent in Delivery.
 - **Progress:** lifecycle smoke now also covers custom discovery/decision input, observable Delivery continuation and editable prototype frame creation with durable canvas read-back.
+- **Progress:** live release path now proves an app-owned approval produces a non-mock Figma receipt, independent read-back/audit and a Markdown PRD; Jira and Zdoc remain clearly labeled mocks.
 
 ### `P0-QA-002` Desktop E2E happy path
 

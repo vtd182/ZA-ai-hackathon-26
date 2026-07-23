@@ -64,10 +64,11 @@ Signature moment:
 - **Completed task:** `P0-CAN-006` application-owned intent routing and receipt-confirmed bidirectional canvas collaboration.
 - **Completed task:** `P0-UI-005` guided continuation, custom answers and canvas prototypes.
 - **Completed task:** `P0-CAN-008` canvas co-creation and prototype scene transformation.
-- **Current task:** `P0-QA-001` unit and contract test gates is `IN_PROGRESS`.
-- **Current slice:** Reconcile the documented critical matrix against the 106-test suite and dedicated production smoke modes; add or record evidence for any uncovered P0 contract.
-- **Last known repository state:** Runnable Electron app with one blank-first infinite canvas per thread, typed Canvas Programs, Mock/Codex provider paths, explicit ProductSpec promotion, deterministic impact preview, approval/outbox/read-back verification and a verified live Figma read connection.
-- **Known blockers:** Connected public framework page exposes styles/text evidence but zero components in the allowlisted source subtree, so the guard correctly uses a labeled synthetic fixture; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
+- **Completed task:** `P0-AGT-006` thread-specific decision-to-ProductSpec synthesis with atomic empty-draft replacement.
+- **Current task:** `P0-QA-001` critical test-matrix reconciliation is `IN_PROGRESS`.
+- **Current slice:** Keep the verified chat -> canvas -> ProductSpec -> approval -> live Figma + Markdown path green, then close the remaining release-provider, Electron E2E and packaging/rehearsal gaps.
+- **Last known repository state:** Runnable Electron app with one blank-first infinite canvas per thread, typed Canvas Programs, Mock/Codex provider paths, thread-specific ProductSpec synthesis, editable prototypes, deterministic impact preview, Markdown PRD export and approved live Figma write/read-back verification.
+- **Known blockers:** Connected public framework page exposes no usable component map in the bounded allowlisted scan, so live writes use a labeled free-mode primitive fallback rather than claiming strict Zalo DS compliance; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
 
 ## 4. Important implementation notes
@@ -105,6 +106,8 @@ Signature moment:
 - MCP hiện có 98 tools, stdio transport, local WebSocket plugin bridge, multi-session routing và typed error contract.
 - Existing DS apply đang hard-code registration form slots và cho phép primitive fallback; strict hackathon flow cần generic recipe + zero-write preflight.
 - Pin explicit Figma `sessionId`; không dựa vào global active route.
+- Live primitive fallback is allowed only after the exact file/page target is pinned. The plan records `mode=free`, removes fixture component keys and retains only labeled synthetic tokens.
+- Strict Zalo DS compliance requires a captured live component map. A public page with no mappings must never be pitched as a production DS write.
 
 ### Providers
 
@@ -371,6 +374,39 @@ Signature moment:
 - **Regression test:** `./run.sh smoke-lifecycle` selects and edits an agent-owned prototype element; the reviewed 2880x1740 screenshot confirms the panel remains hidden.
 - **Caveat:** Generated shapes remain editable through normal canvas transforms; richer generated-component styling belongs in a compact inspector follow-up.
 
+### BUG-023 - Decision completed with a placeholder ProductSpec
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, non-demo lifecycle-to-artifact audit.
+- **Symptom:** A normal thread could reach Delivery after selecting an option while its ProductSpec still had zero requirements/screens/stories, so canvas/Figma output depended on fixture or later promotion.
+- **Trigger:** Create a blank thread, answer discovery questions and select any decision option.
+- **Root cause:** The decision transition persisted phase/status and transcript evidence but never synthesized and committed business entities from the clarified idea.
+- **Fix:** Added deterministic domain-aware ProductSpec synthesis and an atomic repository method that replaces only an untouched empty v1 draft.
+- **Regression test:** `product-spec-synthesis.test.ts`, `lifecycle-store.test.ts` and `./run.sh smoke-lifecycle` verify traceability, thread specificity and preservation across canvas Sync.
+- **Caveat:** The synthesizer is an MVP baseline, not a replacement for later provider-assisted enrichment; every generated spec still passes domain invariants before persistence.
+
+### BUG-024 - Go and TypeScript disagreed on the approved Figma plan hash
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, app-level live Figma smoke.
+- **Symptom:** Target pinning and preflight succeeded, but the approved live action failed with `Approved action does not cover this immutable Figma plan`.
+- **Trigger:** Prepare a live plan in Go, persist its hash, then execute through the TypeScript connector policy.
+- **Root cause:** Go hashed struct-field JSON order while TypeScript recursively sorted object keys before SHA-256, producing different hashes for the same semantic plan.
+- **Fix:** Go now converts the resolved plan to generic JSON before hashing, matching the cross-runtime canonical key order; a fixed canonical hash regression test locks the contract.
+- **Regression test:** Go suite, live adapter test and `PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke` pass with a non-mock Figma receipt.
+- **Caveat:** Any future hash-bearing cross-language payload must use the same canonical JSON contract before approval.
+
+### BUG-025 - Deep Figma page scans starved live artifact apply
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, repeated live demo runs on the public framework file.
+- **Symptom:** Design-system capture or artifact apply timed out after the page accumulated generated artifacts.
+- **Trigger:** Capture and then apply on a large public page containing a deep source tree and several previous lifecycle artifacts.
+- **Root cause:** Capture budgets allowed up to 1,500 visited nodes per scan, while lifecycle idempotency lookup traversed up to 5,000 descendants even though generated roots are direct page children.
+- **Fix:** Bounded component/text discovery to short demo budgets, persisted an explicit labeled fallback when capture cannot finish, and changed artifact lookup to direct page children.
+- **Regression test:** 256 plugin tests, Go suite, live adapter test completes in about two seconds, and app live smoke verifies Figma/Jira/Zdoc plus Markdown.
+- **Caveat:** A dedicated compact DS source page remains preferable for strict component-map capture; fallback does not imply strict Zalo DS compliance.
+
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 
 ```md
@@ -404,6 +440,9 @@ Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 - Plugin connection is not permission: readiness requires an immutable hash over exact session/file/page identity plus cached DS context. A session/page mismatch removes ready state.
 - MCP tool `plan_design_system_screens` is intentionally pure: it receives the host-approved target and normalized manifest, computes the full strict decision and plan hash, and has no `Runtime` parameter capable of issuing plugin writes.
 - Lifecycle Figma apply uses plugin data key `za-pm-lifecycle`; root metadata owns idempotency/plan/target identity, screen metadata owns requirement traceability, and slot metadata owns resolved component role. Strict apply removes the root before returning an error if any component cannot be instantiated.
+- Cross-runtime approval hashes use recursively canonicalized JSON in both Go and TypeScript. Go struct serialization order is not an approval-hash contract.
+- Lifecycle artifact roots are direct page children by contract; idempotency/read-back inspects that bounded set rather than traversing the full design file.
+- If bounded live component-map capture cannot finish, the app persists the pinned target plus a labeled `fixture_fallback` context. Live writes then use `mode=free` and primitives with no fixture component keys.
 
 Khi tiếp tục spike Figma bridge, ghi lại:
 
@@ -427,9 +466,9 @@ App commands đã chạy thành công:
 ./run.sh setup       # verified 2026-07-22; installs/builds app, Go runtime and Figma plugin bundle
 ./run.sh reset       # verified by shared reset path 2026-07-22; resets then opens dev app
 ./run.sh typecheck   # verified 2026-07-23
-./run.sh test        # verified 2026-07-23; 101 tests pass, 1 optional live test skipped
-./run.sh build       # verified 2026-07-22
-./run.sh smoke       # verified 2026-07-22; Mock provider + canvas
+./run.sh test        # verified 2026-07-23; 112 tests pass, 1 optional live test skipped
+./run.sh build       # verified 2026-07-23
+./run.sh smoke       # verified 2026-07-23; Mock provider + canvas + Markdown artifact
 ./run.sh smoke-recovery  # verified 2026-07-22; injected Jira failure + target-only UI retry
 ./run.sh smoke-reset # verified 2026-07-22; UI reset + three deterministic seeds + full flow
 ./run.sh smoke-canvas # verified 2026-07-22; drag/undo/delete boundary + invalid command + full flow
@@ -437,16 +476,16 @@ App commands đã chạy thành công:
 ./run.sh smoke-canvas-agent  # verified 2026-07-23; draw + selected feedback + script + promotion + verified artifacts
 ./run.sh smoke-codex-canvas  # verified 2026-07-23; real Codex Canvas Program + topology guard + verified artifacts
 PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke  # verified 2026-07-22
-PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke  # verified 2026-07-22; live allowlist + bounded DS capture + cache + UI
+PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke  # verified 2026-07-23; approved live write + read-back/audit + non-mock receipt
 ```
 
 Command MCP đã chạy thành công:
 
 ```text
-cd mcp-tool/za-talk-to-figma && go test ./...  # verified 2026-07-22
-cd mcp-tool/za-talk-to-figma/plugin && bun run typecheck  # verified 2026-07-22
-cd mcp-tool/za-talk-to-figma/plugin && bun test  # verified 2026-07-22; 253 tests pass
-PM_AGENT_FIGMA_LIVE=1 pnpm exec vitest run packages/connectors/src/figma-mcp.live.test.ts  # verified 2026-07-22
+cd mcp-tool/za-talk-to-figma && go test ./...  # verified 2026-07-23
+cd mcp-tool/za-talk-to-figma/plugin && bun run typecheck  # verified 2026-07-23
+cd mcp-tool/za-talk-to-figma/plugin && bun test  # verified 2026-07-23; 256 tests pass
+PM_AGENT_FIGMA_LIVE=1 pnpm exec vitest run packages/connectors/src/figma-mcp.live.test.ts  # verified 2026-07-23
 ```
 
 Chỉ thêm command mới sau khi đã chạy thành công trong workspace hiện tại.
@@ -676,6 +715,16 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Separated scene furniture from promotable business nodes and hid the intrusive style panel for generated prototype selections.
 - Verification: 106 tests + 1 optional live skip, workspace typecheck, production build and full `./run.sh smoke-lifecycle` pass. Smoke proves custom decision -> five-screen prototype -> pointer edit -> dirty state -> selected feedback -> Sync receipt -> unchanged ProductSpec -> verified artifact path; final 2880x1740 screenshot reviewed.
 - Next action: continue `P0-QA-001` critical-matrix reconciliation and retain the two-way canvas smoke as a release gate.
+
+### 2026-07-23 - Thread-specific kickoff package and live Figma write
+
+- Decision completion now synthesizes and atomically commits a validated ProductSpec from the active thread instead of leaving a placeholder draft.
+- Added an explicit kickoff-package approval path: live or mock Figma, labeled backlog mock and a generated Markdown PRD with requirement/screen/story traceability.
+- Live public-page execution uses a pinned target and an honestly labeled primitive fallback when no component map is available; strict mode remains reserved for a captured live mapping.
+- Upgraded the Figma compositor with distinct screen frames, titles, purposes, semantic slot styling, non-overlapping placement and auto-focus.
+- Fixed cross-runtime plan-hash canonicalization and removed deep-tree idempotency scans that caused live timeouts on large files.
+- Verification: 112 tests + 1 optional live skip, workspace typecheck/build, `./run.sh smoke-lifecycle`, 256 plugin tests, Go suite, live adapter test and `PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke` pass. App smoke recorded live Figma node `444:16250` and verified Figma/Jira/Zdoc plus Markdown.
+- Next action: finish `P0-QA-001`, then select/live-test one API provider and complete Electron E2E plus packaging/rehearsal.
 
 ## 10. End-of-session checklist
 

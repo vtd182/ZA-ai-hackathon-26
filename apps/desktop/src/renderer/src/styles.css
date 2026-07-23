@@ -1188,6 +1188,22 @@ button {
   padding: 3px 10px;
 }
 
+.document-open-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(100% - 20px);
+  min-height: 32px;
+  gap: 6px;
+  margin: 5px 10px 10px;
+  border: 1px solid #8abbaa;
+  border-radius: 5px;
+  color: #126b52;
+  background: #f3fbf8;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .execution-row {
   min-height: 38px;
   gap: 8px;
@@ -1467,6 +1483,12 @@ button {
 .delivery-actions button:hover:not(:disabled) {
   border-color: #6ca7e9;
   background: #f4f9ff;
+}
+
+.delivery-actions .delivery-package-action {
+  border-color: #78af9b;
+  color: #14785d;
+  background: #f1faf7;
 }
 
 .delivery-actions button span {
