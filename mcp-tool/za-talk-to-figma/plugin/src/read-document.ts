@@ -51,6 +51,15 @@ const yieldToUI = async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+const getNodeByIdLocalFirst = async (nodeId: string): Promise<BaseNode | null> => {
+  if (figma.currentPage.id === nodeId) return figma.currentPage;
+  if ("findOne" in figma.currentPage) {
+    const local = figma.currentPage.findOne((node) => node.id === nodeId);
+    if (local) return local;
+  }
+  return figma.getNodeByIdAsync(nodeId);
+};
+
 const toPositiveInt = (value: any, fallback: number) => {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return fallback;
@@ -174,16 +183,26 @@ const buildNodeSummary = async (node: any, detail: ReadDetail): Promise<any> => 
   }
 
   if (node.type === "INSTANCE" && (detail === "compact" || detail === "full")) {
-    const mainComponent = await node.getMainComponentAsync();
-    summary.mainComponentId = mainComponent?.id ?? null;
-    if (node.componentProperties) {
-      const componentProperties: Record<string, any> = {};
-      for (const [key, property] of Object.entries(node.componentProperties)) {
-        componentProperties[key] = (property as any).value;
+    try {
+      const mainComponent = await node.getMainComponentAsync();
+      summary.mainComponentId = mainComponent?.id ?? null;
+      summary.mainComponentName = mainComponent?.name ?? null;
+      summary.mainComponentKey = mainComponent?.key ?? null;
+    } catch (error) {
+      summary.mainComponentError = error instanceof Error ? error.message : String(error);
+    }
+    try {
+      if (node.componentProperties) {
+        const componentProperties: Record<string, any> = {};
+        for (const [key, property] of Object.entries(node.componentProperties)) {
+          componentProperties[key] = (property as any).value;
+        }
+        if (Object.keys(componentProperties).length > 0) {
+          summary.componentProperties = componentProperties;
+        }
       }
-      if (Object.keys(componentProperties).length > 0) {
-        summary.componentProperties = componentProperties;
-      }
+    } catch (error) {
+      summary.componentPropertiesError = error instanceof Error ? error.message : String(error);
     }
   }
 
@@ -304,6 +323,59 @@ const traversalExceeded = (visited: number, deadline: number, maxVisited: number
   return "";
 };
 
+const isDesignSystemInstanceCandidate = (node: InstanceNode) => {
+  const name = node.name.toLowerCase();
+  return name.includes("[zds]")
+    || name === "mp-header"
+    || name === "calendar"
+    || name === "single-picker";
+};
+
+const componentPropertyValues = (node: InstanceNode): Record<string, string> => {
+  try {
+    return Object.fromEntries(
+      Object.entries(node.componentProperties ?? {}).map(([name, property]) => [
+        name,
+        String((property as { value?: unknown }).value ?? ""),
+      ]),
+    );
+  } catch {
+    return {};
+  }
+};
+
+const catalogVariantSignature = (properties: Record<string, string>): string =>
+  Object.entries(properties)
+    .filter(([name]) => /(dark|level|state|size|icon|type)/i.test(name))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, value]) => `${name}=${value}`)
+    .join("|")
+    .toLowerCase();
+
+const nearbyContextLabels = (node: SceneNode): string[] => {
+  const labels: string[] = [];
+  const parent = node.parent;
+  if (parent && "children" in parent) {
+    const siblings = parent.children;
+    const index = siblings.indexOf(node);
+    for (let cursor = Math.max(0, index - 3); cursor < Math.min(siblings.length, index + 2); cursor++) {
+      const sibling = siblings[cursor];
+      if (sibling?.type === "TEXT" && sibling.characters.trim()) labels.push(sibling.characters.trim());
+    }
+  }
+  return [...new Set(labels)].slice(0, 6);
+};
+
+const ancestorNames = (node: BaseNode): string[] => {
+  const names: string[] = [];
+  let current = node.parent;
+  while (current && current.type !== "DOCUMENT" && names.length < 5) {
+    if ("name" in current && current.name) names.push(current.name);
+    current = current.parent;
+  }
+  return names;
+};
+
 export const handleReadDocumentRequest = async (
   request: PluginToolRequest,
 ): Promise<PluginToolResponse | null> => {
@@ -331,7 +403,7 @@ export const handleReadDocumentRequest = async (
     case "get_node_context": {
       const nodeId = request.nodeIds && request.nodeIds[0];
       if (!nodeId) throw new Error("nodeIds is required for get_node");
-      const node = await figma.getNodeByIdAsync(nodeId);
+      const node = await getNodeByIdLocalFirst(nodeId);
       if (!node || node.type === "DOCUMENT") {
         throw new Error(`Node not found: ${nodeId}`);
       }
@@ -357,7 +429,7 @@ export const handleReadDocumentRequest = async (
         throw new Error("nodeIds is required for get_nodes_info");
       }
       const opts = makeSerializeOptions(request, DEFAULT_READ_BUDGET.nodeContext, "compact", true);
-      const nodes = await Promise.all(request.nodeIds.map((id: string) => figma.getNodeByIdAsync(id)));
+      const nodes = await Promise.all(request.nodeIds.map((id: string) => getNodeByIdLocalFirst(id)));
       const data: any[] = [];
       for (const node of nodes) {
         if (!node || node.type === "DOCUMENT") continue;
@@ -544,7 +616,7 @@ export const handleReadDocumentRequest = async (
       const limit = toPositiveInt(params.limit, 50);
       const maxVisited = toPositiveInt(params.maxVisited, DEFAULT_READ_BUDGET.search.maxVisited);
       const maxTimeMs = toPositiveInt(params.maxTimeMs, DEFAULT_READ_BUDGET.search.maxTimeMs);
-      const root = scopeNodeId ? await figma.getNodeByIdAsync(scopeNodeId) : figma.currentPage;
+      const root = scopeNodeId ? await getNodeByIdLocalFirst(scopeNodeId) : figma.currentPage;
       if (!root) throw new Error(`Node not found: ${scopeNodeId}`);
 
       const results: any[] = [];
@@ -606,7 +678,7 @@ export const handleReadDocumentRequest = async (
     case "get_reactions": {
       const nodeId = request.nodeIds && request.nodeIds[0];
       if (!nodeId) throw new Error("nodeId is required for get_reactions");
-      const node = await figma.getNodeByIdAsync(nodeId);
+      const node = await getNodeByIdLocalFirst(nodeId);
       if (!node || node.type === "DOCUMENT") throw new Error(`Node not found: ${nodeId}`);
       const reactions = "reactions" in node ? node.reactions : [];
       return {
@@ -620,7 +692,7 @@ export const handleReadDocumentRequest = async (
       const params = request.params || {};
       const nodeId = params.nodeId;
       if (!nodeId) throw new Error("nodeId is required for scan_text_nodes");
-      const root = await figma.getNodeByIdAsync(nodeId);
+      const root = await getNodeByIdLocalFirst(nodeId);
       if (!root) throw new Error(`Node not found: ${nodeId}`);
       const maxVisited = toPositiveInt(params.maxVisited, DEFAULT_READ_BUDGET.scan.maxVisited);
       const maxTimeMs = toPositiveInt(params.maxTimeMs, DEFAULT_READ_BUDGET.scan.maxTimeMs);
@@ -680,7 +752,7 @@ export const handleReadDocumentRequest = async (
       const types = Array.isArray(params.types) ? params.types : [];
       if (!nodeId) throw new Error("nodeId is required for scan_nodes_by_types");
       if (types.length === 0) throw new Error("types must be a non-empty array");
-      const root = await figma.getNodeByIdAsync(nodeId);
+      const root = await getNodeByIdLocalFirst(nodeId);
       if (!root) throw new Error(`Node not found: ${nodeId}`);
 
       const maxVisited = toPositiveInt(params.maxVisited, DEFAULT_READ_BUDGET.scan.maxVisited);
@@ -736,6 +808,78 @@ export const handleReadDocumentRequest = async (
           ...(truncated
             ? { recommendedNextCalls: buildRecommendedNextCalls(root, "compact", 2) }
             : {}),
+        },
+      };
+    }
+
+    case "discover_design_system_instances": {
+      const params = request.params || {};
+      const nodeId = typeof params.nodeId === "string" && params.nodeId
+        ? params.nodeId
+        : figma.currentPage.id;
+      const root = await getNodeByIdLocalFirst(nodeId);
+      if (!root || root.type === "DOCUMENT" || !("findAllWithCriteria" in root)) {
+        throw new Error(`Node does not support instance discovery: ${nodeId}`);
+      }
+      const maxInstances = toPositiveInt(params.maxInstances, 600);
+      const allInstances = root.findAllWithCriteria({ types: ["INSTANCE"] });
+      const matchingInstances = allInstances.filter(isDesignSystemInstanceCandidate);
+      const candidates: Array<{
+        node: InstanceNode;
+        contextLabels: string[];
+        componentProperties: Record<string, string>;
+      }> = [];
+      const seenSignatures = new Set<string>();
+      for (const node of matchingInstances) {
+        const contextLabels = nearbyContextLabels(node);
+        const componentProperties = componentPropertyValues(node);
+        const signature = [
+          node.name.toLowerCase(),
+          catalogVariantSignature(componentProperties),
+          contextLabels.join("|").toLowerCase(),
+        ].join("|");
+        if (seenSignatures.has(signature)) continue;
+        seenSignatures.add(signature);
+        candidates.push({ node, contextLabels, componentProperties });
+        if (candidates.length >= maxInstances) break;
+      }
+      const instances: any[] = [];
+      for (const candidate of candidates) {
+        const { node, contextLabels, componentProperties } = candidate;
+        let mainComponentId: string | null = null;
+        let mainComponentName: string | null = null;
+        let mainComponentKey: string | null = null;
+        let mainComponentError: string | undefined;
+        try {
+          const main = await node.getMainComponentAsync();
+          mainComponentId = main?.id ?? null;
+          mainComponentName = main?.name ?? null;
+          mainComponentKey = main?.key ?? null;
+        } catch (error) {
+          mainComponentError = error instanceof Error ? error.message : String(error);
+        }
+        instances.push({
+          id: node.id,
+          name: node.name,
+          type: node.type,
+          pageId: figma.currentPage.id,
+          mainComponentId,
+          mainComponentName,
+          mainComponentKey,
+          componentProperties,
+          contextLabels,
+          ancestorNames: ancestorNames(node),
+          ...(mainComponentError ? { mainComponentError } : {}),
+        });
+      }
+      return {
+        type: request.type,
+        requestId: request.requestId,
+        data: {
+          count: instances.length,
+          instances,
+          candidateCount: matchingInstances.length,
+          truncated: candidates.length >= maxInstances && candidates.length < matchingInstances.length,
         },
       };
     }

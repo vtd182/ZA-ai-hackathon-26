@@ -58,9 +58,13 @@ class MemoryExecutionRepository implements ExecutionRepository {
 class TestConnector implements ArtifactConnector<TestPlan, TestPlan, TestSnapshot> {
   readonly target = 'jira' as const
   executeCount = 0
+  preflightCount = 0
   mismatch = false
   checkAvailability(): Promise<ConnectorStatus> { return Promise.resolve({ available: true, label: 'ready', detail: 'test' }) }
-  preflight(plan: TestPlan): Promise<PreflightResult<TestPlan>> { return Promise.resolve({ allowed: true, plan, planHash: 'hash', issues: [] }) }
+  preflight(plan: TestPlan): Promise<PreflightResult<TestPlan>> {
+    this.preflightCount += 1
+    return Promise.resolve({ allowed: true, plan, planHash: 'hash', issues: [] })
+  }
   execute(): Promise<ActionReceipt> {
     this.executeCount += 1
     return Promise.resolve({
@@ -97,6 +101,29 @@ describe('receipt-first connector orchestration', () => {
     expect(recovered.status).toBe('verified')
     expect(connector.executeCount).toBe(1)
     expect(repository.verification?.verified).toBe(true)
+  })
+
+  it('executes the exact prepared preflight covered by approval without resolving it again', async () => {
+    const repository = new MemoryExecutionRepository()
+    const connector = new TestConnector()
+    const preparedPreflight = {
+      allowed: true,
+      plan: { value: 'expected' },
+      planHash: 'hash',
+      issues: [],
+    } satisfies PreflightResult<TestPlan>
+
+    const result = await executeConnectorAction({
+      action,
+      plan: { value: 'source' },
+      preparedPreflight,
+      connector,
+      repository,
+      now: () => '2026-07-22T00:02:00.000Z',
+    })
+
+    expect(result.status).toBe('verified')
+    expect(connector.preflightCount).toBe(0)
   })
 
   it('records a verification mismatch without reporting success', async () => {

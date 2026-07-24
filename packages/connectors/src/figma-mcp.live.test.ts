@@ -28,7 +28,7 @@ describe('FigmaMcpAdapter live', () => {
         runId: 'RUN-LIVE-DEMO',
         threadId: 'THREAD-LIVE-DEMO',
         actionId: 'ACTION-LIVE-DEMO',
-        idempotencyKey: 'figma:live-demo:v5',
+        idempotencyKey: 'figma:live-demo:v6',
       }, mode)
       const preflight = await adapter.preflightArtifactPlan(plan, manifest, target)
 

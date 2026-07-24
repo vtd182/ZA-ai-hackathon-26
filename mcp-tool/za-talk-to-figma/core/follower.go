@@ -25,10 +25,9 @@ type Follower struct {
 func NewFollower(leaderURL string) *Follower {
 	return &Follower{
 		leaderURL: leaderURL,
-		client: &http.Client{
-			// 35s > 30s bridge timeout — gives the leader time to time out first
-			Timeout: 35 * time.Second,
-		},
+		// Long-running lifecycle writes inherit the per-tool MCP deadline through
+		// NewRequestWithContext. A fixed client timeout would truncate those calls.
+		client: &http.Client{},
 	}
 }
 

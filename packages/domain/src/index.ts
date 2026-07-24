@@ -2,7 +2,9 @@ import { z } from 'zod'
 import type { FigmaSetupStatus } from './figma-setup'
 import type { ApproveChangeOutput, CanvasCommandOutput, CanvasGestureCommand, ChangePreview, LifecycleWorkspaceState, PlannedAction } from './lifecycle'
 import type { ProductSpec } from './product-spec'
-import { canvasProgramJsonSchema, canvasProgramSchema, emptyCanvasProgram, normalizeCanvasProgram, type CanvasDocumentContext, type CanvasExecutionFailure, type CanvasExecutionReceipt, type CanvasProgram, type CanvasPromotionPreview } from './canvas-program'
+import type { ArtifactProgressEvent } from './execution'
+import { canvasProgramJsonSchema, canvasProgramSchema, emptyCanvasProgram, normalizeCanvasProgram, type CanvasDiffContext, type CanvasDocumentContext, type CanvasExecutionFailure, type CanvasExecutionReceipt, type CanvasProgram, type CanvasPromotionPreview } from './canvas-program'
+import { figmaCreativeBlueprintJsonSchema, figmaCreativeBlueprintSchema } from './figma-creative'
 
 export * from './design-system'
 export * from './artifact-plan'
@@ -15,6 +17,7 @@ export * from './mock-artifact'
 export * from './product-spec'
 export * from './state-machine'
 export * from './canvas-program'
+export * from './figma-creative'
 
 export const workflowViews = ['discover', 'decide', 'deliver', 'change'] as const
 export type WorkflowView = (typeof workflowViews)[number]
@@ -58,6 +61,16 @@ export const reasoningResultSchema = z.object({
 })
 export type ReasoningResult = z.infer<typeof reasoningResultSchema>
 
+export const providerIntentKinds = ['conversation', 'discovery', 'draw', 'edit', 'promote', 'change', 'artifact'] as const
+export const providerArtifactActions = ['prepare', 'approve', 'status', 'retry'] as const
+
+export const providerIntentSchema = z.object({
+  kind: z.enum(providerIntentKinds),
+  target: z.string().min(1).max(200).nullable(),
+  artifactAction: z.enum(providerArtifactActions).nullable(),
+}).default({ kind: 'conversation', target: null, artifactAction: null })
+export type ProviderIntent = z.infer<typeof providerIntentSchema>
+
 const clarificationQuestionSchema = z.object({
   id: z.string().min(1),
   prompt: z.string().min(1),
@@ -68,7 +81,9 @@ const phaseResultBase = {
   schemaVersion: z.literal(1),
   message: z.string().min(1),
   commands: z.array(providerCommandSchema),
+  intent: providerIntentSchema,
   canvasProgram: canvasProgramSchema.optional(),
+  figmaBlueprint: figmaCreativeBlueprintSchema.optional(),
 }
 
 export const discoveryReasoningResultSchema = z.object({
@@ -194,6 +209,7 @@ export interface SendChatInput {
   content: string
   selection?: CanvasSelectionContext
   canvas?: CanvasDocumentContext
+  canvasDiff?: CanvasDiffContext
 }
 
 export interface SendChatOutput {
@@ -232,6 +248,12 @@ export interface DemoResetOutput {
   workspace: LifecycleWorkspaceState
 }
 
+export interface ThreadExportResult {
+  directoryPath: string
+  files: string[]
+  exportedAt: string
+}
+
 export interface HandoffPackage {
   schemaVersion: 1
   threadId: string
@@ -259,6 +281,7 @@ export interface DesktopApi {
     archive(threadId: string): Promise<void>
     setProvider(threadId: string, profileId: string, confirmPaid?: boolean): Promise<ThreadDetail>
     messages(threadId: string, cursor?: string, limit?: number): Promise<MessagePage>
+    exportBundle(threadId: string): Promise<ThreadExportResult>
   }
   canvas: {
     save(threadId: string, snapshot: unknown): Promise<void>
@@ -281,6 +304,7 @@ export interface DesktopApi {
     approveArtifacts(threadId: string): Promise<ApproveChangeOutput>
     rejectArtifacts(threadId: string): Promise<ApproveChangeOutput>
     showDocument(threadId: string): Promise<void>
+    onArtifactProgress(listener: (event: ArtifactProgressEvent) => void): () => void
   }
   figma: {
     status(): Promise<FigmaSetupStatus>
@@ -378,17 +402,53 @@ const phaseDataJsonSchemas = {
   },
 } as const
 
-export function reasoningJsonSchemaForPhase(phase: WorkflowView): Record<string, unknown> {
+const providerIntentJsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['kind', 'target', 'artifactAction'],
+  properties: {
+    kind: { type: 'string', enum: providerIntentKinds },
+    target: { type: ['string', 'null'] },
+    artifactAction: { type: ['string', 'null'], enum: [...providerArtifactActions, null] },
+  },
+} as const
+
+export function reasoningJsonSchemaForPhase(
+  phase: WorkflowView,
+  options: { includeCanvasProgram?: boolean; includeFigmaBlueprint?: boolean; intentKind?: ProviderIntent['kind'] } = {},
+): Record<string, unknown> {
+  const includeCanvasProgram = options.includeCanvasProgram ?? true
+  const includeFigmaBlueprint = options.includeFigmaBlueprint ?? false
+  const intentSchema = options.intentKind
+    ? {
+        ...providerIntentJsonSchema,
+        properties: {
+          ...providerIntentJsonSchema.properties,
+          kind: { type: 'string', const: options.intentKind },
+        },
+      }
+    : providerIntentJsonSchema
   return {
     type: 'object',
     additionalProperties: false,
-    required: ['schemaVersion', 'phase', 'message', 'commands', 'canvasProgram', 'phaseData'],
+    required: [
+      'schemaVersion',
+      'phase',
+      'message',
+      'commands',
+      'intent',
+      ...(includeCanvasProgram ? ['canvasProgram'] : []),
+      ...(includeFigmaBlueprint ? ['figmaBlueprint'] : []),
+      'phaseData',
+    ],
     properties: {
       schemaVersion: { type: 'integer', const: 1 },
       phase: { type: 'string', const: phase },
       message: { type: 'string' },
       commands: commandJsonSchema,
-      canvasProgram: canvasProgramJsonSchema,
+      intent: intentSchema,
+      ...(includeCanvasProgram ? { canvasProgram: canvasProgramJsonSchema } : {}),
+      ...(includeFigmaBlueprint ? { figmaBlueprint: figmaCreativeBlueprintJsonSchema } : {}),
       phaseData: phaseDataJsonSchemas[phase],
     },
   }

@@ -28,4 +28,20 @@ describe('paginated and searchable history', () => {
     expect(elapsed).toBeLessThan(250)
     history.close()
   })
+
+  it('returns a complete chronological transcript for review exports', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pm-agent-history-export-'))
+    cleanup.push(directory)
+    const history = new HistoryStore(join(directory, 'app.db'))
+    const thread = history.createThread()
+    for (let index = 0; index < 75; index += 1) {
+      history.addMessage(thread.id, index % 2 === 0 ? 'user' : 'assistant', `Message ${index + 1}`)
+    }
+
+    const messages = history.allMessages(thread.id)
+    expect(messages).toHaveLength(75)
+    expect(messages[0]?.content).toBe('Message 1')
+    expect(messages.at(-1)?.content).toBe('Message 75')
+    history.close()
+  })
 })

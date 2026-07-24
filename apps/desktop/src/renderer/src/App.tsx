@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleAlert,
+  Download,
   ExternalLink,
   FileText,
   FolderOpen,
@@ -24,9 +25,12 @@ import {
   Settings,
   ShieldCheck,
   Square,
+  SquareTerminal,
   X,
 } from 'lucide-react'
 import type {
+  CanvasDiffContext,
+  ArtifactProgressEvent,
   CanvasSelectionContext,
   CanvasDocumentContext,
   CanvasExecutionReceipt,
@@ -46,6 +50,16 @@ import type {
 } from '@pm-agent/domain'
 
 const noCanvasProgram: CanvasProgram = { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null }
+const slashCommands = [
+  { command: '/figma prepare', label: 'Prepare Figma', detail: 'Preflight, chưa write' },
+  { command: '/figma approve', label: 'Approve Figma', detail: 'Duyệt plan đang chờ' },
+  { command: '/figma create', label: 'Create Figma', detail: 'Prepare hoặc chạy plan sẵn có' },
+  { command: '/figma status', label: 'Figma status', detail: 'Plugin, target và guard' },
+  { command: '/figma retry', label: 'Retry Figma', detail: 'Giữ nguyên target đã thành công' },
+  { command: '/canvas flow', label: 'Canvas flow', detail: 'Ép tạo user flow', acceptsPrompt: true },
+  { command: '/canvas prototype', label: 'Canvas prototype', detail: 'Ép tạo prototype', acceptsPrompt: true },
+  { command: '/help', label: 'Slash help', detail: 'Danh sách lệnh' },
+]
 
 const CanvasWorkspace = lazy(async () => {
   const module = await import('./CanvasWorkspace')
@@ -77,7 +91,7 @@ export function App(): React.JSX.Element {
   const [search, setSearch] = useState('')
   const [historyOpen, setHistoryOpen] = useState(true)
   const [loading, setLoading] = useState(true)
-  const [sending, setSending] = useState(false)
+  const [runningThreadId, setRunningThreadId] = useState<string | null>(null)
   const [approving, setApproving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [settingsProfile, setSettingsProfile] = useState<ProviderProfile | null>(null)
@@ -90,6 +104,13 @@ export function App(): React.JSX.Element {
   const [lifecycleWorkspace, setLifecycleWorkspace] = useState<LifecycleWorkspaceState | null>(null)
   const [promotionPreview, setPromotionPreview] = useState<CanvasPromotionPreview | null>(null)
   const [programBatch, setProgramBatch] = useState<{ id: number; requestId?: string; program: CanvasProgram; source: CanvasExecutionReceipt['source'] }>({ id: 0, program: noCanvasProgram, source: 'provider' })
+  const [artifactProgress, setArtifactProgress] = useState<Partial<Record<PlannedAction['target'], ArtifactProgressEvent>>>({})
+  const [artifactClock, setArtifactClock] = useState(Date.now())
+  const activeThreadIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    activeThreadIdRef.current = activeThread?.id ?? null
+  }, [activeThread?.id])
 
   const refreshThreads = useCallback(async (query = search) => {
     const next = await window.pmAgent.threads.list(query)
@@ -98,6 +119,7 @@ export function App(): React.JSX.Element {
   }, [search])
 
   const openThread = useCallback(async (threadId: string) => {
+    activeThreadIdRef.current = threadId
     setLoading(true)
     setError(null)
     try {
@@ -105,16 +127,18 @@ export function App(): React.JSX.Element {
         window.pmAgent.threads.get(threadId),
         window.pmAgent.lifecycle.getWorkspace(threadId),
       ])
+      if (activeThreadIdRef.current !== threadId) return
       setActiveThread(detail)
       setLifecycleWorkspace(workspace)
       setSelection(undefined)
       setCanvasContext(undefined)
       setPromotionPreview(null)
+      setArtifactProgress({})
       setProgramBatch({ id: 0, program: noCanvasProgram, source: 'provider' })
     } catch (nextError) {
-      setError(errorText(nextError))
+      if (activeThreadIdRef.current === threadId) setError(errorText(nextError))
     } finally {
-      setLoading(false)
+      if (activeThreadIdRef.current === threadId) setLoading(false)
     }
   }, [])
 
@@ -142,6 +166,7 @@ export function App(): React.JSX.Element {
           window.pmAgent.threads.get(batch.threadId),
           window.pmAgent.lifecycle.getWorkspace(batch.threadId),
         ])
+        activeThreadIdRef.current = batch.threadId
         setActiveThread(detail)
         setLifecycleWorkspace(workspace)
         setSelection(undefined)
@@ -163,6 +188,25 @@ export function App(): React.JSX.Element {
     })().catch((nextError) => setError(errorText(nextError)))
   }), [activeThread?.id, openThread])
 
+  useEffect(() => window.pmAgent.lifecycle.onArtifactProgress((progress) => {
+    if (activeThreadIdRef.current !== progress.threadId) return
+    setArtifactProgress((current) => ({ ...current, [progress.target]: progress }))
+    setArtifactClock(Date.now())
+  }), [])
+
+  useEffect(() => {
+    const busy = Object.values(artifactProgress).some((progress) => progress?.status === 'running')
+    if (!busy || !activeThread?.id) return
+    const threadId = activeThread.id
+    const timer = setInterval(() => {
+      setArtifactClock(Date.now())
+      void window.pmAgent.lifecycle.getWorkspace(threadId).then((workspace) => {
+        if (activeThreadIdRef.current === threadId) setLifecycleWorkspace(workspace)
+      }).catch(() => undefined)
+    }, 500)
+    return () => clearInterval(timer)
+  }, [activeThread?.id, artifactProgress])
+
   useEffect(() => {
     if (!figmaSetupOpen) return
     const refresh = (): void => { void window.pmAgent.figma.status().then(setFigmaStatus) }
@@ -182,6 +226,7 @@ export function App(): React.JSX.Element {
     try {
       const detail = await window.pmAgent.threads.create()
       const workspace = await window.pmAgent.lifecycle.getWorkspace(detail.id)
+      activeThreadIdRef.current = detail.id
       setActiveThread(detail)
       setLifecycleWorkspace(workspace)
       setSelection(undefined)
@@ -201,7 +246,10 @@ export function App(): React.JSX.Element {
     const next = await refreshThreads()
     if (activeThread?.id === threadId) {
       if (next[0]) await openThread(next[0].id)
-      else setActiveThread(null)
+      else {
+        activeThreadIdRef.current = null
+        setActiveThread(null)
+      }
     }
   }
 
@@ -226,55 +274,61 @@ export function App(): React.JSX.Element {
     content: string,
     canvasOverride?: CanvasDocumentContext,
     selectionOverride?: CanvasSelectionContext,
+    canvasDiff?: CanvasDiffContext,
   ): Promise<void> => {
-    if (!activeThread || sending || !content.trim()) return
+    if (!activeThread || runningThreadId || !content.trim()) return
+    const requestThreadId = activeThread.id
     const optimistic: ChatMessage = {
       id: `optimistic-${Date.now()}`,
-      threadId: activeThread.id,
+      threadId: requestThreadId,
       role: 'user',
       content: content.trim(),
       createdAt: new Date().toISOString(),
     }
     setActiveThread({ ...activeThread, messages: [...activeThread.messages, optimistic] })
-    setSending(true)
+    setRunningThreadId(requestThreadId)
     setError(null)
     try {
       const effectiveSelection = selectionOverride ?? selection
       const effectiveCanvas = canvasOverride ?? canvasContext
       const result = await window.pmAgent.chat.send({
-        threadId: activeThread.id,
+        threadId: requestThreadId,
         content: content.trim(),
         ...(effectiveSelection ? { selection: effectiveSelection } : {}),
         ...(effectiveCanvas ? { canvas: effectiveCanvas } : {}),
+        ...(canvasDiff ? { canvasDiff } : {}),
       })
       const [detail, workspace] = await Promise.all([
-        window.pmAgent.threads.get(activeThread.id),
-        window.pmAgent.lifecycle.getWorkspace(activeThread.id),
+        window.pmAgent.threads.get(requestThreadId),
+        window.pmAgent.lifecycle.getWorkspace(requestThreadId),
       ])
-      setActiveThread(detail)
-      setLifecycleWorkspace(workspace)
-      setProgramBatch({
-        id: Date.now(),
-        ...(result.canvasRequestId ? { requestId: result.canvasRequestId } : {}),
-        program: result.canvasProgram,
-        source: result.canvasProgramSource === 'none' ? 'provider' : result.canvasProgramSource,
-      })
+      if (activeThreadIdRef.current === requestThreadId) {
+        setActiveThread(detail)
+        setLifecycleWorkspace(workspace)
+        setProgramBatch({
+          id: Date.now(),
+          ...(result.canvasRequestId ? { requestId: result.canvasRequestId } : {}),
+          program: result.canvasProgram,
+          source: result.canvasProgramSource === 'none' ? 'provider' : result.canvasProgramSource,
+        })
+      }
       if (isPromotionIntent(content) && canvasContext && canvasContext.shapes.length > 0) {
-        setPromotionPreview(await window.pmAgent.lifecycle.previewPromotion(activeThread.id, canvasContext))
+        const preview = await window.pmAgent.lifecycle.previewPromotion(requestThreadId, canvasContext)
+        if (activeThreadIdRef.current === requestThreadId) setPromotionPreview(preview)
       }
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
-      const detail = await window.pmAgent.threads.get(activeThread.id)
-      setActiveThread(detail)
+      const detail = await window.pmAgent.threads.get(requestThreadId)
+      if (activeThreadIdRef.current === requestThreadId) setActiveThread(detail)
     } finally {
-      setSending(false)
+      setRunningThreadId((current) => current === requestThreadId ? null : current)
     }
   }
 
   const stopMessage = async (): Promise<void> => {
-    if (!activeThread) return
-    await window.pmAgent.chat.cancel(activeThread.id)
+    if (!runningThreadId) return
+    await window.pmAgent.chat.cancel(runningThreadId)
   }
 
   const loadEarlierMessages = async (): Promise<void> => {
@@ -289,17 +343,22 @@ export function App(): React.JSX.Element {
 
   const approveChange = async (): Promise<void> => {
     if (!activeThread || approving) return
+    const requestThreadId = activeThread.id
     setApproving(true)
+    setRunningThreadId(requestThreadId)
     setError(null)
     try {
-      const result = await window.pmAgent.lifecycle.approveChange(activeThread.id)
-      setLifecycleWorkspace(result)
-      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      const result = await window.pmAgent.lifecycle.approveChange(requestThreadId)
+      if (activeThreadIdRef.current === requestThreadId) {
+        setLifecycleWorkspace(result)
+        setActiveThread(await window.pmAgent.threads.get(requestThreadId))
+      }
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
     } finally {
       setApproving(false)
+      setRunningThreadId((current) => current === requestThreadId ? null : current)
     }
   }
 
@@ -337,40 +396,52 @@ export function App(): React.JSX.Element {
 
   const commitPromotion = async (): Promise<void> => {
     if (!activeThread || !promotionPreview || approving) return
+    const requestThreadId = activeThread.id
     setApproving(true)
+    setRunningThreadId(requestThreadId)
     setError(null)
     try {
-      const workspace = await window.pmAgent.lifecycle.commitPromotion(activeThread.id, promotionPreview.payloadHash)
-      setLifecycleWorkspace(workspace)
-      setPromotionPreview(null)
-      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      const workspace = await window.pmAgent.lifecycle.commitPromotion(requestThreadId, promotionPreview.payloadHash)
+      if (activeThreadIdRef.current === requestThreadId) {
+        setLifecycleWorkspace(workspace)
+        setPromotionPreview(null)
+        setActiveThread(await window.pmAgent.threads.get(requestThreadId))
+      }
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
     } finally {
       setApproving(false)
+      setRunningThreadId((current) => current === requestThreadId ? null : current)
     }
   }
 
   const prepareArtifacts = async (): Promise<void> => {
     if (!activeThread || approving) return
+    const requestThreadId = activeThread.id
     setApproving(true)
+    setRunningThreadId(requestThreadId)
+    setArtifactProgress({})
     setError(null)
     try {
-      const workspace = await window.pmAgent.lifecycle.prepareArtifacts(activeThread.id)
-      setLifecycleWorkspace(workspace)
-      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      const workspace = await window.pmAgent.lifecycle.prepareArtifacts(requestThreadId)
+      if (activeThreadIdRef.current === requestThreadId) {
+        setLifecycleWorkspace(workspace)
+        setActiveThread(await window.pmAgent.threads.get(requestThreadId))
+      }
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
     } finally {
       setApproving(false)
+      setRunningThreadId((current) => current === requestThreadId ? null : current)
     }
   }
 
   const decideArtifacts = async (decision: 'approve' | 'reject'): Promise<void> => {
     if (!activeThread || approving) return
     setApproving(true)
+    if (decision === 'approve') setArtifactProgress({})
     setError(null)
     try {
       const workspace = decision === 'approve'
@@ -387,34 +458,40 @@ export function App(): React.JSX.Element {
   }
 
   const advanceDecision = async (answers: Record<string, string>): Promise<void> => {
-    if (!activeThread || sending) return
-    setSending(true)
+    if (!activeThread || runningThreadId) return
+    const requestThreadId = activeThread.id
+    setRunningThreadId(requestThreadId)
     setError(null)
     try {
-      const workspace = await window.pmAgent.lifecycle.advanceDecision(activeThread.id, answers)
-      setLifecycleWorkspace(workspace)
-      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      const workspace = await window.pmAgent.lifecycle.advanceDecision(requestThreadId, answers)
+      if (activeThreadIdRef.current === requestThreadId) {
+        setLifecycleWorkspace(workspace)
+        setActiveThread(await window.pmAgent.threads.get(requestThreadId))
+      }
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
     } finally {
-      setSending(false)
+      setRunningThreadId((current) => current === requestThreadId ? null : current)
     }
   }
 
   const selectDecision = async (optionId: string, customTitle?: string): Promise<void> => {
-    if (!activeThread || sending) return
-    setSending(true)
+    if (!activeThread || runningThreadId) return
+    const requestThreadId = activeThread.id
+    setRunningThreadId(requestThreadId)
     setError(null)
     try {
-      const workspace = await window.pmAgent.lifecycle.selectDecision(activeThread.id, optionId, customTitle)
-      setLifecycleWorkspace(workspace)
-      setActiveThread(await window.pmAgent.threads.get(activeThread.id))
+      const workspace = await window.pmAgent.lifecycle.selectDecision(requestThreadId, optionId, customTitle)
+      if (activeThreadIdRef.current === requestThreadId) {
+        setLifecycleWorkspace(workspace)
+        setActiveThread(await window.pmAgent.threads.get(requestThreadId))
+      }
       await refreshThreads()
     } catch (nextError) {
       setError(errorText(nextError))
     } finally {
-      setSending(false)
+      setRunningThreadId((current) => current === requestThreadId ? null : current)
     }
   }
 
@@ -426,6 +503,7 @@ export function App(): React.JSX.Element {
     try {
       const result = await window.pmAgent.demo.reset()
       setSearch('')
+      activeThreadIdRef.current = result.thread.id
       setActiveThread(result.thread)
       setLifecycleWorkspace(result.workspace)
       setSelection(undefined)
@@ -471,7 +549,7 @@ export function App(): React.JSX.Element {
               <button className="thread-main" onClick={() => void openThread(thread.id)}>
                 <strong>{thread.title}</strong>
                 <span>{thread.lastMessage ?? 'Canvas trống'}</span>
-                <small>{thread.phase} · {relativeTime(thread.updatedAt)}</small>
+                <small>{thread.id === runningThreadId ? 'Đang reasoning' : thread.phase} · {relativeTime(thread.updatedAt)}</small>
               </button>
               <button className="thread-archive" title="Lưu trữ" onClick={() => void archiveThread(thread.id)}>
                 <Archive size={15} />
@@ -497,7 +575,7 @@ export function App(): React.JSX.Element {
             <select
               aria-label="Reasoning provider"
               value={activeThread?.providerId ?? ''}
-              disabled={!activeThread || sending}
+              disabled={!activeThread || Boolean(runningThreadId)}
               onChange={(event) => void switchProvider(event.target.value)}
             >
               {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}</option>)}
@@ -541,7 +619,7 @@ export function App(): React.JSX.Element {
                 threadId={activeThread.id}
                 snapshot={activeThread.canvasSnapshot}
                 programBatch={programBatch}
-                agentBusy={sending}
+                agentBusy={runningThreadId === activeThread.id}
                 onContextChange={(context, nextSelection) => {
                   setCanvasContext(context)
                   setSelection(nextSelection)
@@ -560,13 +638,14 @@ export function App(): React.JSX.Element {
                     await refreshThreads()
                   }
                 }}
-                onSync={async (context, nextSelection) => {
+                onSync={async (context, nextSelection, diff) => {
                   await sendMessage(
                     nextSelection
-                      ? `Sync canvas với chat và đọc vùng đang chọn: ${nextSelection.label}`
-                      : 'Sync canvas với chat và tóm tắt scene hiện tại',
+                      ? `Sync canvas. Hãy đọc thay đổi và phản hồi về vùng đang chọn: ${nextSelection.label}`
+                      : 'Sync canvas. Hãy đọc các thay đổi tôi vừa thực hiện và tóm tắt tác động.',
                     context,
                     nextSelection,
+                    diff,
                   )
                 }}
                 onError={setError}
@@ -586,8 +665,11 @@ export function App(): React.JSX.Element {
         messages={activeThread?.messages ?? []}
         hasEarlierMessages={Boolean(activeThread?.messageNextCursor)}
         selection={selection}
-        sending={sending}
+        sending={runningThreadId === activeThread?.id}
+        blockedByOtherThread={Boolean(runningThreadId && runningThreadId !== activeThread?.id)}
         approving={approving}
+        artifactProgress={artifactProgress}
+        artifactClock={artifactClock}
         preview={lifecycleWorkspace?.preview ?? undefined}
         clarification={lifecycleWorkspace?.runState.pendingClarification ?? undefined}
         execution={lifecycleWorkspace?.execution ?? undefined}
@@ -613,6 +695,14 @@ export function App(): React.JSX.Element {
         onRejectArtifacts={() => decideArtifacts('reject')}
         onShowDocument={async () => {
           if (activeThread) await window.pmAgent.lifecycle.showDocument(activeThread.id)
+        }}
+        onExport={async () => {
+          if (!activeThread) return
+          try {
+            await window.pmAgent.threads.exportBundle(activeThread.id)
+          } catch (nextError) {
+            setError(errorText(nextError))
+          }
         }}
       />
 
@@ -780,7 +870,10 @@ function ChatPanel({
   hasEarlierMessages,
   selection,
   sending,
+  blockedByOtherThread,
   approving,
+  artifactProgress,
+  artifactClock,
   preview,
   clarification,
   execution,
@@ -805,12 +898,16 @@ function ChatPanel({
   onApproveArtifacts,
   onRejectArtifacts,
   onShowDocument,
+  onExport,
 }: {
   messages: ChatMessage[]
   hasEarlierMessages: boolean
   selection?: CanvasSelectionContext
   sending: boolean
+  blockedByOtherThread: boolean
   approving: boolean
+  artifactProgress: Partial<Record<PlannedAction['target'], ArtifactProgressEvent>>
+  artifactClock: number
   preview?: ChangePreview
   clarification?: string
   execution?: ExecutionSummary
@@ -835,10 +932,33 @@ function ChatPanel({
   onApproveArtifacts(): Promise<void>
   onRejectArtifacts(): Promise<void>
   onShowDocument(): Promise<void>
+  onExport(): Promise<void>
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
+  const [slashIndex, setSlashIndex] = useState(0)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
-  const canSend = !disabled && !sending && draft.trim().length > 0
+  const artifactBusy = Object.values(artifactProgress).some((progress) => progress?.status === 'running')
+  const canSend = !disabled && !sending && !approving && !artifactBusy && !blockedByOtherThread && draft.trim().length > 0
+  const figmaAction = artifactActions.find((action) => action.target === 'figma')
+  const figmaTimeoutMinutes = typeof figmaAction?.payload.timeoutBudgetMs === 'number'
+    ? Math.ceil(figmaAction.payload.timeoutBudgetMs / 60_000)
+    : null
+  const figmaPlan = figmaAction?.payload.plan as {
+    creativeBlueprint?: { screens?: Array<{ elements?: unknown[] }> }
+  } | undefined
+  const creativeScreens = figmaPlan?.creativeBlueprint?.screens ?? []
+  const creativeLayers = creativeScreens.reduce((sum, screen) => sum + (screen.elements?.length ?? 0), 0)
+  const slashQuery = draft.trimStart().toLowerCase()
+  const matchingSlashCommands = slashQuery.startsWith('/') && !slashQuery.includes('\n')
+    ? slashCommands.filter((item) => item.command.startsWith(slashQuery) || item.label.toLowerCase().includes(slashQuery.slice(1)))
+    : []
+  const selectedSlashCommand = matchingSlashCommands[Math.min(slashIndex, Math.max(0, matchingSlashCommands.length - 1))]
+
+  const chooseSlashCommand = (item: typeof slashCommands[number]): void => {
+    setDraft(`${item.command}${item.acceptsPrompt ? ' ' : ''}`)
+    setSlashIndex(0)
+    requestAnimationFrame(() => composerRef.current?.focus())
+  }
 
   const submit = async (): Promise<void> => {
     if (!canSend) return
@@ -850,23 +970,30 @@ function ChatPanel({
   return (
     <aside className="chat-panel">
       <div className="chat-header">
-        <div><strong>Chat</strong><span>Agent + canvas commands</span></div>
+        <div><strong>Chat</strong><span>Product co-creation</span></div>
+        <button className="icon-button chat-export-button" title="Xuất log và tài liệu" disabled={disabled} onClick={() => void onExport()}>
+          <Download size={16} />
+        </button>
         <CheckCircle2 size={18} className="verified-icon" />
       </div>
-      {selection && (
-        <div className="selection-chip">
-          <div><span>Context canvas</span><strong>{selection.label.replace('\n', ' · ')}</strong></div>
-          <button
-            type="button"
-            title="Chat về vùng đang chọn"
-            onClick={() => {
-              setDraft(`Về ${selection.label.replace('\n', ' · ')}: `)
-              requestAnimationFrame(() => composerRef.current?.focus())
-            }}
-          ><MessageSquareText size={15} /></button>
-        </div>
+      <div className="selection-slot">
+        {selection && (
+          <div className="selection-chip">
+            <div><span>Context canvas</span><strong>{selection.label.replace('\n', ' · ')}</strong></div>
+            <button
+              type="button"
+              title="Chat về vùng đang chọn"
+              onClick={() => {
+                setDraft(`Về ${selection.label.replace('\n', ' · ')}: `)
+                requestAnimationFrame(() => composerRef.current?.focus())
+              }}
+            ><MessageSquareText size={15} /></button>
+          </div>
+        )}
+      </div>
+      {productSpec && (productSpec.requirements.length > 0 || productSpec.screens.length > 0 || productSpec.stories.length > 0) && (
+        <ProductSpecInspector productSpec={productSpec} selection={selection} />
       )}
-      {productSpec && <ProductSpecInspector productSpec={productSpec} selection={selection} />}
       <div className="message-list">
         {hasEarlierMessages && (
           <button className="load-earlier-button" onClick={() => void onLoadEarlier()}><RefreshCw size={13} /> Tải tin cũ</button>
@@ -907,10 +1034,18 @@ function ChatPanel({
           <div className="artifact-targets">
             {artifactActions.map((action) => <span key={action.id}>{action.target === 'jira' ? 'Backlog mock' : action.target === 'zdoc' ? 'PRD.md' : 'Figma'}</span>)}
           </div>
-          <small>Figma được guard và read-back. PRD được xuất local; backlog vẫn là mock cho tới khi có MCP.</small>
+          <small>
+            Figma được guard và read-back
+            {creativeScreens.length > 0 ? ` · creative blueprint ${creativeScreens.length} màn hình/${creativeLayers} lớp` : ''}
+            {figmaTimeoutMinutes ? ` · budget tối đa ${figmaTimeoutMinutes} phút theo quy mô plan` : ''}.
+            {' '}PRD được xuất local; backlog vẫn là mock cho tới khi có MCP.
+          </small>
           <footer>
             <button className="secondary-button" disabled={approving} onClick={() => void onRejectArtifacts()}>Hủy writes</button>
-            <button className="primary-button" disabled={approving} onClick={() => void onApproveArtifacts()}>Duyệt & tạo</button>
+            <button className="primary-button" disabled={approving || artifactBusy} onClick={() => void onApproveArtifacts()}>
+              {approving || artifactBusy ? <LoaderCircle className="spin" size={15} /> : <ShieldCheck size={15} />}
+              {approving || artifactBusy ? 'Đang tạo...' : 'Duyệt & tạo'}
+            </button>
           </footer>
         </section>
       )}
@@ -920,7 +1055,16 @@ function ChatPanel({
           <div><strong>Cần xác định target</strong><span>{clarification}</span></div>
         </section>
       )}
-      {execution && <ExecutionPanel execution={execution} busy={approving} onRetry={onRetry} onShowDocument={onShowDocument} />}
+      {(execution || artifactBusy) && (
+        <ExecutionPanel
+          execution={execution}
+          progress={artifactProgress}
+          clock={artifactClock}
+          busy={approving || artifactBusy}
+          onRetry={onRetry}
+          onShowDocument={onShowDocument}
+        />
+      )}
       {reasoning && (reasoning.phase === 'discover' || reasoning.phase === 'decide') && (
         <PhaseReasoningPanel
           reasoning={reasoning}
@@ -933,21 +1077,65 @@ function ChatPanel({
         <DeliveryGuide
           productSpec={productSpec}
           canvasItemCount={canvasItemCount}
-          busy={sending}
+          busy={sending || approving || artifactBusy}
           onSend={onSend}
           onPrepareArtifacts={onPrepareArtifacts}
         />
       )}
       <div className="composer">
+        {matchingSlashCommands.length > 0 && (
+          <div className="slash-menu" role="listbox" aria-label="Slash commands">
+            {matchingSlashCommands.map((item, index) => (
+              <button
+                type="button"
+                role="option"
+                aria-selected={item === selectedSlashCommand}
+                className={item === selectedSlashCommand ? 'selected' : ''}
+                key={item.command}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => chooseSlashCommand(item)}
+              >
+                <SquareTerminal size={15} />
+                <span><strong>{item.command}</strong><small>{item.detail}</small></span>
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           ref={composerRef}
           value={draft}
-          disabled={disabled}
-          placeholder="Nhập ý tưởng hoặc điều khiển canvas..."
-          onChange={(event) => setDraft(event.target.value)}
+          disabled={disabled || approving || artifactBusy || blockedByOtherThread}
+          placeholder={blockedByOtherThread
+            ? 'Một thread khác đang reasoning...'
+            : artifactBusy || approving
+              ? 'Design agent đang xử lý artifact...'
+              : 'Nhập ý tưởng hoặc điều khiển canvas...'}
+          onChange={(event) => {
+            setDraft(event.target.value)
+            setSlashIndex(0)
+          }}
           onKeyDown={(event) => {
+            if (matchingSlashCommands.length > 0 && event.key === 'ArrowDown') {
+              event.preventDefault()
+              setSlashIndex((current) => (current + 1) % matchingSlashCommands.length)
+              return
+            }
+            if (matchingSlashCommands.length > 0 && event.key === 'ArrowUp') {
+              event.preventDefault()
+              setSlashIndex((current) => (current - 1 + matchingSlashCommands.length) % matchingSlashCommands.length)
+              return
+            }
+            if (selectedSlashCommand && event.key === 'Tab') {
+              event.preventDefault()
+              chooseSlashCommand(selectedSlashCommand)
+              return
+            }
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
+              if (selectedSlashCommand && draft.trim() !== selectedSlashCommand.command) {
+                chooseSlashCommand(selectedSlashCommand)
+                return
+              }
               void submit()
             }
           }}
@@ -992,7 +1180,7 @@ function DeliveryGuide({
         <button disabled={busy} onClick={() => void onSend('Vẽ user flow MVP dựa trên phương án đã chọn')}>
           <Route size={16} /><span><strong>User flow</strong><small>Luồng và nhánh chính</small></span>
         </button>
-        <button disabled={busy} onClick={() => void onSend('Vẽ prototype low-fidelity các màn hình MVP dựa trên phương án đã chọn')}>
+        <button disabled={busy} onClick={() => void onSend('Tạo prototype các màn hình MVP dựa trên phương án đã chọn')}>
           <LayoutTemplate size={16} /><span><strong>Prototype</strong><small>3–5 màn hình chỉnh được</small></span>
         </button>
         <button disabled={busy} onClick={() => void onSend('Tiếp tục hoàn thiện ProductSpec: chỉ ra scope, giả định và điểm còn thiếu')}>
@@ -1186,31 +1374,72 @@ function ChangePreviewPanel({
 
 function ExecutionPanel({
   execution,
+  progress,
+  clock,
   busy,
   onRetry,
   onShowDocument,
 }: {
-  execution: ExecutionSummary
+  execution?: ExecutionSummary
+  progress: Partial<Record<PlannedAction['target'], ArtifactProgressEvent>>
+  clock: number
   busy: boolean
   onRetry(target: PlannedAction['target']): Promise<void>
   onShowDocument(): Promise<void>
 }): React.JSX.Element {
   const labels: Record<PlannedAction['target'], string> = { figma: 'Figma', jira: 'Backlog mock', zdoc: 'PRD Markdown' }
+  const stageLabels: Record<ArtifactProgressEvent['stage'], string> = {
+    planning: 'AI thiết kế',
+    availability: 'Kiểm tra kết nối',
+    preflight: 'Xác minh plan',
+    write: 'Đang ghi',
+    read_back: 'Đọc lại',
+    verify: 'Xác minh',
+    complete: 'Hoàn tất',
+  }
+  const actions = execution?.actions ?? (Object.keys(progress) as PlannedAction['target'][]).map((target) => ({
+    actionId: `progress:${target}`,
+    target,
+    status: 'executing' as const,
+    attempts: 1,
+    lastError: null,
+    receipt: null,
+    verification: null,
+  }))
+  const status = execution?.status ?? 'executing'
   return (
-    <section className={`execution-panel ${execution.status}`} aria-label="Artifact execution status">
+    <section className={`execution-panel ${status}`} aria-label="Artifact execution status">
       <header>
-        <div><strong>Artifact sync</strong><span>{execution.status.replace('_', ' ')}</span></div>
-        {execution.status === 'verified' ? <CheckCircle2 size={18} /> : <GitCompareArrows size={18} />}
+        <div><strong>Artifact sync</strong><span>{status.replace('_', ' ')}</span></div>
+        {status === 'verified' ? <CheckCircle2 size={18} /> : <GitCompareArrows size={18} />}
       </header>
       <div className="execution-list">
-        {execution.actions.map((action) => {
+        {actions.map((action) => {
           const retryable = action.status === 'failed' || action.status === 'verification_failed'
+          const live = progress[action.target]
+          const elapsed = live
+            ? live.totalElapsedMs + (live.status === 'running' ? Math.max(0, clock - new Date(live.at).getTime()) : 0)
+            : 0
           return (
-            <div className="execution-row" key={action.actionId}>
-              <span className={`execution-state ${action.status}`} />
-              <div><strong>{labels[action.target]}</strong><small>{action.status.replace('_', ' ')} · attempt {action.attempts}</small></div>
+            <div className="execution-row" data-target={action.target} key={action.actionId}>
+              {live?.status === 'running'
+                ? <LoaderCircle className="spin execution-loader" size={14} />
+                : <span className={`execution-state ${action.status}`} />}
+              <div>
+                <strong>{labels[action.target]}</strong>
+                <small>
+                  {live ? live.message : `${action.status.replace('_', ' ')} · attempt ${action.attempts}`}
+                </small>
+                {live && <small>{stageLabels[live.stage]} · {Math.ceil(elapsed / 1_000)}s</small>}
+              </div>
               {retryable && (
-                <button className="icon-button" disabled={busy} title={`Retry ${labels[action.target]}`} onClick={() => void onRetry(action.target)}>
+                <button
+                  className="icon-button"
+                  data-retry-target={action.target}
+                  disabled={busy}
+                  title={`Retry ${labels[action.target]}`}
+                  onClick={() => void onRetry(action.target)}
+                >
                   <RefreshCw className={busy ? 'spin' : ''} size={15} />
                 </button>
               )}
@@ -1218,7 +1447,7 @@ function ExecutionPanel({
           )
         })}
       </div>
-      {execution.status === 'verified' && (
+      {execution?.status === 'verified' && (
         <button className="document-open-button" onClick={() => void onShowDocument()}>
           <FolderOpen size={15} /> Mở PRD.md
         </button>

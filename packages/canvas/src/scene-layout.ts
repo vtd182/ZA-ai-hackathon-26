@@ -31,11 +31,17 @@ const NODE_GAP = 56
 const LARGE_SCENE_NODE_COUNT = 10
 const WRAPPED_RANKS_PER_BAND = 6
 const WRAPPED_RANK_SPACING = 376
-const PROTOTYPE_COLUMN_GAP = 160
+const PROTOTYPE_COLUMN_GAP = 100
 const PROTOTYPE_ROW_GAP = 180
 
-export function canvasNodeDimensions(kind: CanvasNodeKind, label = '', semanticId = ''): CanvasNodeDimensions {
-  if (kind === 'screen' && semanticId.startsWith('prototype-')) return { width: 320, height: 520 }
+export function canvasNodeDimensions(kind: CanvasNodeKind, label = '', semanticId = '', rich = false, description = ''): CanvasNodeDimensions {
+  if (kind === 'screen' && semanticId.startsWith('prototype-')) return { width: 360, height: 720 }
+  if (rich) {
+    const descriptionLines = description ? Math.ceil(description.length / 32) : 0
+    const extraHeight = Math.min(220, Math.max(0, descriptionLines - 2) * 22)
+    if (kind === 'decision') return { width: 300, height: 220 + extraHeight }
+    return { width: 300, height: 200 + extraHeight }
+  }
   const extraLine = Math.max(0, Math.ceil(label.length / 24) - 2)
   if (kind === 'decision') return { width: 224, height: 144 + extraLine * 18 }
   if (kind === 'screen') return { width: 244, height: 128 + extraLine * 18 }
@@ -231,7 +237,7 @@ export function layoutCanvasProgram(
   for (const node of nodeById.values()) {
     const dimensions = existing.get(node.id)
       ? { width: existing.get(node.id)!.width, height: existing.get(node.id)!.height }
-      : canvasNodeDimensions(node.kind, node.label, node.id)
+      : canvasNodeDimensions(node.kind, node.label, node.id, Boolean(node.description || node.badge || node.lane), node.description)
     graph.setNode(node.id, dimensions)
   }
   for (const [index, connection] of connections.entries()) {

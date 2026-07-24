@@ -264,7 +264,7 @@ var __async = (__this, __arguments, generator) => {
     scan: { maxVisited: 3500, maxTimeMs: 12e3 },
     fonts: { maxVisited: 4e3, maxTimeMs: 12e3 }
   };
-  const postProgress = (requestId, progress, message) => {
+  const postProgress$1 = (requestId, progress, message) => {
     figma.ui.postMessage({
       type: "progress_update",
       requestId,
@@ -274,6 +274,14 @@ var __async = (__this, __arguments, generator) => {
   };
   const yieldToUI = () => __async(null, null, function* () {
     yield new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  const getNodeByIdLocalFirst$1 = (nodeId) => __async(null, null, function* () {
+    if (figma.currentPage.id === nodeId) return figma.currentPage;
+    if ("findOne" in figma.currentPage) {
+      const local = figma.currentPage.findOne((node) => node.id === nodeId);
+      if (local) return local;
+    }
+    return figma.getNodeByIdAsync(nodeId);
   });
   const toPositiveInt = (value, fallback) => {
     if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
@@ -347,11 +355,11 @@ var __async = (__this, __arguments, generator) => {
     const nodeProgress = Math.min(70, Math.round(state.visitedNodes / opts.maxNodes * 100));
     const timeProgress = Math.min(70, Math.round((now - state.startedAt) / opts.maxTimeMs * 100));
     const progress = Math.max(5, Math.min(95, Math.max(nodeProgress, timeProgress)));
-    postProgress(opts.requestId, progress, message);
+    postProgress$1(opts.requestId, progress, message);
     yield yieldToUI();
   });
   const buildNodeSummary = (node, detail) => __async(null, null, function* () {
-    var _a;
+    var _a, _b, _c;
     const summary = {
       id: node.id,
       name: node.name,
@@ -375,16 +383,26 @@ var __async = (__this, __arguments, generator) => {
       }
     }
     if (node.type === "INSTANCE" && (detail === "compact" || detail === "full")) {
-      const mainComponent = yield node.getMainComponentAsync();
-      summary.mainComponentId = (_a = mainComponent == null ? void 0 : mainComponent.id) != null ? _a : null;
-      if (node.componentProperties) {
-        const componentProperties = {};
-        for (const [key, property] of Object.entries(node.componentProperties)) {
-          componentProperties[key] = property.value;
+      try {
+        const mainComponent = yield node.getMainComponentAsync();
+        summary.mainComponentId = (_a = mainComponent == null ? void 0 : mainComponent.id) != null ? _a : null;
+        summary.mainComponentName = (_b = mainComponent == null ? void 0 : mainComponent.name) != null ? _b : null;
+        summary.mainComponentKey = (_c = mainComponent == null ? void 0 : mainComponent.key) != null ? _c : null;
+      } catch (error) {
+        summary.mainComponentError = error instanceof Error ? error.message : String(error);
+      }
+      try {
+        if (node.componentProperties) {
+          const componentProperties = {};
+          for (const [key, property] of Object.entries(node.componentProperties)) {
+            componentProperties[key] = property.value;
+          }
+          if (Object.keys(componentProperties).length > 0) {
+            summary.componentProperties = componentProperties;
+          }
         }
-        if (Object.keys(componentProperties).length > 0) {
-          summary.componentProperties = componentProperties;
-        }
+      } catch (error) {
+        summary.componentPropertiesError = error instanceof Error ? error.message : String(error);
       }
     }
     return summary;
@@ -476,7 +494,51 @@ var __async = (__this, __arguments, generator) => {
     if (Date.now() >= deadline) return `Traversal time budget exceeded (${maxTimeMs} ms).`;
     return "";
   };
+  const isDesignSystemInstanceCandidate = (node) => {
+    const name = node.name.toLowerCase();
+    return name.includes("[zds]") || name === "mp-header" || name === "calendar" || name === "single-picker";
+  };
+  const componentPropertyValues = (node) => {
+    var _a;
+    try {
+      return Object.fromEntries(
+        Object.entries((_a = node.componentProperties) != null ? _a : {}).map(([name, property]) => {
+          var _a2;
+          return [
+            name,
+            String((_a2 = property.value) != null ? _a2 : "")
+          ];
+        })
+      );
+    } catch (e) {
+      return {};
+    }
+  };
+  const catalogVariantSignature = (properties) => Object.entries(properties).filter(([name]) => /(dark|level|state|size|icon|type)/i.test(name)).sort(([left], [right]) => left.localeCompare(right)).map(([name, value]) => `${name}=${value}`).join("|").toLowerCase();
+  const nearbyContextLabels = (node) => {
+    const labels = [];
+    const parent = node.parent;
+    if (parent && "children" in parent) {
+      const siblings = parent.children;
+      const index = siblings.indexOf(node);
+      for (let cursor = Math.max(0, index - 3); cursor < Math.min(siblings.length, index + 2); cursor++) {
+        const sibling = siblings[cursor];
+        if ((sibling == null ? void 0 : sibling.type) === "TEXT" && sibling.characters.trim()) labels.push(sibling.characters.trim());
+      }
+    }
+    return [...new Set(labels)].slice(0, 6);
+  };
+  const ancestorNames = (node) => {
+    const names = [];
+    let current = node.parent;
+    while (current && current.type !== "DOCUMENT" && names.length < 5) {
+      if ("name" in current && current.name) names.push(current.name);
+      current = current.parent;
+    }
+    return names;
+  };
   const handleReadDocumentRequest = (request) => __async(null, null, function* () {
+    var _a, _b, _c;
     switch (request.type) {
       case "get_document": {
         const opts = makeSerializeOptions(request, DEFAULT_READ_BUDGET.document, "full", false);
@@ -499,7 +561,7 @@ var __async = (__this, __arguments, generator) => {
       case "get_node_context": {
         const nodeId = request.nodeIds && request.nodeIds[0];
         if (!nodeId) throw new Error("nodeIds is required for get_node");
-        const node = yield figma.getNodeByIdAsync(nodeId);
+        const node = yield getNodeByIdLocalFirst$1(nodeId);
         if (!node || node.type === "DOCUMENT") {
           throw new Error(`Node not found: ${nodeId}`);
         }
@@ -522,7 +584,7 @@ var __async = (__this, __arguments, generator) => {
           throw new Error("nodeIds is required for get_nodes_info");
         }
         const opts = makeSerializeOptions(request, DEFAULT_READ_BUDGET.nodeContext, "compact", true);
-        const nodes = yield Promise.all(request.nodeIds.map((id) => figma.getNodeByIdAsync(id)));
+        const nodes = yield Promise.all(request.nodeIds.map((id) => getNodeByIdLocalFirst$1(id)));
         const data = [];
         for (const node of nodes) {
           if (!node || node.type === "DOCUMENT") continue;
@@ -648,7 +710,7 @@ var __async = (__this, __arguments, generator) => {
           if (truncated) return;
           visited++;
           if (visited % 75 === 0) {
-            postProgress(request.requestId, 20, `Scanning fonts… (${visited} nodes)`);
+            postProgress$1(request.requestId, 20, `Scanning fonts… (${visited} nodes)`);
             yield yieldToUI();
           }
           reason = traversalExceeded(visited, deadline, maxVisited, maxTimeMs);
@@ -694,7 +756,7 @@ var __async = (__this, __arguments, generator) => {
         const limit = toPositiveInt(params.limit, 50);
         const maxVisited = toPositiveInt(params.maxVisited, DEFAULT_READ_BUDGET.search.maxVisited);
         const maxTimeMs = toPositiveInt(params.maxTimeMs, DEFAULT_READ_BUDGET.search.maxTimeMs);
-        const root = scopeNodeId ? yield figma.getNodeByIdAsync(scopeNodeId) : figma.currentPage;
+        const root = scopeNodeId ? yield getNodeByIdLocalFirst$1(scopeNodeId) : figma.currentPage;
         if (!root) throw new Error(`Node not found: ${scopeNodeId}`);
         const results = [];
         let visited = 0;
@@ -705,7 +767,7 @@ var __async = (__this, __arguments, generator) => {
           if (truncated || results.length >= limit) return;
           visited++;
           if (visited % 75 === 0) {
-            postProgress(request.requestId, 25, `Searching nodes… (${visited} visited)`);
+            postProgress$1(request.requestId, 25, `Searching nodes… (${visited} visited)`);
             yield yieldToUI();
           }
           reason = traversalExceeded(visited, deadline, maxVisited, maxTimeMs);
@@ -748,7 +810,7 @@ var __async = (__this, __arguments, generator) => {
       case "get_reactions": {
         const nodeId = request.nodeIds && request.nodeIds[0];
         if (!nodeId) throw new Error("nodeId is required for get_reactions");
-        const node = yield figma.getNodeByIdAsync(nodeId);
+        const node = yield getNodeByIdLocalFirst$1(nodeId);
         if (!node || node.type === "DOCUMENT") throw new Error(`Node not found: ${nodeId}`);
         const reactions = "reactions" in node ? node.reactions : [];
         return {
@@ -761,7 +823,7 @@ var __async = (__this, __arguments, generator) => {
         const params = request.params || {};
         const nodeId = params.nodeId;
         if (!nodeId) throw new Error("nodeId is required for scan_text_nodes");
-        const root = yield figma.getNodeByIdAsync(nodeId);
+        const root = yield getNodeByIdLocalFirst$1(nodeId);
         if (!root) throw new Error(`Node not found: ${nodeId}`);
         const maxVisited = toPositiveInt(params.maxVisited, DEFAULT_READ_BUDGET.scan.maxVisited);
         const maxTimeMs = toPositiveInt(params.maxTimeMs, DEFAULT_READ_BUDGET.scan.maxTimeMs);
@@ -774,7 +836,7 @@ var __async = (__this, __arguments, generator) => {
           if (truncated) return;
           visited++;
           if (visited % 75 === 0) {
-            postProgress(request.requestId, 15, `Scanning text nodes… (${visited} visited)`);
+            postProgress$1(request.requestId, 15, `Scanning text nodes… (${visited} visited)`);
             yield yieldToUI();
           }
           reason = traversalExceeded(visited, deadline, maxVisited, maxTimeMs);
@@ -816,7 +878,7 @@ var __async = (__this, __arguments, generator) => {
         const types = Array.isArray(params.types) ? params.types : [];
         if (!nodeId) throw new Error("nodeId is required for scan_nodes_by_types");
         if (types.length === 0) throw new Error("types must be a non-empty array");
-        const root = yield figma.getNodeByIdAsync(nodeId);
+        const root = yield getNodeByIdLocalFirst$1(nodeId);
         if (!root) throw new Error(`Node not found: ${nodeId}`);
         const maxVisited = toPositiveInt(params.maxVisited, DEFAULT_READ_BUDGET.scan.maxVisited);
         const maxTimeMs = toPositiveInt(params.maxTimeMs, DEFAULT_READ_BUDGET.scan.maxTimeMs);
@@ -829,7 +891,7 @@ var __async = (__this, __arguments, generator) => {
           if (truncated) return;
           visited++;
           if (visited % 75 === 0) {
-            postProgress(request.requestId, 15, `Scanning nodes… (${visited} visited)`);
+            postProgress$1(request.requestId, 15, `Scanning nodes… (${visited} visited)`);
             yield yieldToUI();
           }
           reason = traversalExceeded(visited, deadline, maxVisited, maxTimeMs);
@@ -865,6 +927,70 @@ var __async = (__this, __arguments, generator) => {
             visitedNodes: visited,
             truncated
           }, reason ? { fallbackReason: reason } : {}), truncated ? { recommendedNextCalls: buildRecommendedNextCalls(root, "compact", 2) } : {})
+        };
+      }
+      case "discover_design_system_instances": {
+        const params = request.params || {};
+        const nodeId = typeof params.nodeId === "string" && params.nodeId ? params.nodeId : figma.currentPage.id;
+        const root = yield getNodeByIdLocalFirst$1(nodeId);
+        if (!root || root.type === "DOCUMENT" || !("findAllWithCriteria" in root)) {
+          throw new Error(`Node does not support instance discovery: ${nodeId}`);
+        }
+        const maxInstances = toPositiveInt(params.maxInstances, 600);
+        const allInstances = root.findAllWithCriteria({ types: ["INSTANCE"] });
+        const matchingInstances = allInstances.filter(isDesignSystemInstanceCandidate);
+        const candidates = [];
+        const seenSignatures = /* @__PURE__ */ new Set();
+        for (const node of matchingInstances) {
+          const contextLabels = nearbyContextLabels(node);
+          const componentProperties = componentPropertyValues(node);
+          const signature = [
+            node.name.toLowerCase(),
+            catalogVariantSignature(componentProperties),
+            contextLabels.join("|").toLowerCase()
+          ].join("|");
+          if (seenSignatures.has(signature)) continue;
+          seenSignatures.add(signature);
+          candidates.push({ node, contextLabels, componentProperties });
+          if (candidates.length >= maxInstances) break;
+        }
+        const instances = [];
+        for (const candidate of candidates) {
+          const { node, contextLabels, componentProperties } = candidate;
+          let mainComponentId = null;
+          let mainComponentName = null;
+          let mainComponentKey = null;
+          let mainComponentError;
+          try {
+            const main = yield node.getMainComponentAsync();
+            mainComponentId = (_a = main == null ? void 0 : main.id) != null ? _a : null;
+            mainComponentName = (_b = main == null ? void 0 : main.name) != null ? _b : null;
+            mainComponentKey = (_c = main == null ? void 0 : main.key) != null ? _c : null;
+          } catch (error) {
+            mainComponentError = error instanceof Error ? error.message : String(error);
+          }
+          instances.push(__spreadValues({
+            id: node.id,
+            name: node.name,
+            type: node.type,
+            pageId: figma.currentPage.id,
+            mainComponentId,
+            mainComponentName,
+            mainComponentKey,
+            componentProperties,
+            contextLabels,
+            ancestorNames: ancestorNames(node)
+          }, mainComponentError ? { mainComponentError } : {}));
+        }
+        return {
+          type: request.type,
+          requestId: request.requestId,
+          data: {
+            count: instances.length,
+            instances,
+            candidateCount: matchingInstances.length,
+            truncated: candidates.length >= maxInstances && candidates.length < matchingInstances.length
+          }
         };
       }
       default:
@@ -1227,6 +1353,16 @@ var __async = (__this, __arguments, generator) => {
     }
   });
   const metadataKey = "za-pm-lifecycle";
+  const postProgress = (requestId, progress, message) => {
+    var _a;
+    (_a = figma.ui) == null ? void 0 : _a.postMessage({
+      type: "progress_update",
+      requestId,
+      progress,
+      message
+    });
+  };
+  const yieldToFigma = () => new Promise((resolve) => setTimeout(resolve, 0));
   const readMetadata = (node) => {
     const raw = node.getPluginData(metadataKey);
     if (!raw) return null;
@@ -1240,13 +1376,27 @@ var __async = (__this, __arguments, generator) => {
   const writeMetadata = (node, metadata) => {
     node.setPluginData(metadataKey, JSON.stringify(metadata));
   };
-  const findArtifactRoot = (page, idempotencyKey) => {
-    var _a;
-    return (_a = page.children.find((node) => {
-      const metadata = readMetadata(node);
-      return (metadata == null ? void 0 : metadata.kind) === "artifact_root" && metadata.idempotencyKey === idempotencyKey;
-    })) != null ? _a : null;
-  };
+  const findArtifactRoot = (idempotencyKey) => __async(null, null, function* () {
+    const pages = [
+      figma.currentPage,
+      ...figma.root.children.filter((page) => page.id !== figma.currentPage.id)
+    ];
+    for (const page of pages) {
+      if (page.id !== figma.currentPage.id) {
+        try {
+          yield page.loadAsync();
+        } catch (e) {
+          continue;
+        }
+      }
+      const root = page.children.find((node) => {
+        const metadata = readMetadata(node);
+        return (metadata == null ? void 0 : metadata.kind) === "artifact_root" && metadata.idempotencyKey === idempotencyKey;
+      });
+      if (root) return { page, root };
+    }
+    return null;
+  });
   const requireCurrentPage = (targetPageId) => {
     if (typeof targetPageId !== "string" || !targetPageId) throw new Error("targetPageId is required");
     if (figma.currentPage.id !== targetPageId) {
@@ -1267,29 +1417,333 @@ var __async = (__this, __arguments, generator) => {
       throw new Error(`COMPONENT_UNAVAILABLE: ${key}: ${detail}`);
     }
   });
+  const containingPageId = (node) => {
+    let current = node;
+    while (current && current.type !== "DOCUMENT") {
+      if (current.type === "PAGE") return current.id;
+      current = current.parent;
+    }
+    return null;
+  };
+  const getLoadedNodeById = (nodeId) => {
+    for (const page of figma.root.children) {
+      if (page.id === nodeId) return page;
+      if ("findOne" in page) {
+        const local = page.findOne((node) => node.id === nodeId);
+        if (local) return local;
+      }
+    }
+    return null;
+  };
+  const getNodeByIdLocalFirst = (nodeId) => __async(null, null, function* () {
+    var _a;
+    return (_a = getLoadedNodeById(nodeId)) != null ? _a : figma.getNodeByIdAsync(nodeId);
+  });
+  const createBoundInstance = (slot, targetPage) => __async(null, null, function* () {
+    const binding = slot.componentBinding;
+    if ((binding == null ? void 0 : binding.kind) === "same_file_instance") {
+      if (binding.pageId !== targetPage.id || typeof binding.nodeId !== "string") {
+        throw new Error(`COMPONENT_SOURCE_NOT_ALLOWED: ${String(slot.slotKey)}`);
+      }
+      const source = yield getNodeByIdLocalFirst(binding.nodeId);
+      if (!source || source.type !== "INSTANCE" || containingPageId(source) !== targetPage.id) {
+        throw new Error(`COMPONENT_UNAVAILABLE: same-file instance ${binding.nodeId}`);
+      }
+      return source.clone();
+    }
+    const key = (binding == null ? void 0 : binding.kind) === "component_key" && typeof binding.key === "string" ? binding.key : slot.componentKey;
+    if (typeof key !== "string" || !key) {
+      throw new Error(`COMPONENT_UNAVAILABLE: missing binding for ${String(slot.slotKey)}`);
+    }
+    const component = yield localComponentByKey(key);
+    return component.createInstance();
+  });
+  const editableTextNodes = (node) => {
+    if (node.type === "TEXT") return [node];
+    if ("findAllWithCriteria" in node) return node.findAllWithCriteria({ types: ["TEXT"] });
+    return [];
+  };
+  const applySlotContent = (node, semanticRole, content) => __async(null, null, function* () {
+    const text = typeof (content == null ? void 0 : content.text) === "string" ? content.text.trim() : "";
+    if (!text) return false;
+    const candidates = editableTextNodes(node);
+    const ranked = [...candidates].sort((left, right) => {
+      const score = (item) => {
+        const name = item.name.toLowerCase();
+        if (semanticRole === "app-header" && (name.includes("title") || name.includes("header"))) return 4;
+        if (semanticRole.includes("button") && (name.includes("label") || name.includes("text"))) return 3;
+        if (semanticRole.includes("input") && (name.includes("placeholder") || name.includes("text"))) return 3;
+        if ((semanticRole === "list-item" || semanticRole === "menu-card" || semanticRole === "order-summary" || semanticRole === "payment-method") && name.includes("title")) return 4;
+        if ((semanticRole.includes("message") || semanticRole === "pickup-code") && (name.includes("title") || name.includes("message") || name.includes("text"))) return 3;
+        return item.visible ? 1 : 0;
+      };
+      return score(right) - score(left);
+    });
+    for (const target of ranked) {
+      try {
+        const fontName = target.fontName;
+        if (!fontName || typeof fontName !== "object" || !("family" in fontName) || !("style" in fontName)) continue;
+        yield figma.loadFontAsync(fontName);
+        target.characters = text;
+        return true;
+      } catch (e) {
+      }
+    }
+    return false;
+  });
+  const stretchSlot = (node, semanticRole) => {
+    if (!("layoutAlign" in node)) return;
+    if (semanticRole === "app-header" || semanticRole.includes("button") || semanticRole.includes("input") || semanticRole === "list-item" || semanticRole === "menu-card" || semanticRole === "order-summary" || semanticRole.includes("message")) {
+      node.layoutAlign = "STRETCH";
+    }
+  };
   const flattenEdges = (screens) => screens.flatMap((screen) => Array.isArray(screen.prototypeEdges) ? screen.prototypeEdges : []);
   const solid = (r, g, b) => ({
     type: "SOLID",
     color: { r: r / 255, g: g / 255, b: b / 255 }
   });
   const readableLabel = (slotKey) => String(slotKey != null ? slotKey : "Component").replace(/^\d+-/, "").split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
-  const appendText = (parent, characters, fontSize, color) => __async(null, null, function* () {
-    yield figma.loadFontAsync({ family: "Inter", style: "Regular" });
+  const appendText = (parent, characters, fontSize, color, style = "Regular") => __async(null, null, function* () {
+    try {
+      yield figma.loadFontAsync({ family: "Inter", style });
+    } catch (e) {
+      style = "Regular";
+      yield figma.loadFontAsync({ family: "Inter", style });
+    }
     const text = figma.createText();
-    text.fontName = { family: "Inter", style: "Regular" };
+    text.fontName = { family: "Inter", style };
     text.fontSize = fontSize;
     text.characters = characters;
     text.fills = [color];
+    if ("layoutAlign" in text) text.layoutAlign = "STRETCH";
+    text.textAutoResize = "HEIGHT";
     parent.appendChild(text);
     return text;
   });
-  const styleScreen = (frame) => {
-    frame.fills = [solid(255, 255, 255)];
+  const paletteFor = (name) => {
+    const base = {
+      canvas: solid(245, 247, 249),
+      surface: solid(255, 255, 255),
+      text: solid(24, 34, 41),
+      muted: solid(93, 108, 116),
+      border: solid(218, 225, 229),
+      warningSoft: solid(255, 247, 224)
+    };
+    if (name === "trust-green") {
+      return __spreadProps(__spreadValues({}, base), {
+        primary: solid(0, 133, 98),
+        primarySoft: solid(229, 247, 241),
+        success: solid(0, 133, 98),
+        successSoft: solid(226, 248, 239),
+        accentSoft: solid(232, 242, 255)
+      });
+    }
+    if (name === "signal-violet") {
+      return __spreadProps(__spreadValues({}, base), {
+        primary: solid(106, 70, 184),
+        primarySoft: solid(242, 237, 252),
+        success: solid(0, 133, 98),
+        successSoft: solid(226, 248, 239),
+        accentSoft: solid(237, 242, 255)
+      });
+    }
+    if (name === "warm-coral") {
+      return __spreadProps(__spreadValues({}, base), {
+        primary: solid(223, 91, 65),
+        primarySoft: solid(255, 238, 233),
+        success: solid(0, 133, 98),
+        successSoft: solid(226, 248, 239),
+        accentSoft: solid(255, 245, 218)
+      });
+    }
+    return __spreadProps(__spreadValues({}, base), {
+      primary: solid(0, 104, 225),
+      primarySoft: solid(232, 242, 255),
+      success: solid(0, 133, 98),
+      successSoft: solid(226, 248, 239),
+      accentSoft: solid(239, 235, 255)
+    });
+  };
+  const createStack = (parent, name, width, fill, padding, gap, radius = 0) => {
+    const frame = figma.createFrame();
+    frame.name = name;
+    frame.resize(width, 100);
+    frame.layoutMode = "VERTICAL";
+    frame.primaryAxisSizingMode = "AUTO";
+    frame.counterAxisSizingMode = "FIXED";
+    frame.itemSpacing = gap;
+    frame.paddingTop = padding;
+    frame.paddingRight = padding;
+    frame.paddingBottom = padding;
+    frame.paddingLeft = padding;
+    frame.fills = [fill];
+    frame.cornerRadius = radius;
+    frame.clipsContent = false;
+    parent.appendChild(frame);
+    return frame;
+  };
+  const toneFill = (tone, palette) => {
+    if (tone === "success") return palette.successSoft;
+    if (tone === "warning") return palette.warningSoft;
+    if (tone === "accent") return palette.accentSoft;
+    if (tone === "brand") return palette.primarySoft;
+    return palette.surface;
+  };
+  const appendPresentationSection = (parent, section, palette) => __async(null, null, function* () {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const kind = String((_a = section.kind) != null ? _a : "info");
+    const prominent = kind === "status" || kind === "confirmation" || kind === "progress";
+    const card = createStack(
+      parent,
+      `Section · ${String(section.key)}`,
+      358,
+      toneFill(section.tone, palette),
+      prominent ? 18 : 16,
+      prominent ? 10 : 8,
+      kind === "info" ? 8 : 14
+    );
+    card.strokes = kind === "info" ? [] : [palette.border];
+    card.strokeWeight = kind === "info" ? 0 : 1;
+    writeMetadata(card, {
+      kind: "presentation_section",
+      sectionKey: String(section.key),
+      sectionKind: kind
+    });
+    yield appendText(card, String((_b = section.title) != null ? _b : ""), prominent ? 20 : 15, palette.text, "Medium");
+    if (typeof section.body === "string" && section.body.trim()) {
+      yield appendText(card, section.body, 12, palette.muted);
+    }
+    const items = Array.isArray(section.items) ? section.items : [];
+    if (kind === "progress") {
+      const track = figma.createFrame();
+      track.name = "Progress track";
+      track.resize(322, 8);
+      track.fills = [palette.surface];
+      track.cornerRadius = 4;
+      card.appendChild(track);
+      const fill = figma.createFrame();
+      fill.name = "Progress · 72%";
+      fill.resize(232, 8);
+      fill.fills = [palette.primary];
+      fill.cornerRadius = 4;
+      track.appendChild(fill);
+    }
+    if (kind === "metric_grid" || kind === "confirmation") {
+      const grid = figma.createFrame();
+      grid.name = "Metric grid";
+      grid.resize(322, 64);
+      grid.layoutMode = "HORIZONTAL";
+      grid.primaryAxisSizingMode = "FIXED";
+      grid.counterAxisSizingMode = "AUTO";
+      grid.itemSpacing = 12;
+      grid.fills = [];
+      card.appendChild(grid);
+      for (const item of items) {
+        const metric = createStack(grid, `Metric · ${String(item.label)}`, 155, toneFill(section.tone, palette), 4, 3);
+        yield appendText(metric, String((_c = item.label) != null ? _c : ""), 10, palette.muted, "Medium");
+        yield appendText(metric, String((_d = item.value) != null ? _d : ""), 15, palette.text, "Medium");
+      }
+      return card;
+    }
+    for (const [index, item] of items.entries()) {
+      const row = figma.createFrame();
+      row.name = `${kind === "timeline" ? "Timeline" : kind === "choice_list" ? "Choice" : "Data"} row · ${String(item.label)}`;
+      row.resize(326, kind === "choice_list" ? 42 : 28);
+      row.layoutMode = "HORIZONTAL";
+      row.primaryAxisSizingMode = "FIXED";
+      row.counterAxisSizingMode = "AUTO";
+      row.primaryAxisAlignItems = "SPACE_BETWEEN";
+      row.counterAxisAlignItems = "CENTER";
+      row.paddingTop = kind === "choice_list" ? 8 : 2;
+      row.paddingBottom = kind === "choice_list" ? 8 : 2;
+      row.paddingLeft = kind === "choice_list" ? 10 : 0;
+      row.paddingRight = kind === "choice_list" ? 10 : 0;
+      row.cornerRadius = 8;
+      row.fills = kind === "choice_list" ? [palette.surface] : [];
+      card.appendChild(row);
+      const label = kind === "timeline" ? `${index === 0 ? "●" : "○"}  ${String((_e = item.label) != null ? _e : "")}` : kind === "choice_list" ? `${index === 0 ? "●" : "○"}  ${String((_f = item.label) != null ? _f : "")}` : String((_g = item.label) != null ? _g : "");
+      const labelNode = yield appendText(row, label, 12, kind === "timeline" ? palette.primary : palette.muted);
+      labelNode.layoutAlign = "INHERIT";
+      labelNode.textAutoResize = "WIDTH_AND_HEIGHT";
+      const value = yield appendText(row, String((_h = item.value) != null ? _h : ""), 12, palette.text, "Medium");
+      value.layoutAlign = "INHERIT";
+      value.textAutoResize = "WIDTH_AND_HEIGHT";
+    }
+    return card;
+  });
+  const appendDesignBrief = (root, direction, screens, palette) => __async(null, null, function* () {
+    var _a, _b, _c, _d, _e, _f, _g;
+    const brief = createStack(root, "Design direction", 360, palette.surface, 24, 18, 20);
+    brief.x = 0;
+    brief.y = 80;
+    brief.strokes = [palette.border];
+    brief.strokeWeight = 1;
+    const accent = figma.createFrame();
+    accent.name = "Concept accent";
+    accent.resize(48, 5);
+    accent.cornerRadius = 3;
+    accent.fills = [palette.primary];
+    brief.appendChild(accent);
+    yield appendText(brief, "DESIGN DIRECTION", 11, palette.primary, "Medium");
+    yield appendText(brief, String((_a = direction.conceptName) != null ? _a : "Product concept"), 30, palette.text, "Medium");
+    yield appendText(brief, String((_b = direction.productPromise) != null ? _b : ""), 14, palette.muted);
+    writeMetadata(brief, {
+      kind: "design_brief",
+      conceptName: String((_c = direction.conceptName) != null ? _c : "")
+    });
+    const meta = createStack(brief, "Design attributes", 312, palette.primarySoft, 14, 8, 12);
+    yield appendText(meta, `${String((_d = direction.tone) != null ? _d : "focused").toUpperCase()}  ·  ${String((_e = direction.density) != null ? _e : "comfortable").toUpperCase()}`, 11, palette.primary, "Medium");
+    for (const principle of Array.isArray(direction.principles) ? direction.principles : []) {
+      const principleCard = createStack(brief, `Principle · ${String(principle.title)}`, 312, palette.canvas, 14, 6, 10);
+      yield appendText(principleCard, String((_f = principle.title) != null ? _f : ""), 14, palette.text, "Medium");
+      yield appendText(principleCard, String((_g = principle.detail) != null ? _g : ""), 11, palette.muted);
+    }
+    yield appendText(brief, `${screens.length} PRODUCT SCREENS`, 11, palette.primary, "Medium");
+    yield appendText(brief, screens.map((screen, index) => `${index + 1}. ${String(screen.name)}`).join("\n"), 12, palette.text);
+    return brief;
+  });
+  const styleScreen = (frame, palette) => {
+    frame.fills = [palette.canvas];
     frame.strokes = [solid(210, 220, 225)];
     frame.strokeWeight = 1;
-    frame.cornerRadius = 20;
+    frame.cornerRadius = 28;
     frame.clipsContent = true;
   };
+  const navigationCopy = (direction, presentation) => {
+    var _a, _b;
+    const active = String((_a = presentation.navigationLabel) != null ? _a : "Hiện tại");
+    switch (String((_b = direction.palette) != null ? _b : "")) {
+      case "trust-green":
+        return `${active}      Lịch backup      Nhật ký`;
+      case "warm-coral":
+        return `${active}      Đơn nhóm      Cá nhân`;
+      default:
+        return `${active}      Hoạt động      Cá nhân`;
+    }
+  };
+  const setNavigationReactions = (node, destinations) => __async(null, null, function* () {
+    const reactions = destinations.map(({ frame }) => ({
+      trigger: { type: "ON_CLICK" },
+      actions: [{
+        type: "NODE",
+        destinationId: frame.id,
+        navigation: "NAVIGATE",
+        transition: { type: "SMART_ANIMATE", duration: 0.24, easing: { type: "EASE_OUT" } },
+        resetScrollPosition: true
+      }]
+    }));
+    const prototypeNode = node;
+    if (typeof prototypeNode.setReactionsAsync === "function") {
+      yield prototypeNode.setReactionsAsync(reactions);
+    } else if ("reactions" in prototypeNode) {
+      prototypeNode.reactions = reactions;
+    } else {
+      throw new Error(`PROTOTYPE_UNAVAILABLE: ${node.id} does not support reactions`);
+    }
+    writeMetadata(node, __spreadProps(__spreadValues({}, readMetadata(node)), {
+      prototypeEdges: destinations.map(({ edge }) => edge)
+    }));
+  });
   const createFallbackSlot = (slot) => __async(null, null, function* () {
     var _a;
     const fallback = figma.createFrame();
@@ -1318,19 +1772,267 @@ var __async = (__this, __arguments, generator) => {
     );
     return fallback;
   });
-  const artifactX = (page) => {
-    const rightEdge = page.children.reduce((right, node) => {
-      if (!("x" in node) || !("width" in node)) return right;
-      return Math.max(right, node.x + node.width);
-    }, 0);
-    return rightEdge + 240;
+  const paintFromHex = (value, fallback) => {
+    if (typeof value !== "string") return fallback != null ? fallback : null;
+    const match = value.trim().match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    if (!match) return fallback != null ? fallback : null;
+    return solid(
+      Number.parseInt(match[1], 16),
+      Number.parseInt(match[2], 16),
+      Number.parseInt(match[3], 16)
+    );
   };
+  const creativeFontStyle = (value) => {
+    if (value === "medium") return "Medium";
+    if (value === "semibold") return "Semi Bold";
+    if (value === "bold") return "Bold";
+    return "Regular";
+  };
+  const applyCreativeFrameStyle = (node, element) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+    node.resize(Number(element.width), Number(element.height));
+    const layout = String((_a = element.layout) != null ? _a : "none");
+    node.layoutMode = layout === "vertical" ? "VERTICAL" : layout === "horizontal" ? "HORIZONTAL" : "NONE";
+    node.primaryAxisSizingMode = "FIXED";
+    node.counterAxisSizingMode = "FIXED";
+    node.itemSpacing = Number((_b = element.gap) != null ? _b : 0);
+    node.paddingTop = Number((_c = element.paddingTop) != null ? _c : 0);
+    node.paddingRight = Number((_d = element.paddingRight) != null ? _d : 0);
+    node.paddingBottom = Number((_e = element.paddingBottom) != null ? _e : 0);
+    node.paddingLeft = Number((_f = element.paddingLeft) != null ? _f : 0);
+    node.cornerRadius = Number((_g = element.radius) != null ? _g : 0);
+    node.opacity = Number((_h = element.opacity) != null ? _h : 1);
+    node.clipsContent = true;
+    const fill = paintFromHex(element.fill);
+    node.fills = fill ? [fill] : [];
+    const stroke = paintFromHex(element.stroke);
+    node.strokes = stroke ? [stroke] : [];
+    node.strokeWeight = stroke ? Number((_i = element.strokeWidth) != null ? _i : 1) : 0;
+  };
+  const placeCreativeNode = (node, element, parent) => {
+    var _a, _b, _c;
+    parent.appendChild(node);
+    if ("layoutMode" in parent && parent.layoutMode === "NONE") {
+      node.x = Number((_a = element.x) != null ? _a : 0);
+      node.y = Number((_b = element.y) != null ? _b : 0);
+    }
+    if ("layoutGrow" in node) node.layoutGrow = Number((_c = element.layoutGrow) != null ? _c : 0);
+  };
+  const createCreativePrimitive = (element) => __async(null, null, function* () {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const kind = String(element.kind);
+    if (kind === "text") {
+      let style = creativeFontStyle(element.fontWeight);
+      try {
+        yield figma.loadFontAsync({ family: "Inter", style });
+      } catch (e) {
+        style = "Regular";
+        yield figma.loadFontAsync({ family: "Inter", style: "Regular" });
+      }
+      const node2 = figma.createText();
+      node2.name = String(element.name);
+      node2.fontName = { family: "Inter", style };
+      node2.fontSize = Number((_a = element.fontSize) != null ? _a : 14);
+      node2.characters = String((_b = element.text) != null ? _b : "");
+      node2.textAlignHorizontal = element.textAlign === "center" ? "CENTER" : element.textAlign === "right" ? "RIGHT" : "LEFT";
+      node2.textAutoResize = "NONE";
+      node2.resize(Number(element.width), Number(element.height));
+      node2.opacity = Number((_c = element.opacity) != null ? _c : 1);
+      const fill2 = paintFromHex(element.fill, solid(24, 34, 41));
+      node2.fills = fill2 ? [fill2] : [];
+      return node2;
+    }
+    if (kind === "ellipse") {
+      const node2 = figma.createEllipse();
+      node2.name = String(element.name);
+      node2.resize(Number(element.width), Number(element.height));
+      node2.opacity = Number((_d = element.opacity) != null ? _d : 1);
+      const fill2 = paintFromHex(element.fill);
+      node2.fills = fill2 ? [fill2] : [];
+      const stroke2 = paintFromHex(element.stroke);
+      node2.strokes = stroke2 ? [stroke2] : [];
+      node2.strokeWeight = stroke2 ? Number((_e = element.strokeWidth) != null ? _e : 1) : 0;
+      return node2;
+    }
+    const node = figma.createRectangle();
+    node.name = String(element.name);
+    node.resize(Number(element.width), Number(element.height));
+    node.cornerRadius = kind === "divider" ? 0 : Number((_f = element.radius) != null ? _f : 0);
+    node.opacity = Number((_g = element.opacity) != null ? _g : 1);
+    const fill = paintFromHex(element.fill, kind === "divider" ? solid(218, 225, 229) : void 0);
+    node.fills = fill ? [fill] : [];
+    const stroke = paintFromHex(element.stroke);
+    node.strokes = stroke ? [stroke] : [];
+    node.strokeWeight = stroke ? Number((_h = element.strokeWidth) != null ? _h : 1) : 0;
+    return node;
+  });
+  const renderCreativeBlueprint = (input) => __async(null, null, function* () {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const blueprint = input.source.creativeBlueprint;
+    const creativeScreens = Array.isArray(blueprint.screens) ? blueprint.screens : [];
+    const recipeById = new Map(input.source.screens.map((screen) => [String(screen.screenId), screen]));
+    const screenFrames = /* @__PURE__ */ new Map();
+    const elementNodes = /* @__PURE__ */ new Map();
+    const direction = (_a = input.source.designDirection) != null ? _a : {};
+    const palette = paletteFor(direction.palette);
+    yield appendDesignBrief(input.root, __spreadProps(__spreadValues({}, direction), {
+      conceptName: blueprint.conceptName,
+      productPromise: blueprint.productPromise,
+      principles: Array.isArray(blueprint.principles) ? blueprint.principles.map((principle) => ({ title: String(principle), detail: "" })) : []
+    }), creativeScreens, palette);
+    let cursorX = 440;
+    let maxHeight = 0;
+    for (const [screenIndex, creativeScreen] of creativeScreens.entries()) {
+      const screenId = String(creativeScreen.screenId);
+      const recipe = recipeById.get(screenId);
+      if (!recipe) throw new Error(`CREATIVE_SCREEN_UNKNOWN: ${screenId}`);
+      const frame = figma.createFrame();
+      frame.name = `${screenId} · ${String(creativeScreen.name)}`;
+      frame.resize(Number(creativeScreen.width), Number(creativeScreen.height));
+      frame.x = cursorX;
+      frame.y = 80;
+      frame.layoutMode = "NONE";
+      frame.fills = [paintFromHex(creativeScreen.background, palette.canvas)];
+      frame.strokes = [palette.border];
+      frame.strokeWeight = 1;
+      frame.cornerRadius = 28;
+      frame.clipsContent = true;
+      input.root.appendChild(frame);
+      screenFrames.set(screenId, frame);
+      cursorX += Number(creativeScreen.width) + 56;
+      maxHeight = Math.max(maxHeight, Number(creativeScreen.height));
+      writeMetadata(frame, __spreadProps(__spreadValues({}, input.metadata), {
+        kind: "screen",
+        screenId,
+        archetype: (_c = (_b = recipe.presentation) == null ? void 0 : _b.archetype) != null ? _c : "browse",
+        requirementIds: creativeScreen.requirementIds,
+        planHash: input.planHash,
+        creative: true,
+        presentationNote: creativeScreen.presentationNote
+      }));
+      const elements = Array.isArray(creativeScreen.elements) ? creativeScreen.elements : [];
+      const rootAlias = elements.find(
+        (element) => element.kind === "frame" && element.parentId == null && Number(element.width) === Number(creativeScreen.width) && Number(element.height) === Number(creativeScreen.height)
+      );
+      if (rootAlias) {
+        applyCreativeFrameStyle(frame, rootAlias);
+        frame.name = `${screenId} · ${String(creativeScreen.name)}`;
+        writeMetadata(frame, __spreadProps(__spreadValues({}, readMetadata(frame)), {
+          creativeElementId: rootAlias.id,
+          creativeElementKind: rootAlias.kind
+        }));
+        elementNodes.set(String(rootAlias.id), frame);
+      }
+      for (const element of elements) {
+        if (rootAlias && element.id === rootAlias.id) continue;
+        const parent = element.parentId ? elementNodes.get(String(element.parentId)) : frame;
+        if (!parent || !("appendChild" in parent)) {
+          throw new Error(`CREATIVE_PARENT_MISSING: ${String(element.id)} -> ${String(element.parentId)}`);
+        }
+        let node;
+        if (element.kind === "frame") {
+          const created = figma.createFrame();
+          created.name = String(element.name);
+          applyCreativeFrameStyle(created, element);
+          node = created;
+        } else if (element.kind === "component") {
+          const slot = input.resolvedSlots.find(
+            (candidate) => candidate.screenId === screenId && candidate.slotKey === element.id
+          );
+          if (!slot || slot.resolution !== "component") {
+            throw new Error(`STRICT_PLAN_VIOLATION: unresolved creative component ${String(element.id)}`);
+          }
+          node = yield createBoundInstance(slot, input.sourcePage);
+          node.name = `${String(element.id)} · ${String(element.name)}`;
+          yield applySlotContent(node, String((_d = slot.semanticRole) != null ? _d : ""), { text: element.componentText });
+          try {
+            node.resize(Number(element.width), Number(element.height));
+          } catch (e) {
+          }
+          writeMetadata(node, __spreadProps(__spreadValues({}, input.metadata), {
+            kind: "slot",
+            screenId,
+            requirementIds: creativeScreen.requirementIds,
+            slotKey: element.id,
+            componentKey: (_e = slot.componentKey) != null ? _e : null,
+            componentBinding: (_f = slot.componentBinding) != null ? _f : null,
+            semanticRole: (_g = slot.semanticRole) != null ? _g : null,
+            primitiveFallback: false,
+            planHash: input.planHash
+          }));
+        } else {
+          node = yield createCreativePrimitive(element);
+        }
+        if ("opacity" in node) node.opacity = Number((_h = element.opacity) != null ? _h : 1);
+        placeCreativeNode(node, element, parent);
+        writeMetadata(node, __spreadProps(__spreadValues({}, readMetadata(node)), {
+          creativeElementId: element.id,
+          creativeElementKind: element.kind
+        }));
+        elementNodes.set(String(element.id), node);
+      }
+      const progress = 18 + Math.round((screenIndex + 1) / creativeScreens.length * 66);
+      postProgress(input.requestId, progress, `Composed ${screenIndex + 1}/${creativeScreens.length}: ${String(creativeScreen.name)}`);
+      yield yieldToFigma();
+    }
+    const edges = Array.isArray(blueprint.prototypeEdges) ? blueprint.prototypeEdges : [];
+    postProgress(input.requestId, 88, "Connecting creative prototype interactions");
+    for (const edge of edges) {
+      const sourceNode = elementNodes.get(String(edge.fromElementId));
+      const destination = screenFrames.get(String(edge.toScreenId));
+      if (!sourceNode || !destination) throw new Error(`CREATIVE_EDGE_INVALID: ${String(edge.key)}`);
+      yield setNavigationReactions(sourceNode, [{ edge: {
+        key: edge.key,
+        fromScreenId: edge.fromScreenId,
+        toScreenId: edge.toScreenId,
+        trigger: edge.trigger,
+        action: edge.action
+      }, frame: destination }]);
+    }
+    return { width: Math.max(900, cursorX + 24), height: Math.max(1020, maxHeight + 180), edges };
+  });
   const focusArtifact = (node) => {
     figma.currentPage.selection = [node];
     figma.viewport.scrollAndZoomIntoView([node]);
   };
-  const applyArtifact = (params) => __async(null, null, function* () {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+  const artifactPageName = (metadata) => {
+    var _a, _b;
+    if (typeof metadata.artifactPageName === "string" && metadata.artifactPageName.trim()) {
+      return metadata.artifactPageName.trim().slice(0, 80);
+    }
+    const spec = String((_a = metadata.specId) != null ? _a : "Product").trim() || "Product";
+    return `PM · ${spec.slice(0, 48)} · v${String((_b = metadata.specVersion) != null ? _b : "1")}`;
+  };
+  const containsLifecycleScreen = (node) => {
+    var _a;
+    if (((_a = readMetadata(node)) == null ? void 0 : _a.kind) === "screen") return true;
+    if (!("children" in node)) return false;
+    return node.children.some((child) => containsLifecycleScreen(child));
+  };
+  const recoverableArtifactPage = (metadata) => __async(null, null, function* () {
+    if (metadata.pageStrategy !== "create_or_recover_incomplete") return null;
+    const expectedName = artifactPageName(metadata);
+    for (const page of figma.root.children) {
+      if (page.name !== expectedName) continue;
+      if (page.id !== figma.currentPage.id) {
+        try {
+          yield page.loadAsync();
+        } catch (e) {
+          continue;
+        }
+      }
+      const roots = page.children.filter((node) => {
+        const stored = readMetadata(node);
+        return (stored == null ? void 0 : stored.namespace) === "za.pm-lifecycle/v1" && stored.kind === "artifact_root" && stored.specId === metadata.specId && stored.specVersion === metadata.specVersion;
+      });
+      if (roots.length !== 1) continue;
+      const hasScreens = containsLifecycleScreen(roots[0]);
+      if (!hasScreens) return { page, root: roots[0] };
+    }
+    return null;
+  });
+  const applyArtifact = (params, requestId) => __async(null, null, function* () {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
     const resolvedPlan = params.preflightPlan;
     const source = resolvedPlan == null ? void 0 : resolvedPlan.source;
     const planHash = typeof params.planHash === "string" ? params.planHash : "";
@@ -1340,114 +2042,268 @@ var __async = (__this, __arguments, generator) => {
     if (!resolvedPlan || !source || !metadata || screens.length === 0 || !planHash) {
       throw new Error("preflightPlan, planHash, metadata and screens are required");
     }
-    const page = requireCurrentPage(params.targetPageId);
+    const sourcePage = requireCurrentPage(params.targetPageId);
     const idempotencyKey = String((_a = metadata.idempotencyKey) != null ? _a : "");
     if (!idempotencyKey) throw new Error("lifecycle idempotencyKey is required");
-    const existing = findArtifactRoot(page, idempotencyKey);
+    postProgress(requestId, 3, "Checking existing lifecycle artifact");
+    const existing = yield findArtifactRoot(idempotencyKey);
     if (existing) {
-      const existingMetadata = readMetadata(existing);
+      const existingMetadata = readMetadata(existing.root);
       if (existingMetadata.planHash !== planHash) {
         throw new Error(`IDEMPOTENCY_CONFLICT: ${idempotencyKey} already exists with another plan hash`);
       }
-      focusArtifact(existing);
-      return __spreadProps(__spreadValues({}, readArtifact(page, idempotencyKey)), { idempotent: true });
+      if (existing.page.id === figma.currentPage.id) focusArtifact(existing.root);
+      postProgress(requestId, 100, "Existing lifecycle artifact is ready");
+      return {
+        schemaVersion: 1,
+        rootNodeIds: [existing.root.id],
+        artifactPageId: existing.page.id,
+        artifactPageName: existing.page.name,
+        idempotent: true
+      };
     }
+    postProgress(requestId, 8, "Preparing a dedicated Figma page");
+    const recoverable = yield recoverableArtifactPage(metadata);
+    const outputPage = (_b = recoverable == null ? void 0 : recoverable.page) != null ? _b : figma.createPage();
+    if (recoverable) recoverable.root.remove();
+    outputPage.name = artifactPageName(metadata);
     const root = figma.createSection();
-    root.name = `PM Lifecycle · ${String((_b = metadata.specId) != null ? _b : "Artifact")} · v${String((_c = metadata.specVersion) != null ? _c : "")}`;
-    root.x = artifactX(page);
+    root.name = `PM Lifecycle · ${String((_c = metadata.specId) != null ? _c : "Artifact")} · v${String((_d = metadata.specVersion) != null ? _d : "")}`;
+    root.x = 0;
     root.y = 0;
-    page.appendChild(root);
+    outputPage.appendChild(root);
     writeMetadata(root, __spreadProps(__spreadValues({}, metadata), {
       kind: "artifact_root",
       planHash,
-      targetHash: (_d = source.target) == null ? void 0 : _d.targetHash,
-      targetPageId: page.id
+      targetHash: (_e = source.target) == null ? void 0 : _e.targetHash,
+      designConceptName: (_f = source.designDirection) == null ? void 0 : _f.conceptName,
+      sourcePageId: sourcePage.id,
+      artifactPageId: outputPage.id,
+      artifactPageName: outputPage.name
     }));
     try {
+      const direction = (_g = source.designDirection) != null ? _g : {};
+      const palette = paletteFor(direction.palette);
+      const screenFrames = /* @__PURE__ */ new Map();
+      const primaryActionNodes = /* @__PURE__ */ new Map();
+      if (source.creativeBlueprint) {
+        postProgress(requestId, 12, "Creative blueprint validated; composing product screens");
+        const rendered = yield renderCreativeBlueprint({
+          root,
+          sourcePage,
+          source,
+          metadata,
+          planHash,
+          resolvedSlots,
+          requestId
+        });
+        root.resizeWithoutConstraints(rendered.width, rendered.height);
+        writeMetadata(root, __spreadProps(__spreadValues({}, readMetadata(root)), { prototypeEdges: rendered.edges, creative: true }));
+        figma.commitUndo();
+        postProgress(requestId, 100, "Creative Figma artifact created");
+        return {
+          schemaVersion: 1,
+          rootNodeIds: [root.id],
+          artifactPageId: outputPage.id,
+          artifactPageName: outputPage.name,
+          idempotent: false
+        };
+      }
+      yield appendDesignBrief(root, direction, screens, palette);
+      postProgress(requestId, 15, "Design direction prepared");
       for (const [index, screen] of screens.entries()) {
+        const presentation = (_h = screen.presentation) != null ? _h : {};
+        const sections = Array.isArray(presentation.sections) ? presentation.sections : [];
         const frame = figma.createFrame();
         frame.name = `${String(screen.screenId)} · ${String(screen.name)}`;
-        frame.resize(360, 720);
-        frame.x = index * 420;
+        frame.resize(390, 844);
+        frame.x = 440 + index * 430;
         frame.y = 80;
         frame.layoutMode = "VERTICAL";
         frame.primaryAxisSizingMode = "FIXED";
         frame.counterAxisSizingMode = "FIXED";
-        frame.itemSpacing = 16;
-        frame.paddingTop = 24;
-        frame.paddingRight = 16;
-        frame.paddingBottom = 24;
-        frame.paddingLeft = 16;
-        styleScreen(frame);
+        frame.itemSpacing = 0;
+        frame.paddingTop = 0;
+        frame.paddingRight = 0;
+        frame.paddingBottom = 0;
+        frame.paddingLeft = 0;
+        styleScreen(frame, palette);
         root.appendChild(frame);
+        screenFrames.set(String(screen.screenId), frame);
         writeMetadata(frame, __spreadProps(__spreadValues({}, metadata), {
           kind: "screen",
           screenId: screen.screenId,
+          archetype: presentation.archetype,
+          sectionKeys: sections.map((section) => String(section.key)),
           requirementIds: screen.requirementIds,
           planHash
         }));
-        const title = yield appendText(frame, String((_e = screen.name) != null ? _e : screen.screenId), 20, solid(25, 36, 43));
-        title.name = "Screen title";
-        const purpose = yield appendText(frame, String((_f = screen.purpose) != null ? _f : ""), 12, solid(94, 110, 118));
-        purpose.name = "Screen purpose";
         const screenSlots = resolvedSlots.filter((slot) => slot.screenId === screen.screenId);
-        for (const slot of screenSlots) {
+        const appendResolvedSlot = (slot, parent) => __async(null, null, function* () {
+          var _a2, _b2, _c2;
           let node;
           if (slot.resolution === "component" && typeof slot.componentKey === "string") {
-            const component = yield localComponentByKey(slot.componentKey);
-            node = component.createInstance();
+            node = yield createBoundInstance(slot, sourcePage);
           } else if (source.mode === "free" && slot.resolution === "primitive_fallback") {
             node = yield createFallbackSlot(slot);
           } else {
             throw new Error(`STRICT_PLAN_VIOLATION: unresolved slot ${String(slot.slotKey)}`);
           }
+          const recipeSlot = Array.isArray(screen.slots) ? screen.slots.find((candidate) => candidate.key === slot.slotKey) : void 0;
+          const semanticRole = typeof slot.semanticRole === "string" ? slot.semanticRole : "";
+          yield applySlotContent(node, semanticRole, recipeSlot == null ? void 0 : recipeSlot.content);
+          stretchSlot(node, semanticRole);
           node.name = `${String(slot.slotKey)} · ${node.name}`;
-          frame.appendChild(node);
+          parent.appendChild(node);
           writeMetadata(node, __spreadProps(__spreadValues({}, metadata), {
             kind: "slot",
             screenId: screen.screenId,
             requirementIds: screen.requirementIds,
             slotKey: slot.slotKey,
-            componentKey: (_g = slot.componentKey) != null ? _g : null,
-            semanticRole: (_h = slot.semanticRole) != null ? _h : null,
+            componentKey: (_a2 = slot.componentKey) != null ? _a2 : null,
+            componentBinding: (_b2 = slot.componentBinding) != null ? _b2 : null,
+            semanticRole: (_c2 = slot.semanticRole) != null ? _c2 : null,
             primitiveFallback: slot.resolution === "primitive_fallback",
             planHash
           }));
+          return node;
+        });
+        const headerSlots = screenSlots.filter((slot) => slot.semanticRole === "app-header");
+        if (headerSlots.length > 0) {
+          for (const slot of headerSlots) yield appendResolvedSlot(slot, frame);
+        } else {
+          const customHeader = createStack(frame, "Product header", 390, palette.surface, 16, 4);
+          yield appendText(customHeader, String((_i = screen.name) != null ? _i : screen.screenId), 16, palette.text, "Medium");
         }
+        const content = createStack(frame, "Product content", 390, palette.canvas, 16, 14);
+        content.layoutAlign = "STRETCH";
+        content.layoutGrow = 1;
+        content.primaryAxisSizingMode = "FIXED";
+        content.clipsContent = true;
+        content.overflowDirection = "VERTICAL";
+        const hero = createStack(content, "Screen hierarchy", 358, palette.canvas, 0, 8);
+        const eyebrow = yield appendText(hero, String((_j = presentation.eyebrow) != null ? _j : "PRODUCT FLOW"), 11, palette.primary, "Medium");
+        eyebrow.name = "Eyebrow";
+        const headline = yield appendText(hero, String((_k = presentation.headline) != null ? _k : screen.name), 26, palette.text, "Medium");
+        headline.name = "Product headline";
+        const supporting = yield appendText(hero, String((_m = (_l = presentation.supportingText) != null ? _l : screen.purpose) != null ? _m : ""), 13, palette.muted);
+        supporting.name = "Supporting copy";
+        for (const section of sections) yield appendPresentationSection(content, section, palette);
+        const controlSlots = screenSlots.filter((slot) => {
+          var _a2;
+          const role = String((_a2 = slot.semanticRole) != null ? _a2 : "");
+          return role !== "app-header" && !role.includes("button");
+        });
+        if (controlSlots.length > 0) {
+          const controls = createStack(content, "Design System controls", 358, palette.surface, 12, 10, 14);
+          controls.strokes = [palette.border];
+          controls.strokeWeight = 1;
+          for (const slot of controlSlots) yield appendResolvedSlot(slot, controls);
+        }
+        const actionSlots = screenSlots.filter((slot) => {
+          var _a2;
+          return String((_a2 = slot.semanticRole) != null ? _a2 : "").includes("button");
+        });
+        if (actionSlots.length > 0) {
+          const actions = createStack(frame, "Sticky actions", 390, palette.surface, 16, 10);
+          actions.layoutAlign = "STRETCH";
+          for (const [actionIndex, slot] of actionSlots.entries()) {
+            const actionNode = yield appendResolvedSlot(slot, actions);
+            if (actionIndex === 0) primaryActionNodes.set(String(screen.screenId), actionNode);
+          }
+        }
+        const navigation = createStack(frame, "Bottom navigation", 390, palette.surface, 10, 2);
+        navigation.strokes = [palette.border];
+        navigation.strokeTopWeight = 1;
+        yield appendText(navigation, navigationCopy(direction, presentation), 11, palette.muted, "Medium");
+        const progress = 15 + Math.round((index + 1) / screens.length * 70);
+        postProgress(requestId, progress, `Rendered ${index + 1}/${screens.length}: ${String(screen.name)}`);
+        yield yieldToFigma();
       }
-      root.resizeWithoutConstraints(Math.max(420, screens.length * 420), 900);
+      postProgress(requestId, 90, "Connecting prototype interactions");
+      for (const screen of screens) {
+        const fromScreenId = String(screen.screenId);
+        const sourceNode = (_n = primaryActionNodes.get(fromScreenId)) != null ? _n : screenFrames.get(fromScreenId);
+        const destinations = (Array.isArray(screen.prototypeEdges) ? screen.prototypeEdges : []).flatMap((edge) => {
+          const frame = screenFrames.get(String(edge.toScreenId));
+          return frame ? [{ edge, frame }] : [];
+        });
+        if (sourceNode && destinations.length > 0) yield setNavigationReactions(sourceNode, destinations);
+      }
+      root.resizeWithoutConstraints(Math.max(900, 460 + screens.length * 430), 1020);
       writeMetadata(root, __spreadProps(__spreadValues({}, readMetadata(root)), { prototypeEdges: flattenEdges(screens) }));
-      focusArtifact(root);
       figma.commitUndo();
-      return __spreadProps(__spreadValues({}, readArtifact(page, idempotencyKey)), { idempotent: false });
+      postProgress(requestId, 100, "Lifecycle artifact created");
+      return {
+        schemaVersion: 1,
+        rootNodeIds: [root.id],
+        artifactPageId: outputPage.id,
+        artifactPageName: outputPage.name,
+        idempotent: false
+      };
     } catch (error) {
       root.remove();
+      if (!recoverable) outputPage.remove();
       throw error;
     }
   });
-  const readArtifact = (page, idempotencyKey) => {
-    var _a;
-    const root = findArtifactRoot(page, idempotencyKey);
-    if (!root) throw new Error(`ARTIFACT_NOT_FOUND: ${idempotencyKey}`);
+  const readArtifact = (idempotencyKey, rootNodeId) => __async(null, null, function* () {
+    var _a, _b;
+    let location = null;
+    if (rootNodeId) {
+      const root2 = yield getNodeByIdLocalFirst(rootNodeId);
+      const pageId = root2 ? containingPageId(root2) : null;
+      const page2 = pageId ? yield getNodeByIdLocalFirst(pageId) : null;
+      const metadata = root2 ? readMetadata(root2) : null;
+      if (root2 && (page2 == null ? void 0 : page2.type) === "PAGE" && (metadata == null ? void 0 : metadata.kind) === "artifact_root" && metadata.idempotencyKey === idempotencyKey) {
+        location = { page: page2, root: root2 };
+      }
+    }
+    if (!location) location = yield findArtifactRoot(idempotencyKey);
+    if (!location) throw new Error(`ARTIFACT_NOT_FOUND: ${idempotencyKey}`);
+    const { page, root } = location;
     const rootMetadata = readMetadata(root);
+    const descendants = (node) => {
+      if (!("children" in node)) return [];
+      return node.children.flatMap((child) => [child, ...descendants(child)]);
+    };
     const screens = "children" in root ? root.children.flatMap((node) => {
+      var _a2;
       const metadata = readMetadata(node);
       if ((metadata == null ? void 0 : metadata.kind) !== "screen") return [];
-      const childSlots = "children" in node ? node.children.flatMap((child) => {
+      const childSlots = descendants(node).flatMap((child) => {
         const slot = readMetadata(child);
         return (slot == null ? void 0 : slot.kind) === "slot" ? [{
           slotKey: String(slot.slotKey),
           componentKey: typeof slot.componentKey === "string" ? slot.componentKey : null,
+          componentBinding: slot.componentBinding && typeof slot.componentBinding === "object" ? slot.componentBinding : null,
           semanticRole: typeof slot.semanticRole === "string" ? slot.semanticRole : null,
-          primitiveFallback: Boolean(slot.primitiveFallback)
+          primitiveFallback: Boolean(slot.primitiveFallback),
+          instanceBacked: child.type === "INSTANCE"
         }] : [];
-      }) : [];
+      });
+      const sectionKeys = descendants(node).flatMap((child) => {
+        const section = readMetadata(child);
+        return (section == null ? void 0 : section.kind) === "presentation_section" && typeof section.sectionKey === "string" ? [section.sectionKey] : [];
+      });
+      const creativeNodes = [node, ...descendants(node)].filter((child) => {
+        const childMetadata = readMetadata(child);
+        return typeof (childMetadata == null ? void 0 : childMetadata.creativeElementId) === "string";
+      });
       return [{
         nodeId: node.id,
         screenId: String(metadata.screenId),
         name: node.name,
+        archetype: String((_a2 = metadata.archetype) != null ? _a2 : ""),
+        sectionKeys,
         componentKey: null,
         semanticRole: null,
+        creativeMetrics: creativeNodes.length > 0 ? {
+          elementCount: creativeNodes.length,
+          instanceCount: creativeNodes.filter((child) => child.type === "INSTANCE").length,
+          primitiveCount: creativeNodes.filter((child) => child.type !== "INSTANCE" && child.type !== "TEXT").length,
+          textCount: creativeNodes.filter((child) => child.type === "TEXT").length
+        } : void 0,
         metadata: {
           namespace: metadata.namespace,
           runId: metadata.runId,
@@ -1463,28 +2319,48 @@ var __async = (__this, __arguments, generator) => {
         childSlots
       }];
     }) : [];
+    const screenIdByNodeId = new Map(screens.map((screen) => [screen.nodeId, screen.screenId]));
+    const prototypeEdges = "children" in root ? root.children.flatMap((screenNode) => [screenNode, ...descendants(screenNode)].flatMap((node) => {
+      const metadata = readMetadata(node);
+      const edges = Array.isArray(metadata == null ? void 0 : metadata.prototypeEdges) ? metadata.prototypeEdges : [];
+      const reactions = "reactions" in node && Array.isArray(node.reactions) ? node.reactions : [];
+      return edges.filter((edge) => reactions.some(
+        (reaction) => reaction.actions.some(
+          (action) => action.type === "NODE" && action.destinationId != null && screenIdByNodeId.get(action.destinationId) === edge.toScreenId
+        )
+      ));
+    })) : [];
+    const renderedDesignBrief = "children" in root ? root.children.find((node) => {
+      var _a2;
+      return ((_a2 = readMetadata(node)) == null ? void 0 : _a2.kind) === "design_brief";
+    }) : void 0;
+    const renderedDesignBriefMetadata = renderedDesignBrief ? readMetadata(renderedDesignBrief) : null;
     return {
       schemaVersion: 1,
       targetHash: String((_a = rootMetadata.targetHash) != null ? _a : ""),
       planHash: String(rootMetadata.planHash),
       idempotencyKey,
       rootNodeIds: [root.id],
+      artifactPageId: page.id,
+      artifactPageName: page.name,
+      designConceptName: String((_b = renderedDesignBriefMetadata == null ? void 0 : renderedDesignBriefMetadata.conceptName) != null ? _b : ""),
       screens,
-      prototypeEdges: Array.isArray(rootMetadata.prototypeEdges) ? rootMetadata.prototypeEdges : [],
+      prototypeEdges,
       readAt: (/* @__PURE__ */ new Date()).toISOString()
     };
-  };
+  });
   const handleLifecycleArtifactRequest = (request) => __async(null, null, function* () {
     var _a;
     const params = (_a = request.params) != null ? _a : {};
     switch (request.type) {
       case "apply_lifecycle_artifact_plan":
-        return { type: request.type, requestId: request.requestId, data: yield applyArtifact(params) };
+        return { type: request.type, requestId: request.requestId, data: yield applyArtifact(params, request.requestId) };
       case "read_lifecycle_artifact": {
-        const page = requireCurrentPage(params.targetPageId);
+        requireCurrentPage(params.targetPageId);
         const idempotencyKey = typeof params.idempotencyKey === "string" ? params.idempotencyKey : "";
         if (!idempotencyKey) throw new Error("idempotencyKey is required");
-        return { type: request.type, requestId: request.requestId, data: readArtifact(page, idempotencyKey) };
+        const rootNodeId = typeof params.rootNodeId === "string" ? params.rootNodeId : void 0;
+        return { type: request.type, requestId: request.requestId, data: yield readArtifact(idempotencyKey, rootNodeId) };
       }
       default:
         return null;
@@ -1506,6 +2382,7 @@ var __async = (__this, __arguments, generator) => {
     "search_nodes",
     "scan_text_nodes",
     "scan_nodes_by_types",
+    "discover_design_system_instances",
     "get_reactions",
     "get_viewport",
     "get_fonts",

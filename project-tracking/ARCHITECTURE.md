@@ -73,9 +73,11 @@ A raw canvas does not silently become a ProductSpec. Promotion is a first-class 
 
 ```text
 User message or developer skill
-  -> application-owned intent router (conversation/draw/edit/clarify/promote)
+  -> slash command route, or provider-owned typed intent route
+     (conversation/discovery/draw/edit/promote/change/artifact)
+  -> Agent Core policy guard resolves target/approval and permits or rejects the action
   -> bounded CanvasContext (selection/region + nearby shapes) only when canvas work is allowed
-  -> provider proposes a CanvasProgram; provider commands cannot override the routed intent
+  -> draw/edit only: provider receives the rich creative schema and proposes a CanvasProgram
   -> Agent Core validates policy/schema and adds deterministic fallback if required
   -> Canvas layout owns generated coordinates, reconciles stable semantic IDs and avoids occupied user content
   -> CanvasService applies operations or runs a sandboxed virtual-API script
@@ -85,7 +87,7 @@ User message or developer skill
   -> concise final chat outcome/audit event
 ```
 
-Ordinary product conversation never mutates the canvas, even when a provider proposes drawing. An explicit draw request must produce visible canvas output even when the model omits or malforms its program. A vague edit without a selected or explicitly named target returns clarification. The fallback derives labels and topology from user text; it is labeled as deterministic, not provider-generated. Chat may show a pending state while work runs, but it cannot claim success before durable save plus read-back.
+Natural-language semantics belong to the reasoning provider, not a Vietnamese keyword/diacritic classifier in application code. Route responses use a small schema without CanvasProgram. Only a typed `draw` or `edit` intent triggers a second creative response with the rich schema; `/canvas flow|prototype` skips directly to that creative response. Ordinary conversation cannot mutate canvas. A vague typed edit without a selected or uniquely named target returns clarification. Deterministic fallback consumes the already-authorized intent and never decides whether a mutation is allowed. Chat may show a pending state while work runs, but it cannot claim success before durable save plus read-back.
 
 ### Business and artifact loop
 

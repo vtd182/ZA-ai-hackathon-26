@@ -42,6 +42,19 @@ type dsTextNode struct {
 	FontName   interface{} `json:"fontName,omitempty"`
 }
 
+type dsCatalogInstance struct {
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	Type                string            `json:"type"`
+	PageID              string            `json:"pageId"`
+	MainComponentID     *string           `json:"mainComponentId,omitempty"`
+	MainComponentName   *string           `json:"mainComponentName,omitempty"`
+	MainComponentKey    *string           `json:"mainComponentKey,omitempty"`
+	ComponentProperties map[string]string `json:"componentProperties"`
+	ContextLabels       []string          `json:"contextLabels"`
+	AncestorNames       []string          `json:"ancestorNames"`
+}
+
 type dsSemanticHint struct {
 	ComponentID string   `json:"componentId"`
 	Name        string   `json:"name"`
@@ -52,6 +65,7 @@ type dsContextBundle struct {
 	SourceRoot           smartSelectionNode        `json:"sourceRoot"`
 	RelevantComponents   []dsLocalComponent        `json:"relevantComponents"`
 	RelevantComponentSet []dsComponentSet          `json:"relevantComponentSets"`
+	RelevantInstances    []dsCatalogInstance       `json:"relevantInstances"`
 	Styles               interface{}               `json:"styles"`
 	Variables            interface{}               `json:"variables"`
 	TextNodes            []dsTextNode              `json:"textNodes"`
@@ -156,11 +170,19 @@ func captureDesignSystemContext(ctx context.Context, runtime *Runtime, args map[
 	}
 
 	reports := []ExecutionReport{rootReport}
+	warnings := []string{}
 	scannedNodes, scanReport, err := fetchSourceDesignSystemNodes(ctx, runtime, sourceRootID, sessionID)
 	if err != nil {
 		return dsContextBundle{}, err
 	}
 	reports = append(reports, scanReport)
+
+	relevantInstances, instanceReport, instanceErr := fetchDesignSystemInstances(ctx, runtime, sourceRootID, sessionID)
+	if instanceErr == nil {
+		reports = append(reports, instanceReport)
+	} else {
+		warnings = append(warnings, fmt.Sprintf("Copied design-system instance discovery failed: %v", instanceErr))
+	}
 
 	textNodes, textReport, err := fetchSourceTextNodes(ctx, runtime, sourceRootID, sessionID)
 	if err == nil {
@@ -168,22 +190,29 @@ func captureDesignSystemContext(ctx context.Context, runtime *Runtime, args map[
 	}
 
 	localComponents, localSets, componentReport, err := fetchLocalDesignComponents(ctx, runtime, sessionID)
-	if err != nil {
-		return dsContextBundle{}, err
+	if err == nil {
+		reports = append(reports, componentReport)
+	} else {
+		localComponents = []dsLocalComponent{}
+		localSets = []dsComponentSet{}
+		warnings = append(warnings, fmt.Sprintf("Local component catalog capture failed: %v", err))
 	}
-	reports = append(reports, componentReport)
 
 	styles, stylesReport, err := executeDetailedTool(ctx, runtime, "get_styles", nil, sessionID)
-	if err != nil {
-		return dsContextBundle{}, err
+	if err == nil {
+		reports = append(reports, stylesReport)
+	} else {
+		styles = map[string]interface{}{}
+		warnings = append(warnings, fmt.Sprintf("Style capture failed: %v", err))
 	}
-	reports = append(reports, stylesReport)
 
 	variables, variableReport, err := executeDetailedTool(ctx, runtime, "get_variable_defs", nil, sessionID)
-	if err != nil {
-		return dsContextBundle{}, err
+	if err == nil {
+		reports = append(reports, variableReport)
+	} else {
+		variables = map[string]interface{}{}
+		warnings = append(warnings, fmt.Sprintf("Variable capture failed: %v", err))
 	}
-	reports = append(reports, variableReport)
 
 	componentIDs := map[string]struct{}{}
 	componentSetIDs := map[string]struct{}{}
@@ -236,15 +265,15 @@ func captureDesignSystemContext(ctx context.Context, runtime *Runtime, args map[
 		})
 	}
 
-	warnings := []string{}
-	if len(relevantComponents) == 0 {
-		warnings = append(warnings, "No components were found inside the selected design-system source subtree. DS apply may need to fallback.")
+	if len(relevantComponents) == 0 && len(relevantInstances) == 0 {
+		warnings = append(warnings, "No components or copied design-system instances were found inside the selected source subtree. DS apply may need to fallback.")
 	}
 
 	return dsContextBundle{
 		SourceRoot:           rootNode,
 		RelevantComponents:   relevantComponents,
 		RelevantComponentSet: relevantSets,
+		RelevantInstances:    relevantInstances,
 		Styles:               styles,
 		Variables:            variables,
 		TextNodes:            textNodes,
@@ -255,6 +284,30 @@ func captureDesignSystemContext(ctx context.Context, runtime *Runtime, args map[
 		ScannedNodes:         scannedNodes,
 		ComponentSetByID:     componentSetByID,
 	}, nil
+}
+
+func fetchDesignSystemInstances(ctx context.Context, runtime *Runtime, nodeID, sessionID string) ([]dsCatalogInstance, ExecutionReport, error) {
+	params := map[string]interface{}{
+		"nodeId":       nodeID,
+		"maxInstances": 2000.0,
+	}
+	if sessionID != "" {
+		params["sessionId"] = sessionID
+	}
+	result, err := runtime.Engine.ExecuteDetailed(ctx, "discover_design_system_instances", nil, params)
+	if err != nil {
+		return nil, result.Report, err
+	}
+	if result.Response.Error != "" {
+		return nil, result.Report, errors.New(result.Response.Error)
+	}
+	var payload struct {
+		Instances []dsCatalogInstance `json:"instances"`
+	}
+	if err := decodeInto(result.Response.Data, &payload); err != nil {
+		return nil, result.Report, err
+	}
+	return payload.Instances, result.Report, nil
 }
 
 func applyDesignSystemScreen(ctx context.Context, runtime *Runtime, args map[string]interface{}, sessionID string) (map[string]any, error) {

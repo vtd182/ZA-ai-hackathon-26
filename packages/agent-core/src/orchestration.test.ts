@@ -9,6 +9,7 @@ const decision: Extract<PhaseReasoningResult, { phase: 'decide' }> = {
   phase: 'decide',
   message: 'Chọn phương án',
   commands: [],
+  intent: { kind: 'conversation', target: null, artifactAction: null },
   phaseData: {
     options: [
       { id: 'OPT-1', title: 'Lean MVP', tradeoff: 'Ít scope' },

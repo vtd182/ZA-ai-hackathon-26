@@ -3,17 +3,23 @@ import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
 import { syntheticZaloDesignSystem } from '@pm-agent/fixture-zalo-design-system'
 import { createFigmaArtifactPlan, preflightFigmaArtifactPlan } from './figma-artifact-plan'
 import type { FigmaJsonToolTransport } from './figma-mcp'
-import { FigmaMcpAdapter, FigmaMcpError } from './figma-mcp'
+import {
+  FIGMA_APPLY_MAX_TIMEOUT_MS,
+  FIGMA_APPLY_MIN_TIMEOUT_MS,
+  FigmaMcpAdapter,
+  FigmaMcpError,
+  figmaApplyTimeoutMs,
+} from './figma-mcp'
 
 class FakeTransport implements FigmaJsonToolTransport {
-  calls: Array<{ name: string; args: Record<string, unknown> }> = []
+  calls: Array<{ name: string; args: Record<string, unknown>; timeoutMs: number }> = []
 
   constructor(private readonly responses: Record<string, unknown>) {}
 
   async connect(): Promise<void> {}
 
-  async callJson(name: string, args: Record<string, unknown>): Promise<unknown> {
-    this.calls.push({ name, args })
+  async callJson(name: string, args: Record<string, unknown>, timeoutMs: number): Promise<unknown> {
+    this.calls.push({ name, args, timeoutMs })
     return this.responses[name]
   }
 
@@ -36,6 +42,12 @@ const health = {
 const pages = { currentPageId: '0:1', pages: [{ id: '0:1', name: 'Page 1' }] }
 
 describe('FigmaMcpAdapter', () => {
+  it('scales apply timeout by estimated operations within explicit bounds', () => {
+    expect(figmaApplyTimeoutMs(0)).toBe(FIGMA_APPLY_MIN_TIMEOUT_MS)
+    expect(figmaApplyTimeoutMs(60)).toBe(10 * 60_000)
+    expect(figmaApplyTimeoutMs(10_000)).toBe(FIGMA_APPLY_MAX_TIMEOUT_MS)
+  })
+
   it('pins an immutable target only after live session and current page validation', async () => {
     const transport = new FakeTransport({ get_runtime_health: health, get_pages: pages })
     const adapter = new FigmaMcpAdapter({ binaryPath: '/unused' }, transport)
@@ -70,6 +82,7 @@ describe('FigmaMcpAdapter', () => {
       sourceRoot: { id: '0:1', name: 'Page 1', type: 'PAGE' },
       relevantComponents: [],
       relevantComponentSets: [],
+      relevantInstances: [],
       styles: {},
       variables: {},
       textNodes: [],
@@ -127,18 +140,25 @@ describe('FigmaMcpAdapter', () => {
       planHash: preflight.planHash,
       idempotencyKey: plan.metadata.idempotencyKey,
       rootNodeIds: ['10:1'],
+      artifactPageId: '9:1',
+      artifactPageName: 'PM · SPEC-MEAL-ORDERING · v1',
+      designConceptName: plan.designDirection.conceptName,
       screens: plan.screens.map((screen, index) => ({
         nodeId: `11:${index + 1}`,
         screenId: screen.screenId,
         name: screen.name,
+        archetype: screen.presentation.archetype,
+        sectionKeys: screen.presentation.sections.map((section) => section.key),
         componentKey: null,
         semanticRole: null,
         metadata: { ...plan.metadata, screenId: screen.screenId, requirementIds: screen.requirementIds, planHash: preflight.planHash },
         childSlots: preflight.plan.resolvedSlots.filter((slot) => slot.screenId === screen.screenId).map((slot) => ({
           slotKey: slot.slotKey,
           componentKey: slot.componentKey,
+          componentBinding: slot.componentBinding,
           semanticRole: slot.semanticRole,
           primitiveFallback: false,
+          instanceBacked: true,
         })),
       })),
       prototypeEdges: plan.screens.flatMap((screen) => screen.prototypeEdges),
@@ -156,9 +176,11 @@ describe('FigmaMcpAdapter', () => {
     await expect(adapter.applyArtifactPlan(preflight, preflight.planHash)).resolves.toMatchObject({ idempotent: false })
     await expect(adapter.readArtifact(target, plan.metadata.idempotencyKey)).resolves.toEqual(snapshot)
     await expect(adapter.auditArtifact(preflight)).resolves.toMatchObject({ verified: true, issues: [] })
-    expect(transport.calls.filter((call) => call.name === 'get_runtime_health')).toHaveLength(3)
+    expect(transport.calls.filter((call) => call.name === 'get_runtime_health')).toHaveLength(1)
     expect(transport.calls.map((call) => call.name)).toContain('apply_design_system_plan')
     expect(transport.calls.map((call) => call.name)).toContain('read_lifecycle_artifact')
     expect(transport.calls.map((call) => call.name)).toContain('audit_lifecycle_artifact')
+    expect(transport.calls.find((call) => call.name === 'apply_design_system_plan')?.timeoutMs)
+      .toBe(figmaApplyTimeoutMs(preflight.plan.estimatedOperations))
   })
 })

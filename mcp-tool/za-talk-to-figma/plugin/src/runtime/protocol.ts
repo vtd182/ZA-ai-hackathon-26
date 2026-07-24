@@ -10,6 +10,7 @@ export const readRequestTypes = [
   "search_nodes",
   "scan_text_nodes",
   "scan_nodes_by_types",
+  "discover_design_system_instances",
   "get_reactions",
   "get_viewport",
   "get_fonts",

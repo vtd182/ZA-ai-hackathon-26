@@ -2,17 +2,17 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
-import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, changeIntentFromCanvasCommand, createHandoffPackage, createImpactPreview, customDecisionOptionId, executeConnectorAction, normalizeClarificationAnswers, rejectActions, resolveRemovalChangeIntent, selectDecisionOption, synthesizeProductSpecFromDecision } from '@pm-agent/agent-core'
-import { canvasProgramCovers, classifyCanvasInteraction, legacyCommandsToCanvasProgram, planExplicitCanvasRequest, synthesizeProductSpecFromCanvas } from '@pm-agent/canvas'
+import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, changeIntentFromCanvasCommand, createHandoffPackage, createImpactPreview, customDecisionOptionId, executeConnectorAction, normalizeClarificationAnswers, rejectActions, resolveRemovalChangeIntent, selectDecisionOption, synthesizeProductSpecFromDecision, type ConnectorExecutionResult } from '@pm-agent/agent-core'
+import { legacyCommandsToCanvasProgram, planExplicitCanvasRequest, resolveCanvasSelection, synthesizeProductSpecFromCanvas } from '@pm-agent/canvas'
 import {
   createFixtureFallbackDesignSystemContext,
   createFigmaArtifactPlan,
-  createLivePrimitiveFallbackManifest,
   createMockJiraPlan,
   createMockZdocPlan,
   FigmaMcpAdapter,
   FigmaMcpArtifactConnector,
   FigmaRuntimeManager,
+  figmaApplyTimeoutMs,
   hashConnectorPayload,
   MockFigmaArtifactConnector,
   MockJiraConnector,
@@ -23,24 +23,30 @@ import {
 } from '@pm-agent/connectors'
 import type {
   ChangeIntent,
+  ArtifactProgressEvent,
   CanvasGestureCommand,
   CanvasExecutionFailure,
   CanvasExecutionReceipt,
   CanvasDocumentContext,
   CanvasProgram,
   CanvasPromotionPreview,
+  ChatMessage,
   ConfigureProviderInput,
   DesktopApi,
   LifecycleWorkspaceState,
   ProviderProfile,
+  ProviderEvent,
+  ProviderIntent,
   SendChatInput,
   PlannedAction,
   ProductSpec,
+  FigmaCreativeBlueprint,
 } from '@pm-agent/domain'
 import {
   createDraftProductSpec,
   designSystemManifestSchema,
   figmaArtifactPlanSchema,
+  figmaPreflightResultSchema,
   mockJiraPlanSchema,
   mockZdocPlanSchema,
   summarizeFigmaDesignSystemContext,
@@ -56,6 +62,9 @@ import { DEMO_FIXTURE_VERSION, DEMO_THREAD_ID, FigmaIntegrationStore, HistorySto
 import { ProviderRegistry } from '@pm-agent/reasoning'
 import { SecretStore } from './secret-store'
 import { CanvasBridge } from './canvas-bridge'
+import { assertProviderTurnAvailable } from './active-turns'
+import { parseSlashCommand, slashHelpMessage } from './slash-commands'
+import { mapFreeformDiscoveryAnswers } from './workflow-intent'
 
 const { app, BrowserWindow, ipcMain, shell } = electron
 
@@ -80,6 +89,10 @@ const pendingCanvasExecutions = new Map<string, {
   kind: 'draw' | 'edit'
 }>()
 
+function assertNoActiveProviderTurn(threadId: string): void {
+  assertProviderTurnAvailable(activeRuns.keys(), threadId)
+}
+
 if (process.env.PM_AGENT_USER_DATA) app.setPath('userData', process.env.PM_AGENT_USER_DATA)
 
 const providerEnv: Record<string, string> = {
@@ -93,8 +106,8 @@ function timestamp(): string {
   return new Date().toISOString()
 }
 
-function normalizeIntentText(value: string): string {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase().trim()
+function resequenceProviderEvents(...groups: ProviderEvent[][]): ProviderEvent[] {
+  return groups.flat().map((event, sequence) => ({ ...event, sequence }))
 }
 
 function deliveryStatusMessage(productSpec: ProductSpec, selectedOption?: string): string {
@@ -104,8 +117,13 @@ function deliveryStatusMessage(productSpec: ProductSpec, selectedOption?: string
 }
 
 function canvasReceiptMessage(program: CanvasProgram, receipt: CanvasExecutionReceipt, kind: 'draw' | 'edit'): string {
-  const nodes = program.operations.filter((operation) => operation.op === 'create_node').length
+  const nodeOperations = program.operations.filter(
+    (operation): operation is Extract<CanvasProgram['operations'][number], { op: 'create_node' }> =>
+      operation.op === 'create_node'
+  )
+  const nodes = nodeOperations.length
   const connections = program.operations.filter((operation) => operation.op === 'connect').length
+  const decisions = nodeOperations.filter((operation) => operation.kind === 'decision').length
   const updates = program.operations.filter((operation) => operation.op === 'update' || operation.op === 'delete').length
   if (program.mode === 'script') {
     return `Canvas đã thực thi ${receipt.appliedOperationCount} thao tác và đọc lại ${receipt.shapeCount} phần tử.`
@@ -118,10 +136,13 @@ function canvasReceiptMessage(program: CanvasProgram, receipt: CanvasExecutionRe
     ].filter(Boolean).join(', ')
     return `Đã cập nhật vùng canvas đã chọn${detail ? `: ${detail}` : ''}. Đọc lại thành công ${receipt.shapeCount} phần tử.`
   }
-  if (/prototype low-fidelity/i.test(program.summary)) {
-    return `Đã dựng ${nodes} màn hình prototype low-fidelity và ${connections} chuyển tiếp. Bạn có thể kéo cả frame, sửa từng thành phần, hoặc chọn một màn hình rồi chat để feedback. Canvas đã đọc lại thành công ${receipt.shapeCount} phần tử.`
+  if (program.sceneType === 'prototype' || /prototype/i.test(program.summary)) {
+    const journey = nodeOperations.map((operation) => operation.label).join(' → ')
+    return `Đã dựng ${nodes} màn hình có nội dung và trạng thái riêng: ${journey}. Chọn một màn hình hoặc thành phần trên canvas, rồi nói điều bạn muốn sửa; agent sẽ chỉ cập nhật vùng đó.`
   }
-  return `Đã vẽ ${nodes} node và ${connections} kết nối. Canvas đã đọc lại thành công ${receipt.shapeCount} phần tử.`
+  const mainPath = nodeOperations.slice(0, 6).map((operation) => operation.label).join(' → ')
+  const remaining = Math.max(0, nodes - 6)
+  return `Đã dựng flow ${nodes} bước${decisions > 0 ? ` với ${decisions} điểm quyết định` : ''}. Luồng chính: ${mainPath}${remaining > 0 ? ` → và ${remaining} bước/nhánh tiếp theo` : ''}. Chọn một node hoặc khoanh vùng cần feedback để mình sửa đúng phần đó.`
 }
 
 function figmaRuntimePaths(): { binaryPath: string; manifestPath: string } {
@@ -244,14 +265,13 @@ function figmaExecutionContext(): FigmaExecutionContext {
   const target = figmaIntegration.getActiveTarget()
   const context = target ? figmaIntegration.getContext(target.targetHash) : null
   if (target && context) {
-    return context.mode === 'live'
-      ? { target, manifest: context.manifest, connectorMode: 'live', planMode: 'strict' }
-      : {
-          target,
-          manifest: createLivePrimitiveFallbackManifest(context.manifest),
-          connectorMode: 'live',
-          planMode: 'free',
-        }
+    if (context.mode !== 'live') {
+      throw new Error(
+        `Figma strict guard chưa có component binding thật: ${context.fallbackReason ?? 'live Design System capture failed'}. `
+        + 'Mở đúng ZDS page và chọn refresh Design System trước khi prepare.',
+      )
+    }
+    return { target, manifest: context.manifest, connectorMode: 'live', planMode: 'strict' }
   }
   return {
     target: {
@@ -307,31 +327,282 @@ function exportMarkdownArtifact(spec: ProductSpec): string {
   return path
 }
 
+function exportThreadBundle(threadId: string): import('@pm-agent/domain').ThreadExportResult {
+  const thread = history.getThread(threadId)
+  const workspace = workspaceFor(threadId)
+  const messages = history.allMessages(threadId)
+  const exportedAt = timestamp()
+  const slug = thread.title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 64) || 'thread'
+  const directoryPath = join(
+    app.getPath('userData'),
+    'exports',
+    `${slug}-${exportedAt.replace(/[:.]/g, '-')}`,
+  )
+  mkdirSync(directoryPath, { recursive: true })
+
+  const transcript = [
+    `# ${thread.title}`,
+    '',
+    `- Thread: ${thread.id}`,
+    `- Provider: ${thread.providerId} / ${thread.modelId}`,
+    `- Phase: ${thread.phase}`,
+    `- Exported: ${exportedAt}`,
+    '',
+    '## Transcript',
+    '',
+    ...messages.flatMap((message) => [
+      `### ${message.role === 'user' ? 'User' : message.role === 'assistant' ? 'Agent' : 'System'} · ${message.createdAt}`,
+      '',
+      message.content,
+      '',
+    ]),
+  ].join('\n')
+  const files = [
+    'README.md',
+    'chat.md',
+    'product-spec.md',
+    'productspec.json',
+    'canvas.json',
+    'workspace.json',
+    'review-bundle.json',
+  ]
+  writeFileSync(join(directoryPath, 'README.md'), [
+    '# PM Lifecycle review bundle',
+    '',
+    'Bundle này chứa transcript, ProductSpec, canvas snapshot và trạng thái workflow tại thời điểm export.',
+    'Có thể gửi toàn bộ thư mục này để tái hiện và kiểm chứng hành vi.',
+    '',
+    ...files.slice(1).map((file) => `- ${file}`),
+  ].join('\n'), 'utf8')
+  writeFileSync(join(directoryPath, 'chat.md'), transcript, 'utf8')
+  writeFileSync(join(directoryPath, 'product-spec.md'), renderProductSpecMarkdown(workspace.runState.productSpec), 'utf8')
+  writeFileSync(join(directoryPath, 'productspec.json'), JSON.stringify(workspace.runState.productSpec, null, 2), 'utf8')
+  writeFileSync(join(directoryPath, 'canvas.json'), JSON.stringify(thread.canvasSnapshot, null, 2), 'utf8')
+  const workspaceExport = {
+    exportedAt,
+    thread: {
+      id: thread.id,
+      title: thread.title,
+      phase: thread.phase,
+      status: thread.status,
+      providerId: thread.providerId,
+      modelId: thread.modelId,
+    },
+    runState: workspace.runState,
+    preview: workspace.preview,
+    execution: workspace.execution,
+    reasoning: workspace.reasoning,
+  }
+  writeFileSync(join(directoryPath, 'workspace.json'), JSON.stringify(workspaceExport, null, 2), 'utf8')
+  writeFileSync(join(directoryPath, 'review-bundle.json'), JSON.stringify({
+    schemaVersion: 1,
+    ...workspaceExport,
+    messages,
+    productSpec: workspace.runState.productSpec,
+    canvasSnapshot: thread.canvasSnapshot,
+  }, null, 2), 'utf8')
+  shell.showItemInFolder(join(directoryPath, 'review-bundle.json'))
+  return { directoryPath, files, exportedAt }
+}
+
+function emitArtifactProgress(
+  threadId: string,
+  event: Omit<ArtifactProgressEvent, 'schemaVersion' | 'threadId' | 'at'>,
+): void {
+  mainWindow?.webContents.send('artifact:progress', {
+    schemaVersion: 1,
+    threadId,
+    ...event,
+    at: timestamp(),
+  } satisfies ArtifactProgressEvent)
+}
+
+function seconds(milliseconds: number): string {
+  return `${(milliseconds / 1_000).toFixed(milliseconds >= 10_000 ? 0 : 1)}s`
+}
+
+function timingSummary(results: ConnectorExecutionResult[]): string {
+  const figma = results.find((result) => result.target === 'figma')
+  if (!figma) return ''
+  return ` Figma ${seconds(figma.timings.total)} (write ${seconds(figma.timings.write)}, read-back ${seconds(figma.timings.read_back)}).`
+}
+
+async function createCreativeFigmaBlueprint(
+  state: RunState,
+  spec: ProductSpec,
+  manifest: DesignSystemManifest,
+  feedback?: string,
+): Promise<FigmaCreativeBlueprint> {
+  const thread = history.getThread(state.threadId)
+  const profile = history.getProfile(thread.providerId)
+  const provider = providers.get(profile.providerId)
+  if (!activeRuns.has(state.threadId)) assertNoActiveProviderTurn(state.threadId)
+  const ownedController = activeRuns.has(state.threadId) ? null : new AbortController()
+  const controller = activeRuns.get(state.threadId) ?? ownedController!
+  if (ownedController) activeRuns.set(state.threadId, ownedController)
+  const timeout = setTimeout(() => ownedController?.abort(), 10 * 60_000)
+  try {
+    const apiKey = secrets.get(profile.id)
+    const response = await provider.reason({
+      threadId: state.threadId,
+      phase: 'deliver',
+      message: feedback
+        ? `Hãy sửa Creative Figma Blueprint theo lỗi preflight sau rồi trả lại toàn bộ blueprint: ${feedback}`
+        : 'Thiết kế một kickoff Figma gần sản phẩm thật từ ProductSpec. Dùng ZDS cho controls nhưng tự do sáng tạo composition và visual language.',
+      recentMessages: history.recentMessages(state.threadId),
+      responseMode: 'figma',
+      intentHint: { kind: 'artifact', target: null, artifactAction: 'prepare' },
+      productSpec: spec,
+      figmaComponentRoles: [...new Set(manifest.components
+        .filter((component) => !component.deprecated)
+        .map((component) => component.semanticRole))],
+      remoteRef: null,
+    }, {
+      modelId: profile.modelId,
+      ...(apiKey ? { apiKey } : {}),
+    }, controller.signal)
+    const blueprint = response.result.figmaBlueprint
+    if (!blueprint) throw new Error('Provider hoàn tất nhưng không trả Creative Figma Blueprint')
+    return blueprint
+  } finally {
+    clearTimeout(timeout)
+    if (ownedController) activeRuns.delete(state.threadId)
+  }
+}
+
 async function prepareExecutableActions(state: RunState, spec: ProductSpec): Promise<PlannedAction[]> {
+  const planningStartedAt = Date.now()
+  emitArtifactProgress(state.threadId, {
+    target: 'figma',
+    stage: 'planning',
+    status: 'running',
+    stageElapsedMs: 0,
+    totalElapsedMs: 0,
+    message: 'Đang tạo và kiểm tra immutable Figma plan',
+  })
   const figmaAction = state.pendingActions.find((action) => action.target === 'figma')
   const jiraAction = state.pendingActions.find((action) => action.target === 'jira')
   const zdocAction = state.pendingActions.find((action) => action.target === 'zdoc')
   if (!figmaAction || !jiraAction || !zdocAction) throw new Error('Change plan must contain Figma, Jira and Zdoc actions')
   const figmaContext = figmaExecutionContext()
-  const figmaPlan = createFigmaArtifactPlan(spec, figmaContext.target, figmaContext.manifest, {
+  emitArtifactProgress(state.threadId, {
+    target: 'figma',
+    stage: 'planning',
+    status: 'running',
+    stageElapsedMs: Date.now() - planningStartedAt,
+    totalElapsedMs: Date.now() - planningStartedAt,
+    message: 'Design agent đang tạo art direction, screen composition và ZDS placements',
+  })
+  let creativeBlueprint: FigmaCreativeBlueprint
+  const metadataBase = {
     runId: state.id,
     threadId: state.threadId,
     actionId: figmaAction.id,
-    idempotencyKey: `figma:${state.id}:spec-v${spec.version}:recipe-v2`,
-  }, figmaContext.planMode)
+    pageStrategy: 'create_or_recover_incomplete' as const,
+  }
+  let figmaPlan: ReturnType<typeof createFigmaArtifactPlan>
+  try {
+    creativeBlueprint = await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest)
+    const metadata = {
+      ...metadataBase,
+      idempotencyKey: `figma:${state.id}:spec-v${spec.version}:creative-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}`,
+    }
+    try {
+      figmaPlan = createFigmaArtifactPlan(
+        spec,
+        figmaContext.target,
+        figmaContext.manifest,
+        metadata,
+        figmaContext.planMode,
+        creativeBlueprint,
+      )
+    } catch (error) {
+      const feedback = error instanceof Error ? error.message : 'Creative blueprint failed preflight'
+      emitArtifactProgress(state.threadId, {
+        target: 'figma',
+        stage: 'planning',
+        status: 'running',
+        stageElapsedMs: Date.now() - planningStartedAt,
+        totalElapsedMs: Date.now() - planningStartedAt,
+        message: `Design agent đang refine blueprint: ${feedback}`,
+      })
+      creativeBlueprint = await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest, feedback)
+      const refinedMetadata = {
+        ...metadataBase,
+        idempotencyKey: `figma:${state.id}:spec-v${spec.version}:creative-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}`,
+      }
+      figmaPlan = createFigmaArtifactPlan(
+        spec,
+        figmaContext.target,
+        figmaContext.manifest,
+        refinedMetadata,
+        figmaContext.planMode,
+        creativeBlueprint,
+      )
+    }
+  } catch (error) {
+    const elapsed = Date.now() - planningStartedAt
+    emitArtifactProgress(state.threadId, {
+      target: 'figma',
+      stage: 'planning',
+      status: 'failed',
+      stageElapsedMs: elapsed,
+      totalElapsedMs: elapsed,
+      message: error instanceof Error ? error.message : 'Creative Figma planning thất bại',
+    })
+    throw error
+  }
   const figmaConnector = figmaContext.connectorMode === 'live'
     ? new FigmaMcpArtifactConnector(figmaMcp, figmaContext.manifest, figmaContext.target)
     : new MockFigmaArtifactConnector(figmaContext.manifest, figmaContext.target, { store: mockFigmaStore })
-  const [figmaPreflight, jiraPreflight, zdocPreflight] = await Promise.all([
-    figmaConnector.preflight(figmaPlan),
-    mockJira.preflight(createMockJiraPlan(spec, {
-      runId: state.id, threadId: state.threadId, actionId: jiraAction.id, idempotencyKey: `jira:${state.id}:v${spec.version}`,
-    })),
-    mockZdoc.preflight(createMockZdocPlan(spec, {
-      runId: state.id, threadId: state.threadId, actionId: zdocAction.id, idempotencyKey: `zdoc:${state.id}:v${spec.version}`,
-    })),
-  ])
-  if (!figmaPreflight.allowed || !jiraPreflight.allowed || !zdocPreflight.allowed) throw new Error('Artifact preflight contains blocking issues')
+  let figmaPreflight
+  let jiraPreflight
+  let zdocPreflight
+  try {
+    [figmaPreflight, jiraPreflight, zdocPreflight] = await Promise.all([
+      figmaConnector.preflight(figmaPlan),
+      mockJira.preflight(createMockJiraPlan(spec, {
+        runId: state.id, threadId: state.threadId, actionId: jiraAction.id, idempotencyKey: `jira:${state.id}:v${spec.version}`,
+      })),
+      mockZdoc.preflight(createMockZdocPlan(spec, {
+        runId: state.id, threadId: state.threadId, actionId: zdocAction.id, idempotencyKey: `zdoc:${state.id}:v${spec.version}`,
+      })),
+    ])
+    const elapsed = Date.now() - planningStartedAt
+    emitArtifactProgress(state.threadId, {
+      target: 'figma',
+      stage: 'planning',
+      status: 'completed',
+      stageElapsedMs: elapsed,
+      totalElapsedMs: elapsed,
+      message: `Creative plan sẵn sàng: ${creativeBlueprint.screens.length} màn hình, ${creativeBlueprint.screens.reduce((sum, screen) => sum + screen.elements.length, 0)} lớp (${figmaContext.connectorMode})`,
+    })
+  } catch (error) {
+    const elapsed = Date.now() - planningStartedAt
+    emitArtifactProgress(state.threadId, {
+      target: 'figma',
+      stage: 'planning',
+      status: 'failed',
+      stageElapsedMs: elapsed,
+      totalElapsedMs: elapsed,
+      message: error instanceof Error ? error.message : 'Figma preflight thất bại',
+    })
+    throw error
+  }
+  if (!figmaPreflight.allowed || !jiraPreflight.allowed || !zdocPreflight.allowed) {
+    const blockingIssues = [
+      ...figmaPreflight.issues.map((issue) => `Figma ${issue.code}: ${issue.message}`),
+      ...jiraPreflight.issues.map((issue) => `Jira ${issue.code}: ${issue.message}`),
+      ...zdocPreflight.issues.map((issue) => `Zdoc ${issue.code}: ${issue.message}`),
+    ].filter(Boolean)
+    throw new Error(`Artifact preflight contains blocking issues: ${blockingIssues.join('; ') || 'unknown issue'}`)
+  }
 
   const executable = <T extends Record<string, unknown>>(
     base: PlannedAction,
@@ -348,22 +619,28 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
       connectorMode: figmaContext.connectorMode,
       guardMode: figmaContext.planMode,
       manifest: figmaContext.manifest,
+      preflight: figmaPreflight,
+      estimatedOperations: figmaPreflight.plan.estimatedOperations,
+      timeoutBudgetMs: figmaApplyTimeoutMs(figmaPreflight.plan.estimatedOperations),
     }),
     executable(jiraAction, 'mock_jira_plan', jiraPreflight.planHash, jiraPreflight.plan),
     executable(zdocAction, 'mock_zdoc_plan', zdocPreflight.planHash, zdocPreflight.plan),
   ]
 }
 
-async function executeRun(threadId: string, target?: PlannedAction['target']): Promise<LifecycleWorkspaceState> {
+async function executeRun(
+  threadId: string,
+  target?: PlannedAction['target'],
+): Promise<{ workspace: LifecycleWorkspaceState; results: ConnectorExecutionResult[] }> {
   let state = lifecycle.getRunState(threadId)
   if (!state) throw new Error('Lifecycle run does not exist')
   if (state.status === 'PARTIAL_FAILURE') state = transitionRunState(state, 'RETRY_EXECUTION', timestamp())
   else if (state.status === 'ACTIVE') state = transitionRunState(state, 'START_EXECUTION', timestamp())
-  else if (state.status !== 'EXECUTING') return workspaceFor(threadId)
+  else if (state.status !== 'EXECUTING') return { workspace: workspaceFor(threadId), results: [] }
   lifecycle.saveRunState(state)
 
   const work = outbox.listRun(state.id).filter((item) => !target || item.action.target === target)
-  await Promise.all(work.map(async (item) => {
+  const results = await Promise.all(work.map(async (item) => {
     const payload = item.action.payload
     if (item.action.target === 'figma') {
       const plan = figmaArtifactPlanSchema.parse(payload.plan)
@@ -371,11 +648,30 @@ async function executeRun(threadId: string, target?: PlannedAction['target']): P
       const connector = payload.connectorMode === 'live'
         ? new FigmaMcpArtifactConnector(figmaMcp, manifest, plan.target)
         : new MockFigmaArtifactConnector(manifest, plan.target, { store: mockFigmaStore })
-      await executeConnectorAction({ action: item.action, plan, connector, repository: outbox })
+      return executeConnectorAction({
+        action: item.action,
+        plan,
+        ...(payload.preflight ? { preparedPreflight: figmaPreflightResultSchema.parse(payload.preflight) } : {}),
+        connector,
+        repository: outbox,
+        onProgress: (event) => emitArtifactProgress(threadId, event),
+      })
     } else if (item.action.target === 'jira') {
-      await executeConnectorAction({ action: item.action, plan: mockJiraPlanSchema.parse(payload.plan), connector: mockJira, repository: outbox })
+      return executeConnectorAction({
+        action: item.action,
+        plan: mockJiraPlanSchema.parse(payload.plan),
+        connector: mockJira,
+        repository: outbox,
+        onProgress: (event) => emitArtifactProgress(threadId, event),
+      })
     } else {
-      await executeConnectorAction({ action: item.action, plan: mockZdocPlanSchema.parse(payload.plan), connector: mockZdoc, repository: outbox })
+      return executeConnectorAction({
+        action: item.action,
+        plan: mockZdocPlanSchema.parse(payload.plan),
+        connector: mockZdoc,
+        repository: outbox,
+        onProgress: (event) => emitArtifactProgress(threadId, event),
+      })
     }
   }))
 
@@ -388,7 +684,66 @@ async function executeRun(threadId: string, target?: PlannedAction['target']): P
     state = transitionRunState(state, 'PARTIAL_FAILURE', timestamp())
   }
   lifecycle.saveRunState(state)
-  return workspaceFor(threadId)
+  return { workspace: workspaceFor(threadId), results }
+}
+
+function artifactPlanPending(state: RunState): boolean {
+  return state.status === 'WAITING_FOR_APPROVAL'
+    && !state.pendingIntent
+    && state.pendingActions.length > 0
+    && state.pendingActions.every((action) => action.status === 'pending_approval')
+}
+
+async function prepareArtifactsForThread(
+  threadId: string,
+): Promise<{ workspace: LifecycleWorkspaceState; message: string; assistantMessage: ChatMessage }> {
+  const workspace = workspaceFor(threadId)
+  const state = workspace.runState
+  if (artifactPlanPending(state)) {
+    const message = 'Immutable artifact plan đã sẵn sàng. Hãy kiểm tra target và chọn “Duyệt & tạo”; chưa có external write nào chạy.'
+    return {
+      workspace,
+      message,
+      assistantMessage: history.addMessage(threadId, 'assistant', message),
+    }
+  }
+  if (state.phase !== 'DELIVERY' || state.status !== 'ACTIVE') {
+    throw new Error('Kickoff package chỉ có thể chuẩn bị tại Delivery checkpoint')
+  }
+  if (state.productSpec.requirements.length === 0) throw new Error('ProductSpec chưa có scope để tạo kickoff package')
+  const startedAt = Date.now()
+  const at = timestamp()
+  const staged = {
+    ...state,
+    status: 'WAITING_FOR_APPROVAL',
+    pendingIntent: null,
+    pendingActions: artifactActionsFor(state, state.productSpec),
+    lastCheckpointAt: at,
+  } satisfies RunState
+  const executableActions = await prepareExecutableActions(staged, staged.productSpec)
+  lifecycle.savePreview({ ...staged, pendingActions: executableActions })
+  const figmaAction = executableActions.find((action) => action.target === 'figma')
+  const mode = figmaAction?.payload.connectorMode === 'live' ? 'Figma live' : 'Mock Figma'
+  const message = `Kickoff package đã preflight trong ${seconds(Date.now() - startedAt)}: ${mode}, PRD Markdown và backlog mock. Hãy kiểm tra immutable target rồi duyệt tạo.`
+  const assistantMessage = history.addMessage(threadId, 'assistant', message)
+  return { workspace: workspaceFor(threadId), message, assistantMessage }
+}
+
+async function approveArtifactsForThread(
+  threadId: string,
+): Promise<{ workspace: LifecycleWorkspaceState; message: string; assistantMessage: ChatMessage }> {
+  const state = workspaceFor(threadId).runState
+  if (!artifactPlanPending(state)) throw new Error('Không có artifact plan đang chờ duyệt')
+  const at = timestamp()
+  const approved = approveActions(state.pendingActions, at)
+  const approvedState = transitionRunState({ ...state, pendingActions: approved.actions }, 'APPROVE', at)
+  lifecycle.commitApprovedChange(approvedState, approved.approvals)
+  const executed = await executeRun(threadId)
+  const message = executed.workspace.execution?.status === 'verified'
+    ? `Kickoff package đã verified: Figma, backlog mock và PRD Markdown tại ${markdownArtifactPath(executed.workspace.runState.productSpec)}.${timingSummary(executed.results)}`
+    : `Artifact execution chưa hoàn tất; xem trạng thái từng target để retry.${timingSummary(executed.results)}`
+  const assistantMessage = history.addMessage(threadId, 'assistant', message)
+  return { workspace: executed.workspace, message, assistantMessage }
 }
 
 function exposeProfile(profile: Omit<ProviderProfile, 'hasCredential'>): ProviderProfile {
@@ -451,6 +806,7 @@ function registerIpc(): void {
   ipcMain.handle('threads:create', () => history.createThread())
   ipcMain.handle('threads:get', (_event, threadId: string) => history.getThread(threadId))
   ipcMain.handle('threads:messages', (_event, threadId: string, cursor?: string, limit?: number) => history.listMessagesPage(threadId, cursor, limit))
+  ipcMain.handle('threads:export-bundle', (_event, threadId: string) => exportThreadBundle(threadId))
   ipcMain.handle('threads:archive', (_event, threadId: string) => history.archiveThread(threadId))
   ipcMain.handle('threads:set-provider', (_event, threadId: string, profileId: string, confirmPaid = false) => {
     const thread = history.getThread(threadId)
@@ -565,40 +921,11 @@ function registerIpc(): void {
     return workspaceFor(threadId)
   })
   ipcMain.handle('lifecycle:prepare-artifacts', async (_event, threadId: string) => {
-    const workspace = workspaceFor(threadId)
-    const state = workspace.runState
-    if (state.phase !== 'DELIVERY' || state.status !== 'ACTIVE') {
-      throw new Error('Kickoff package chỉ có thể chuẩn bị tại Delivery checkpoint')
-    }
-    if (state.productSpec.requirements.length === 0) throw new Error('ProductSpec chưa có scope để tạo kickoff package')
-    const at = timestamp()
-    const staged = {
-      ...state,
-      status: 'WAITING_FOR_APPROVAL',
-      pendingIntent: null,
-      pendingActions: artifactActionsFor(state, state.productSpec),
-      lastCheckpointAt: at,
-    } satisfies RunState
-    const executableActions = await prepareExecutableActions(staged, staged.productSpec)
-    lifecycle.savePreview({ ...staged, pendingActions: executableActions })
-    history.addMessage(threadId, 'assistant', 'Kickoff package đã preflight: Figma guard, PRD Markdown và backlog mock. Hãy kiểm tra target rồi duyệt tạo.')
-    return workspaceFor(threadId)
+    return (await prepareArtifactsForThread(threadId)).workspace
   })
   ipcMain.handle('lifecycle:approve-artifacts', async (_event, threadId: string) => {
-    const state = workspaceFor(threadId).runState
-    if (state.status !== 'WAITING_FOR_APPROVAL' || state.pendingIntent || state.pendingActions.length === 0) {
-      throw new Error('Không có artifact plan đang chờ duyệt')
-    }
-    const at = timestamp()
-    const approved = approveActions(state.pendingActions, at)
-    const approvedState = transitionRunState({ ...state, pendingActions: approved.actions }, 'APPROVE', at)
-    lifecycle.commitApprovedChange(approvedState, approved.approvals)
-    const executed = await executeRun(threadId)
-    const message = executed.execution?.status === 'verified'
-      ? `Kickoff package đã verified: Figma, backlog mock và PRD Markdown tại ${markdownArtifactPath(executed.runState.productSpec)}.`
-      : 'Artifact execution chưa hoàn tất; xem trạng thái từng target để retry.'
-    history.addMessage(threadId, 'assistant', message)
-    return { ...executed, message }
+    const result = await approveArtifactsForThread(threadId)
+    return { ...result.workspace, message: result.message }
   })
   ipcMain.handle('lifecycle:reject-artifacts', (_event, threadId: string) => {
     const state = workspaceFor(threadId).runState
@@ -641,11 +968,11 @@ function registerIpc(): void {
     lifecycle.commitApprovedChange(approvedState, approved.approvals)
     history.setThreadPhase(threadId, 'change')
     const executed = await executeRun(threadId)
-    const message = executed.execution?.status === 'verified'
+    const message = executed.workspace.execution?.status === 'verified'
       ? `Đã duyệt ProductSpec v${preview.after.version} và read-back verified cả Figma, Mock Jira, Mock Zdoc.`
       : `Đã duyệt ProductSpec v${preview.after.version}; một số artifact cần retry sau khi connector sẵn sàng.`
     history.addMessage(threadId, 'assistant', message)
-    return { ...executed, message }
+    return { ...executed.workspace, message }
   })
   ipcMain.handle('lifecycle:reject-change', (_event, threadId: string) => {
     const workspace = workspaceFor(threadId)
@@ -666,15 +993,15 @@ function registerIpc(): void {
     return { ...workspaceFor(threadId), message }
   })
   ipcMain.handle('lifecycle:retry-action', async (_event, threadId: string, target: PlannedAction['target']) => {
-    const workspace = await executeRun(threadId, target)
-    const message = workspace.execution?.status === 'verified'
+    const executed = await executeRun(threadId, target)
+    const message = executed.workspace.execution?.status === 'verified'
       ? 'Retry hoàn tất; mọi artifact đã được read-back verified.'
       : `${target} vẫn chưa verified; các target đã thành công được giữ nguyên.`
     history.addMessage(threadId, 'assistant', message)
-    return { ...workspace, message }
+    return { ...executed.workspace, message }
   })
   ipcMain.handle('lifecycle:advance-decision', async (_event, threadId: string, answers: Record<string, string>) => {
-    if (activeRuns.has(threadId)) throw new Error('Thread này đang có một turn chạy')
+    assertNoActiveProviderTurn(threadId)
     const workspace = workspaceFor(threadId)
     if (workspace.runState.phase !== 'DISCOVERY' || workspace.runState.status !== 'ACTIVE' || workspace.reasoning?.phase !== 'discover') {
       throw new Error('Discovery checkpoint chưa sẵn sàng')
@@ -788,7 +1115,10 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('chat:send', async (_event, input: SendChatInput) => {
-    if (activeRuns.has(input.threadId)) throw new Error('Thread này đang có một turn chạy')
+    assertNoActiveProviderTurn(input.threadId)
+    if (process.env.PM_AGENT_SMOKE_CANVAS_PROVIDER) {
+      console.log(`[chat-turn] start ${input.threadId} ${input.content.slice(0, 48)}`)
+    }
     const thread = history.getThread(input.threadId)
     const profile = history.getProfile(thread.providerId)
     const userMessage = history.addMessage(input.threadId, 'user', input.content.trim())
@@ -797,56 +1127,311 @@ function registerIpc(): void {
     let turnFinished = false
     activeRuns.set(input.threadId, controller)
     try {
-      const interaction = classifyCanvasInteraction(input.content, input.selection, input.canvas)
-      const effectiveSelection = interaction.selection ?? input.selection
+      const slashCommand = parseSlashCommand(input.content)
+      let routedContent = input.content
+      if (slashCommand?.kind === 'canvas_flow') {
+        routedContent = `Vẽ user flow ${slashCommand.prompt || 'MVP dựa trên ProductSpec hiện tại'}`
+      } else if (slashCommand?.kind === 'canvas_prototype') {
+        routedContent = `Tạo prototype ${slashCommand.prompt || 'các màn hình MVP dựa trên ProductSpec hiện tại'}`
+      }
+      const appOwnedReply = (
+        message: string,
+        providerEvents: ProviderEvent[] = [],
+        remoteRef?: string | null,
+      ): {
+        userMessage: ChatMessage
+        assistantMessage: ChatMessage
+        commands: []
+        canvasProgram: CanvasProgram
+        canvasProgramSource: 'none'
+        canvasRequestId: null
+      } => {
+        const assistantMessage = history.addMessage(input.threadId, 'assistant', message)
+        if (remoteRef !== undefined) {
+          history.saveProviderSegment(input.threadId, profile.id, profile.modelId, remoteRef)
+        }
+        history.completeTurn(turnId, 'completed', providerEvents)
+        turnFinished = true
+        return {
+          userMessage,
+          assistantMessage,
+          commands: [],
+          canvasProgram: { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null },
+          canvasProgramSource: 'none',
+          canvasRequestId: null,
+        }
+      }
+      if (slashCommand?.kind === 'help') return appOwnedReply(slashHelpMessage())
+      if (slashCommand?.kind === 'invalid') {
+        return appOwnedReply(`Slash command không hợp lệ: ${slashCommand.command}\n\n${slashHelpMessage()}`)
+      }
+      if (slashCommand?.kind === 'figma_status') {
+        const status = await figmaStatus()
+        const workspace = workspaceFor(input.threadId)
+        const connection = status.pluginConnected
+          ? `${status.sessions.length} plugin session`
+          : 'plugin chưa kết nối'
+        const target = status.target
+          ? `${status.target.fileName} · ${status.target.pageName}`
+          : 'chưa allowlist target'
+        const guard = status.designSystem ? `${status.designSystem.mode} · ${status.designSystem.componentCount} component mapping` : 'chưa capture Design System'
+        const execution = workspace.execution?.status ?? workspace.runState.status
+        return appOwnedReply(`Figma status: ${connection}; target: ${target}; guard: ${guard}; workflow: ${execution}.`)
+      }
+      if (slashCommand?.kind === 'figma_retry') {
+        const failedFigma = workspaceFor(input.threadId).execution?.actions.some((action) => (
+          action.target === 'figma' && (action.status === 'failed' || action.status === 'verification_failed')
+        ))
+        if (!failedFigma) return appOwnedReply('Không có Figma action lỗi cần retry.')
+        const executed = await executeRun(input.threadId, 'figma')
+        return appOwnedReply(executed.workspace.execution?.status === 'verified'
+          ? `Figma retry đã verified.${timingSummary(executed.results)}`
+          : `Figma retry chưa verified.${timingSummary(executed.results)}`)
+      }
+      if (slashCommand?.kind === 'figma_approve') {
+        if (!artifactPlanPending(workspaceFor(input.threadId).runState)) {
+          return appOwnedReply('Không có immutable Figma plan đang chờ. Chạy /figma prepare trước.')
+        }
+        const result = await approveArtifactsForThread(input.threadId)
+        history.completeTurn(turnId, 'completed', [])
+        turnFinished = true
+        return {
+          userMessage,
+          assistantMessage: result.assistantMessage,
+          commands: [],
+          canvasProgram: { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null },
+          canvasProgramSource: 'none',
+          canvasRequestId: null,
+        }
+      }
+      if (slashCommand?.kind === 'figma_prepare' || slashCommand?.kind === 'figma_create') {
+        const state = workspaceFor(input.threadId).runState
+        const canPrepare = state.phase === 'DELIVERY'
+          && state.status === 'ACTIVE'
+          && state.productSpec.requirements.length > 0
+        if (!artifactPlanPending(state) && !canPrepare) {
+          return appOwnedReply('Chưa thể chuẩn bị Figma: cần ProductSpec có scope tại Delivery checkpoint.')
+        }
+        const result = slashCommand.kind === 'figma_create' && artifactPlanPending(state)
+          ? await approveArtifactsForThread(input.threadId)
+          : await prepareArtifactsForThread(input.threadId)
+        history.completeTurn(turnId, 'completed', [])
+        turnFinished = true
+        return {
+          userMessage,
+          assistantMessage: result.assistantMessage,
+          commands: [],
+          canvasProgram: { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null },
+          canvasProgramSource: 'none',
+          canvasRequestId: null,
+        }
+      }
+
+      const currentWorkspace = workspaceFor(input.threadId)
+      if (currentWorkspace.runState.phase === 'DISCOVERY'
+        && currentWorkspace.runState.status === 'ACTIVE'
+        && currentWorkspace.reasoning?.phase === 'discover') {
+        const questions = currentWorkspace.reasoning.phaseData.questions
+        const freeformAnswers = mapFreeformDiscoveryAnswers(questions, routedContent)
+        if (freeformAnswers) {
+          const normalizedAnswers = normalizeClarificationAnswers(questions, freeformAnswers)
+          const answerText = questions
+            .map((question) => `${question.prompt}: ${normalizedAnswers[question.id]}`)
+            .join('\n')
+          const apiKey = secrets.get(profile.id)
+          const response = await providers.get(profile.providerId).reason({
+            threadId: input.threadId,
+            phase: 'decide',
+            message: answerText,
+            recentMessages: history.recentMessages(input.threadId),
+            remoteRef: history.getActiveRemoteRef(input.threadId, profile.id),
+          }, {
+            modelId: profile.modelId,
+            ...(apiKey ? { apiKey } : {}),
+          }, controller.signal)
+          const proposal = acceptCompletedProviderEvents(currentWorkspace.runState, response.events, 'decide')
+          const advanced = advanceReasoningPhase(currentWorkspace.runState, proposal.result, timestamp())
+          lifecycle.saveReasoningCheckpoint(advanced.state, advanced.checkpoint)
+          history.setThreadPhase(input.threadId, 'decide')
+          const assistantMessage = history.addMessage(input.threadId, 'assistant', proposal.result.message)
+          history.saveProviderSegment(input.threadId, profile.id, profile.modelId, response.remoteRef)
+          history.completeTurn(turnId, 'completed', response.events)
+          turnFinished = true
+          return {
+            userMessage,
+            assistantMessage,
+            commands: proposal.result.commands,
+            canvasProgram: { schemaVersion: 1, mode: 'none' as const, summary: '', operations: [], script: null },
+            canvasProgramSource: 'none' as const,
+            canvasRequestId: null,
+          }
+        }
+      }
+
       const apiKey = secrets.get(profile.id)
-      const response = await providers.get(profile.providerId).reason({
+      const forcedIntent: ProviderIntent | undefined = slashCommand?.kind === 'canvas_flow'
+        || slashCommand?.kind === 'canvas_prototype'
+        ? { kind: 'draw', target: null, artifactAction: null }
+        : undefined
+      const provider = providers.get(profile.providerId)
+      let response = await provider.reason({
         threadId: input.threadId,
         phase: thread.phase,
-        message: input.content,
+        message: routedContent,
         recentMessages: history.recentMessages(input.threadId),
-        ...(effectiveSelection ? { selection: effectiveSelection } : {}),
-        ...(input.canvas ? { canvas: input.canvas } : {}),
+        ...(input.selection ? { selection: input.selection } : {}),
+        ...(forcedIntent && input.canvas ? { canvas: input.canvas } : {}),
+        ...(input.canvasDiff ? { canvasDiff: input.canvasDiff } : {}),
+        responseMode: forcedIntent ? 'creative' : 'route',
+        ...(forcedIntent ? { intentHint: forcedIntent } : {}),
         remoteRef: history.getActiveRemoteRef(input.threadId, profile.id),
       }, {
         modelId: profile.modelId,
         ...(apiKey ? { apiKey } : {}),
       }, controller.signal)
-      const proposal = acceptCompletedProviderEvents(workspaceFor(input.threadId).runState, response.events, thread.phase)
-      const normalizedInput = normalizeIntentText(input.content)
-      const canvasSyncIntent = /^(sync canvas|dong bo canvas|doc canvas)/.test(normalizedInput)
-      const removalCommand = interaction.kind === 'conversation' && !canvasSyncIntent
+      let proposal = acceptCompletedProviderEvents(workspaceFor(input.threadId).runState, response.events, thread.phase)
+      let providerEvents = response.events
+      const routedIntent = forcedIntent ?? proposal.result.intent
+      let effectiveSelection = input.selection
+      if (routedIntent.kind === 'edit' && !effectiveSelection) {
+        effectiveSelection = resolveCanvasSelection(
+          [routedIntent.target, routedContent].filter(Boolean).join(' '),
+          input.canvas,
+        )
+      }
+      if (routedIntent.kind === 'edit' && !effectiveSelection) {
+        return appOwnedReply(
+          'Mình hiểu đây là yêu cầu sửa canvas, nhưng chưa có target đủ rõ. Hãy chọn một hoặc nhiều node, hoặc nhắc đúng tên node rồi gửi lại.',
+          providerEvents,
+          response.remoteRef,
+        )
+      }
+      if (!forcedIntent && (routedIntent.kind === 'draw' || routedIntent.kind === 'edit')) {
+        const creativeResponse = await provider.reason({
+          threadId: input.threadId,
+          phase: thread.phase,
+          message: routedContent,
+          recentMessages: history.recentMessages(input.threadId),
+          ...(effectiveSelection ? { selection: effectiveSelection } : {}),
+          ...(input.canvas ? { canvas: input.canvas } : {}),
+          ...(input.canvasDiff ? { canvasDiff: input.canvasDiff } : {}),
+          responseMode: 'creative',
+          intentHint: {
+            ...routedIntent,
+            target: effectiveSelection?.entityId ?? routedIntent.target,
+          },
+          remoteRef: response.remoteRef,
+        }, {
+          modelId: profile.modelId,
+          ...(apiKey ? { apiKey } : {}),
+        }, controller.signal)
+        const creativeProposal = acceptCompletedProviderEvents(
+          workspaceFor(input.threadId).runState,
+          creativeResponse.events,
+          thread.phase,
+        )
+        providerEvents = resequenceProviderEvents(response.events, creativeResponse.events)
+        response = creativeResponse
+        proposal = creativeProposal
+      }
+
+      if (routedIntent.kind === 'artifact') {
+        const artifactAction = routedIntent.artifactAction
+        if (artifactAction === 'status') {
+          const status = await figmaStatus()
+          const workspace = workspaceFor(input.threadId)
+          const connection = status.pluginConnected ? `${status.sessions.length} plugin session` : 'plugin chưa kết nối'
+          const target = status.target ? `${status.target.fileName} · ${status.target.pageName}` : 'chưa allowlist target'
+          const guard = status.designSystem ? `${status.designSystem.mode} · ${status.designSystem.componentCount} component mapping` : 'chưa capture Design System'
+          const execution = workspace.execution?.status ?? workspace.runState.status
+          return appOwnedReply(
+            `Figma status: ${connection}; target: ${target}; guard: ${guard}; workflow: ${execution}.`,
+            providerEvents,
+            response.remoteRef,
+          )
+        }
+        if (artifactAction === 'retry') {
+          const failedFigma = workspaceFor(input.threadId).execution?.actions.some((action) => (
+            action.target === 'figma' && (action.status === 'failed' || action.status === 'verification_failed')
+          ))
+          if (!failedFigma) {
+            return appOwnedReply('Không có Figma action lỗi cần retry.', providerEvents, response.remoteRef)
+          }
+          const executed = await executeRun(input.threadId, 'figma')
+          return appOwnedReply(
+            executed.workspace.execution?.status === 'verified'
+              ? `Figma retry đã verified.${timingSummary(executed.results)}`
+              : `Figma retry chưa verified.${timingSummary(executed.results)}`,
+            providerEvents,
+            response.remoteRef,
+          )
+        }
+        const artifactWorkspace = workspaceFor(input.threadId)
+        const canPrepareArtifacts = artifactWorkspace.runState.phase === 'DELIVERY'
+          && artifactWorkspace.runState.status === 'ACTIVE'
+          && artifactWorkspace.runState.productSpec.requirements.length > 0
+        if (artifactAction === 'approve' && !artifactPlanPending(artifactWorkspace.runState)) {
+          return appOwnedReply(
+            'Không có immutable Figma plan đang chờ. Hãy yêu cầu chuẩn bị Figma trước.',
+            providerEvents,
+            response.remoteRef,
+          )
+        }
+        if (artifactAction !== 'approve' && !artifactPlanPending(artifactWorkspace.runState) && !canPrepareArtifacts) {
+          return appOwnedReply(
+            'Chưa thể chuẩn bị Figma: cần ProductSpec có scope tại Delivery checkpoint.',
+            providerEvents,
+            response.remoteRef,
+          )
+        }
+        const artifactResult = artifactAction === 'approve'
+          ? await approveArtifactsForThread(input.threadId)
+          : await prepareArtifactsForThread(input.threadId)
+        history.saveProviderSegment(input.threadId, profile.id, profile.modelId, response.remoteRef)
+        history.completeTurn(turnId, 'completed', providerEvents)
+        turnFinished = true
+        return {
+          userMessage,
+          assistantMessage: artifactResult.assistantMessage,
+          commands: [],
+          canvasProgram: { schemaVersion: 1, mode: 'none' as const, summary: '', operations: [], script: null },
+          canvasProgramSource: 'none' as const,
+          canvasRequestId: null,
+        }
+      }
+
+      const canvasSyncIntent = Boolean(input.canvasDiff)
+      const removalCommand = routedIntent.kind === 'change' && !canvasSyncIntent
         ? proposal.result.commands.find((command) => command.type === 'remove_card')
         : undefined
       let changePreview
       let responseMessage = proposal.result.message
       let commands = proposal.result.commands
-      const canvasMutationAllowed = interaction.kind === 'draw' || interaction.kind === 'edit'
-      const requiredCanvasProgram = canvasMutationAllowed
-        ? planExplicitCanvasRequest(input.content, effectiveSelection, {
+      const canvasIntent = routedIntent.kind === 'draw' || routedIntent.kind === 'edit'
+        ? routedIntent.kind
+        : null
+      const requiredCanvasProgram = canvasIntent
+        ? planExplicitCanvasRequest(routedContent, effectiveSelection, {
+          intent: canvasIntent,
           recentMessages: history.recentMessages(input.threadId),
           ...(input.canvas ? { canvas: input.canvas } : {}),
         })
         : undefined
-      const providerCanvasProgram = canvasMutationAllowed
+      const providerCanvasProgram = canvasIntent
         ? proposal.result.canvasProgram?.mode && proposal.result.canvasProgram.mode !== 'none'
           ? proposal.result.canvasProgram
           : legacyCommandsToCanvasProgram(proposal.result.commands)
         : undefined
-      const providerProgramComplete = Boolean(providerCanvasProgram && requiredCanvasProgram && canvasProgramCovers(providerCanvasProgram, requiredCanvasProgram))
-      const canvasProgram = requiredCanvasProgram && (!providerCanvasProgram || !providerProgramComplete)
-        ? requiredCanvasProgram
-        : providerCanvasProgram
+      const canvasProgram = providerCanvasProgram ?? requiredCanvasProgram
       const canvasProgramSource = canvasProgram
-        ? requiredCanvasProgram && canvasProgram === requiredCanvasProgram
-          ? providerCanvasProgram ? 'provider_augmented' as const : 'deterministic_fallback' as const
-          : 'provider' as const
+        ? providerCanvasProgram ? 'provider' as const : 'deterministic_fallback' as const
         : 'none' as const
       let canvasRequestId: string | null = null
       if (canvasSyncIntent && input.canvas) {
         const semanticNodes = input.canvas.shapes.filter((shape) => shape.semanticId && shape.nodeKind)
         const selected = effectiveSelection?.selectedShapeCount ?? 0
-        responseMessage = `Đã đọc canvas vào chat context: ${semanticNodes.length} semantic node, ${input.canvas.bindings?.length ?? 0} kết nối${selected > 0 ? ` và ${selected} phần tử đang chọn` : ''}. ProductSpec chưa thay đổi. Bạn có thể feedback vùng chọn, yêu cầu AI cập nhật scene, hoặc chốt canvas thành MVP để tạo preview.`
+        const diffSummary = input.canvasDiff?.summary ? ` ${input.canvasDiff.summary}.` : ''
+        responseMessage = `${proposal.result.message}\n\nĐã đọc canvas: ${semanticNodes.length} semantic node, ${input.canvas.bindings?.length ?? 0} kết nối${selected > 0 ? ` và ${selected} phần tử đang chọn` : ''}.${diffSummary} ProductSpec chưa thay đổi.`
         commands = []
       } else if (removalCommand) {
         const workspace = workspaceFor(input.threadId)
@@ -857,7 +1442,7 @@ function registerIpc(): void {
         } else {
           const resolution = resolveRemovalChangeIntent(workspace.runState.productSpec, {
             query: removalCommand.query,
-            reason: input.content.trim(),
+            reason: routedContent.trim(),
             ...(input.selection ? { selectedEntityId: input.selection.entityId } : {}),
           })
           if (resolution.status === 'needs_user_input') {
@@ -877,41 +1462,37 @@ function registerIpc(): void {
             }
           }
         }
-      } else if (interaction.kind === 'clarify_edit') {
-        responseMessage = 'Bạn muốn sửa phần nào trên canvas? Hãy chọn một hoặc nhiều node, hoặc nhắc đúng tên node rồi gửi yêu cầu lại.'
-        commands = []
-      } else if (interaction.kind === 'promote') {
+      } else if (routedIntent.kind === 'promote') {
         responseMessage = 'Đang chuẩn bị ProductSpec preview từ canvas. Chưa có artifact nào được ghi.'
         commands = []
-      } else if (canvasProgram?.mode && canvasProgram.mode !== 'none' && (interaction.kind === 'draw' || interaction.kind === 'edit')) {
+      } else if (canvasProgram?.mode && canvasProgram.mode !== 'none' && canvasIntent) {
         canvasRequestId = `canvas-request:${turnId}`
         pendingCanvasExecutions.set(canvasRequestId, {
           threadId: input.threadId,
           program: canvasProgram,
-          kind: interaction.kind,
+          kind: canvasIntent,
         })
-        responseMessage = interaction.kind === 'draw'
-          ? /prototype low-fidelity/i.test(canvasProgram.summary)
-            ? 'Đang dựng các màn hình prototype low-fidelity có thể chỉnh trực tiếp trên canvas. Sau khi render, mình sẽ báo số frame và kết quả đọc lại.'
-            : 'Đang vẽ trên canvas. Mình sẽ xác nhận sau khi áp dụng và đọc lại thành công.'
-          : 'Đang cập nhật vùng canvas đã chọn. Mình sẽ xác nhận sau khi áp dụng và đọc lại thành công.'
+        const activity = canvasIntent === 'draw'
+          ? canvasProgram.sceneType === 'prototype'
+            ? 'Mình đang hiện thực hóa các màn hình trên canvas; sau checkpoint sẽ có read-back để bạn review.'
+            : 'Mình đang dựng scene trên canvas; sau checkpoint sẽ có read-back để bạn review.'
+          : 'Mình đang cập nhật đúng vùng canvas đã chọn và sẽ xác nhận sau read-back.'
+        responseMessage = `${proposal.result.message}\n\n${activity}`
       } else {
         const workspace = workspaceFor(input.threadId)
-        if (workspace.runState.phase === 'IDEA_INTAKE' && proposal.result.phase === 'discover') {
+        if (workspace.runState.phase === 'IDEA_INTAKE'
+          && proposal.result.phase === 'discover'
+          && routedIntent.kind === 'discovery') {
           const advanced = advanceReasoningPhase(workspace.runState, proposal.result, timestamp())
           lifecycle.saveReasoningCheckpoint(advanced.state, advanced.checkpoint)
           responseMessage = 'Mình đã chuẩn hóa ý tưởng. Hãy khóa ba clarification bên dưới để tạo phương án.'
-        } else if (workspace.runState.phase === 'DELIVERY'
-          && workspace.runState.status === 'ACTIVE'
-          && /^(tiep tuc|next|lam tiep|roi sao)\b/.test(normalizeIntentText(input.content))) {
-          responseMessage = deliveryStatusMessage(workspace.runState.productSpec)
         }
       }
       const assistantMessage = history.addMessage(input.threadId, 'assistant', responseMessage)
       const switchCommand = commands.find((command) => command.type === 'switch_view')
       if (switchCommand?.type === 'switch_view') history.setThreadPhase(input.threadId, switchCommand.view)
       history.saveProviderSegment(input.threadId, profile.id, profile.modelId, response.remoteRef)
-      history.completeTurn(turnId, 'completed', response.events)
+      history.completeTurn(turnId, 'completed', providerEvents)
       turnFinished = true
       return {
         userMessage,
@@ -932,6 +1513,9 @@ function registerIpc(): void {
       throw error
     } finally {
       activeRuns.delete(input.threadId)
+      if (process.env.PM_AGENT_SMOKE_CANVAS_PROVIDER) {
+        console.log(`[chat-turn] end ${input.threadId} ${input.content.slice(0, 48)}`)
+      }
     }
   })
   ipcMain.handle('chat:cancel', (_event, threadId: string) => activeRuns.get(threadId)?.abort())
@@ -1049,6 +1633,31 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       };
     })()`) as { paidDialogReady: boolean; paidBlocked: boolean; stableThread: boolean; stableSpec: boolean }
 
+    const slashControl = { menuReady: false, statusRouted: false }
+    slashControl.menuReady = await window.webContents.executeJavaScript(`(async () => {
+      const input = document.querySelector('.composer textarea');
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(input, '/');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const ready = Boolean(document.querySelector('[aria-label="Slash commands"]')
+        && document.body.innerText.includes('/figma status'));
+      setter.call(input, '/figma status');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      return ready;
+    })()`) as boolean
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await wait(100)
+      slashControl.statusRouted = await window.webContents.executeJavaScript(`(async () => {
+        const [thread] = await window.pmAgent.threads.list();
+        const detail = await window.pmAgent.threads.get(thread.id);
+        return detail.messages.some((message) => message.role === 'assistant' && message.content.startsWith('Figma status:'))
+          && !document.querySelector('.message.pending');
+      })()`) as boolean
+      if (slashControl.statusRouted) break
+    }
+
     const lifecycleFlow = {
       required: process.env.PM_AGENT_SMOKE_LIFECYCLE === '1',
       blankCanvas: false,
@@ -1088,7 +1697,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       await window.webContents.executeJavaScript(`(() => {
         const input = document.querySelector('.composer textarea');
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-        setter.call(input, 'Mini App hỗ trợ nhân viên đặt bữa trưa tại văn phòng');
+        setter.call(input, 'Kick off Mini App nhắc người dùng backup dữ liệu đúng hạn');
         input.dispatchEvent(new Event('input', { bubbles: true }));
         setTimeout(() => document.querySelector('.send-button')?.click(), 30);
       })()`)
@@ -1108,7 +1717,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
         await new Promise((resolve) => setTimeout(resolve, 50));
         const input = fields[0]?.querySelector('.custom-answer-input');
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        setter.call(input, 'Nhóm vận hành pantry ca trưa');
+        setter.call(input, 'Nhân viên văn phòng có dữ liệu quan trọng trên thiết bị');
         input.dispatchEvent(new Event('input', { bubbles: true }));
         await new Promise((resolve) => setTimeout(resolve, 30));
         document.querySelector('.phase-continue-button')?.click();
@@ -1127,7 +1736,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
         await new Promise((resolve) => setTimeout(resolve, 50));
         const input = document.querySelector('.custom-decision-input input');
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        setter.call(input, 'MVP pantry nội bộ theo khung giờ');
+        setter.call(input, 'MVP nhắc backup chủ động và phục hồi khi lỗi');
         input.dispatchEvent(new Event('input', { bubbles: true }));
         await new Promise((resolve) => setTimeout(resolve, 30));
         document.querySelector('.custom-decision-input .primary-button')?.click();
@@ -1147,7 +1756,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
         const detail = await window.pmAgent.threads.get(thread.id);
         return {
           guide: Boolean(document.querySelector('[aria-label="Delivery next steps"]')),
-          transparent: detail.messages.some((message) => message.role === 'user' && message.content.includes('MVP pantry nội bộ'))
+          transparent: detail.messages.some((message) => message.role === 'user' && message.content.includes('MVP nhắc backup'))
             && detail.messages.some((message) => message.role === 'assistant' && message.content.includes('Bước tiếp theo'))
         };
       })()`) as { guide: boolean; transparent: boolean }
@@ -1178,7 +1787,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       }
       const feedbackTarget = await window.webContents.executeJavaScript(`(() => {
         const shapes = [...document.querySelectorAll('.tl-shape')]
-          .filter((shape) => shape.textContent?.includes('ĐẶT NHÓM'))
+          .filter((shape) => shape.textContent?.includes('DỮ LIỆU MỚI'))
           .map((shape) => ({ shape, rect: shape.getBoundingClientRect() }))
           .sort((first, second) => first.rect.width * first.rect.height - second.rect.width * second.rect.height);
         const target = shapes[0]?.rect;
@@ -1204,7 +1813,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
             const detail = await window.pmAgent.threads.get(thread.id);
             const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
             return {
-              confirmed: detail.messages.some((message) => message.role === 'assistant' && message.content.includes('Đã đọc canvas vào chat context')),
+              confirmed: detail.messages.some((message) => message.role === 'assistant' && message.content.includes('Đã đọc canvas')),
               preserved: workspace.runState.productSpec.version === 1 && workspace.runState.productSpec.requirements.length >= 3
             };
           })()`) as { confirmed: boolean; preserved: boolean }
@@ -1227,58 +1836,86 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       targetFound: false,
       dragPresentationOnly: false,
       undoPresentationOnly: false,
-      shapePreserved: false,
+      deletionPresentationOnly: false,
       specUnchanged: false,
-      previewReady: false,
-      historyRecorded: false,
+      noPreview: false,
+      checkpointRecorded: false,
       invalidRejected: false,
     }
     if (canvasGesture.required) {
-      const target = await window.webContents.executeJavaScript(`(async () => {
-        const deliver = [...document.querySelectorAll('.view-tab')].find((item) => item.textContent?.trim() === 'Deliver');
-        deliver?.click();
-        await new Promise((resolve) => setTimeout(resolve, 350));
-        const shape = [...document.querySelectorAll('.tl-shape')].find((item) => item.textContent?.includes('REQ-PAYMENT'));
-        if (!shape) return null;
-        const rect = shape.getBoundingClientRect();
-        return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
-      })()`) as { x: number; y: number } | null
+      const drawTarget = await window.webContents.executeJavaScript(`(() => {
+        const stage = document.querySelector('.canvas-stage')?.getBoundingClientRect();
+        document.querySelector('.canvas-tool-button[aria-label="Hình khối"]')?.click();
+        if (!stage) return null;
+        return {
+          x1: Math.round(stage.left + stage.width * 0.42),
+          y1: Math.round(stage.top + stage.height * 0.42),
+          x2: Math.round(stage.left + stage.width * 0.42 + 140),
+          y2: Math.round(stage.top + stage.height * 0.42 + 96)
+        };
+      })()`) as { x1: number; y1: number; x2: number; y2: number } | null
+      if (drawTarget) {
+        window.webContents.sendInputEvent({ type: 'mouseDown', x: drawTarget.x1, y: drawTarget.y1, button: 'left', clickCount: 1 })
+        window.webContents.sendInputEvent({ type: 'mouseMove', x: drawTarget.x2, y: drawTarget.y2, button: 'left' })
+        window.webContents.sendInputEvent({ type: 'mouseUp', x: drawTarget.x2, y: drawTarget.y2, button: 'left', clickCount: 1 })
+      }
+      type GestureTarget = { id: string; x: number; y: number; screenX: number; screenY: number }
+      let target: GestureTarget | null = null
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await wait(250)
+        target = await window.webContents.executeJavaScript(`(async () => {
+          const [summary] = await window.pmAgent.threads.list();
+          const thread = await window.pmAgent.threads.get(summary.id);
+          const records = Object.values(thread.canvasSnapshot?.document?.store ?? {});
+          const shape = records.find((record) =>
+            record?.typeName === 'shape' && record?.type === 'geo' && record?.meta?.canvasOwner !== 'agent'
+          );
+          return shape && ${JSON.stringify(drawTarget)}
+            ? {
+                id: shape.id,
+                x: shape.x,
+                y: shape.y,
+                screenX: Math.round((${drawTarget?.x1 ?? 0} + ${drawTarget?.x2 ?? 0}) / 2),
+                screenY: Math.round((${drawTarget?.y1 ?? 0} + ${drawTarget?.y2 ?? 0}) / 2)
+              }
+            : null;
+        })()`) as GestureTarget | null
+        if (target) break
+      }
       canvasGesture.targetFound = Boolean(target)
       if (target) {
-        const dragTarget = { x: target.x + 48, y: target.y + 24 }
-        window.webContents.sendInputEvent({ type: 'mouseDown', x: target.x, y: target.y, button: 'left', clickCount: 1 })
+        await window.webContents.executeJavaScript(`document.querySelector('.canvas-tool-button[aria-label="Chọn"]')?.click()`)
+        const dragTarget = { x: target.screenX + 48, y: target.screenY + 24 }
+        window.webContents.sendInputEvent({ type: 'mouseDown', x: target.screenX, y: target.screenY, button: 'left', clickCount: 1 })
         window.webContents.sendInputEvent({ type: 'mouseMove', x: dragTarget.x, y: dragTarget.y, button: 'left' })
         window.webContents.sendInputEvent({ type: 'mouseUp', x: dragTarget.x, y: dragTarget.y, button: 'left', clickCount: 1 })
-        await wait(250)
+        await wait(900)
         canvasGesture.dragPresentationOnly = await window.webContents.executeJavaScript(`(async () => {
           const [thread] = await window.pmAgent.threads.list();
+          const detail = await window.pmAgent.threads.get(thread.id);
           const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
-          const shape = [...document.querySelectorAll('.tl-shape')].find((item) => item.textContent?.includes('REQ-PAYMENT'));
-          const rect = shape?.getBoundingClientRect();
-          const moved = rect && Math.hypot(rect.left + rect.width / 2 - ${target.x}, rect.top + rect.height / 2 - ${target.y}) > 10;
+          const shape = detail.canvasSnapshot?.document?.store?.[${JSON.stringify(target.id)}];
+          const moved = shape && Math.hypot(shape.x - ${target.x}, shape.y - ${target.y}) > 10;
           return Boolean(moved && workspace.runState.productSpec.version === 1 && workspace.preview === null);
         })()`) as boolean
         window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'z', modifiers: ['meta'] })
         window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'z', modifiers: ['meta'] })
-        await wait(250)
-        const restoredTarget = await window.webContents.executeJavaScript(`(async () => {
+        await wait(900)
+        canvasGesture.undoPresentationOnly = await window.webContents.executeJavaScript(`(async () => {
           const [thread] = await window.pmAgent.threads.list();
+          const detail = await window.pmAgent.threads.get(thread.id);
           const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
-          const shape = [...document.querySelectorAll('.tl-shape')].find((item) => item.textContent?.includes('REQ-PAYMENT'));
-          if (!shape) return null;
-          const rect = shape.getBoundingClientRect();
-          const current = { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
-          return { ...current, unchanged: workspace.runState.productSpec.version === 1 && workspace.preview === null };
-        })()`) as { x: number; y: number; unchanged: boolean } | null
-        canvasGesture.undoPresentationOnly = Boolean(restoredTarget?.unchanged
-          && Math.hypot(restoredTarget.x - target.x, restoredTarget.y - target.y) <= 5)
-        const deleteTarget = restoredTarget ?? target
+          const shape = detail.canvasSnapshot?.document?.store?.[${JSON.stringify(target.id)}];
+          return Boolean(shape
+            && Math.hypot(shape.x - ${target.x}, shape.y - ${target.y}) <= 1
+            && workspace.runState.productSpec.version === 1
+            && workspace.preview === null);
+        })()`) as boolean
+        window.webContents.sendInputEvent({ type: 'mouseDown', x: target.screenX, y: target.screenY, button: 'left', clickCount: 1 })
+        window.webContents.sendInputEvent({ type: 'mouseUp', x: target.screenX, y: target.screenY, button: 'left', clickCount: 1 })
+        await wait(100)
         window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
         window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
-        window.webContents.sendInputEvent({ type: 'mouseMove', x: deleteTarget.x, y: deleteTarget.y })
-        await wait(50)
-        window.webContents.sendInputEvent({ type: 'mouseDown', x: deleteTarget.x, y: deleteTarget.y, button: 'left', clickCount: 1 })
-        window.webContents.sendInputEvent({ type: 'mouseUp', x: deleteTarget.x, y: deleteTarget.y, button: 'left', clickCount: 1 })
         await wait(100)
         window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Delete' })
         window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Delete' })
@@ -1288,17 +1925,17 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
             const [summary] = await window.pmAgent.threads.list();
             const thread = await window.pmAgent.threads.get(summary.id);
             const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
+            const records = Object.values(thread.canvasSnapshot?.document?.store ?? {});
             return {
-              shapePreserved: [...document.querySelectorAll('.tl-shape')].some((item) => item.textContent?.includes('REQ-PAYMENT')),
+              deletionPresentationOnly: !document.querySelector('[data-shape-id="${target.id}"]'),
               specUnchanged: workspace.runState.productSpec.version === 1
                 && workspace.runState.productSpec.requirements.find((item) => item.id === 'REQ-PAYMENT')?.status === 'in_scope',
-              previewReady: workspace.runState.status === 'WAITING_FOR_APPROVAL'
-                && workspace.preview?.intent.targetEntityId === 'REQ-PAYMENT',
-              historyRecorded: thread.messages.some((message) => message.content.includes('[Canvas]'))
+              noPreview: workspace.preview === null && workspace.runState.pendingActions.length === 0,
+              checkpointRecorded: records.length > 0 && !records.some((record) => record?.id === ${JSON.stringify(target.id)})
             };
-          })()`) as Pick<typeof canvasGesture, 'shapePreserved' | 'specUnchanged' | 'previewReady' | 'historyRecorded'>
+          })()`) as Pick<typeof canvasGesture, 'deletionPresentationOnly' | 'specUnchanged' | 'noPreview' | 'checkpointRecorded'>
           Object.assign(canvasGesture, state)
-          if (canvasGesture.shapePreserved && canvasGesture.specUnchanged && canvasGesture.previewReady && canvasGesture.historyRecorded) break
+          if (canvasGesture.deletionPresentationOnly && canvasGesture.specUnchanged && canvasGesture.noPreview && canvasGesture.checkpointRecorded) break
         }
       }
       canvasGesture.invalidRejected = await window.webContents.executeJavaScript(`(async () => {
@@ -1448,7 +2085,8 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       executionPanelReady: false,
       documentReady: false,
     }
-    const approvalAttempts = figmaLive.required ? 240 : 60
+    const providerNeedsDesignTime = process.env.PM_AGENT_SMOKE_PROVIDER && process.env.PM_AGENT_SMOKE_PROVIDER !== 'mock-local'
+    const approvalAttempts = figmaLive.required || providerNeedsDesignTime ? 2_400 : 60
     for (let attempt = 0; attempt < approvalAttempts; attempt += 1) {
       await wait(250)
       approval = await window.webContents.executeJavaScript(`(async () => {
@@ -1473,8 +2111,8 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
           externalIds: Object.fromEntries(workspace.execution?.actions
             .filter((action) => action.receipt)
             .map((action) => [action.target, action.receipt.externalId]) ?? []),
-          executionPanelReady: ['Figma', 'Backlog mock', 'PRD Markdown']
-            .every((label) => document.querySelector('.execution-panel')?.innerText.includes(label))
+          executionPanelReady: ['figma', 'jira', 'zdoc']
+            .every((target) => Boolean(document.querySelector('.execution-panel [data-target="' + target + '"]')))
         };
       })()`) as typeof approval
       const expectedExecutionState = expectedFailureTarget
@@ -1490,8 +2128,9 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       const failureImage = await window.webContents.capturePage()
       writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!.replace(/\.png$/, '-partial-failure.png'), failureImage.toPNG())
       const retryClicked = await window.webContents.executeJavaScript(`(() => {
-        const button = [...document.querySelectorAll('.execution-panel button')]
-          .find((item) => item.title?.toLowerCase().includes(${JSON.stringify(expectedFailureTarget)}));
+        const button = document.querySelector(
+          '.execution-panel button[data-retry-target="${expectedFailureTarget}"]'
+        );
         button?.click();
         return Boolean(button);
       })()`) as boolean
@@ -1512,7 +2151,8 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
             failedTargets: workspace.execution?.actions.filter((action) => action.status === 'failed' || action.status === 'verification_failed').map((action) => action.target).sort() ?? [],
             attempts: Object.fromEntries(workspace.execution?.actions.map((action) => [action.target, action.attempts]) ?? []),
             externalIds: Object.fromEntries(workspace.execution?.actions.filter((action) => action.receipt).map((action) => [action.target, action.receipt.externalId]) ?? []),
-            executionPanelReady: ['Figma', 'Mock Jira', 'Mock Zdoc'].every((label) => document.querySelector('.execution-panel')?.innerText.includes(label))
+            executionPanelReady: ['figma', 'jira', 'zdoc']
+              .every((target) => Boolean(document.querySelector('.execution-panel [data-target="' + target + '"]')))
           };
         })()`) as typeof approval
         if (approval.executionVerified && approval.committed) break
@@ -1525,6 +2165,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
           beforeRetry.attempts[target] === approval.attempts[target]
           && beforeRetry.externalIds[target] === approval.externalIds[target]),
       }
+      approval.documentReady = existsSync(markdownArtifactPath(workspaceFor(history.listThreads()[0]!.id).runState.productSpec))
     }
     const semanticFlow = {
       required: process.env.PM_AGENT_SMOKE_FLOW === '1',
@@ -1538,6 +2179,8 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       ambiguousEditBlocked: false,
       feedbackApplied: false,
       feedbackReceiptConfirmed: false,
+      feedbackProgramSource: '',
+      feedbackOperations: 0,
       promotionPreview: false,
       promoted: false,
       scriptApplied: false,
@@ -1546,98 +2189,109 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     if (semanticFlow.required) {
       await window.webContents.executeJavaScript(`document.querySelector('.new-thread-button')?.click()`)
       await wait(600)
+      const semanticThreadId = await window.webContents.executeJavaScript(
+        `document.querySelector('.thread-row.active')?.getAttribute('data-thread-id')`,
+      ) as string
       if (process.env.PM_AGENT_SMOKE_CANVAS_PROVIDER) {
         await window.webContents.executeJavaScript(`(async () => {
-          const active = document.querySelector('.thread-row.active')?.getAttribute('data-thread-id');
-          if (active) await window.pmAgent.threads.setProvider(active, ${JSON.stringify(process.env.PM_AGENT_SMOKE_CANVAS_PROVIDER)});
+          await window.pmAgent.threads.setProvider(${JSON.stringify(semanticThreadId)}, ${JSON.stringify(process.env.PM_AGENT_SMOKE_CANVAS_PROVIDER)});
         })()`)
       }
+      console.log('[smoke-stage] semantic conversation')
       await window.webContents.executeJavaScript(`(() => {
         const input = document.querySelector('.composer textarea');
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-        setter.call(input, 'Tôi đang muốn kickoff một ý tưởng miniapp đặt xe');
+        setter.call(input, 'Tôi muốn làm Mini App nhắc người dùng backup dữ liệu đúng hạn');
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       })()`)
-      for (let attempt = 0; attempt < 160; attempt += 1) {
+      for (let attempt = 0; attempt < 280; attempt += 1) {
         await wait(500)
-        const kickoff = await window.webContents.executeJavaScript(`(async () => {
-          const [thread] = await window.pmAgent.threads.list();
-          const detail = await window.pmAgent.threads.get(thread.id);
-          const snapshot = JSON.stringify(detail.canvasSnapshot ?? {});
-          return {
-            blank: (snapshot.match(/\"nodeKind\"/g) || []).length === 0,
-            confirmed: detail.messages.some((message) => message.role === 'assistant' && message.content.includes('chuẩn hóa ý tưởng'))
-          };
-        })()`) as { blank: boolean; confirmed: boolean }
+        const kickoffDetail = history.getThread(semanticThreadId)
+        const kickoffSnapshot = JSON.stringify(kickoffDetail.canvasSnapshot ?? {})
+        const kickoff = {
+          blank: (kickoffSnapshot.match(/"nodeKind"/g) || []).length === 0,
+          confirmed: kickoffDetail.messages.some((message) => message.role === 'assistant'),
+        }
         semanticFlow.blankAfterKickoff = kickoff.blank
         semanticFlow.kickoffConfirmed = kickoff.confirmed
         if (kickoff.blank && kickoff.confirmed) break
       }
+      for (let attempt = 0; attempt < 100 && activeRuns.has(semanticThreadId); attempt += 1) await wait(50)
+      console.log('[smoke-stage] semantic draw')
       await window.webContents.executeJavaScript(`(() => {
         const input = document.querySelector('.composer textarea');
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-        setter.call(input, 'cho tôi toàn bộ flow đi');
+        setter.call(input, 'Vẽ toàn bộ user flow cho ý tưởng remind backup');
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       })()`)
-      for (let attempt = 0; attempt < 160; attempt += 1) {
+      const naturalCreativeWaitAttempts = process.env.PM_AGENT_SMOKE_CANVAS_PROVIDER ? 600 : 280
+      for (let attempt = 0; attempt < naturalCreativeWaitAttempts; attempt += 1) {
         await wait(500)
-        const state = await window.webContents.executeJavaScript(`(async () => {
-          const [thread] = await window.pmAgent.threads.list();
-          const detail = await window.pmAgent.threads.get(thread.id);
-          const snapshot = JSON.stringify(detail.canvasSnapshot ?? {});
-          return {
-            nodes: (snapshot.match(/\"nodeKind\"/g) || []).length,
-            edges: (snapshot.match(/\"type\":\"arrow\"/g) || []).length,
-            infiniteCanvas: !document.querySelector('.view-tabs') && Boolean(document.querySelector('.tl-container')),
-            providerProgram: ['provider', 'provider_augmented'].includes(document.querySelector('.canvas-workspace')?.getAttribute('data-program-source') ?? ''),
-            receiptConfirmed: detail.messages.some((message) => message.role === 'assistant' && message.content.startsWith('Đã vẽ '))
-          };
-        })()`)
+        const flowDetail = history.getThread(semanticThreadId)
+        const flowSnapshot = JSON.stringify(flowDetail.canvasSnapshot ?? {})
+        const canvasUiState = await window.webContents.executeJavaScript(`({
+          infiniteCanvas: !document.querySelector('.view-tabs') && Boolean(document.querySelector('.tl-container')),
+          providerProgram: ['provider', 'provider_augmented'].includes(document.querySelector('.canvas-workspace')?.getAttribute('data-program-source') ?? '')
+        })`) as { infiniteCanvas: boolean; providerProgram: boolean }
+        const state = {
+          nodes: (flowSnapshot.match(/"nodeKind"/g) || []).length,
+          edges: (flowSnapshot.match(/"type":"arrow"/g) || []).length,
+          receiptConfirmed: flowDetail.messages.some((message) => message.role === 'assistant' && message.content.startsWith('Đã dựng flow')),
+          ...canvasUiState,
+        }
         Object.assign(semanticFlow, state)
         if (semanticFlow.nodes >= 14 && semanticFlow.edges >= 14 && semanticFlow.infiniteCanvas && semanticFlow.receiptConfirmed) break
       }
+      for (let attempt = 0; attempt < 100 && activeRuns.has(semanticThreadId); attempt += 1) await wait(50)
       const beforeAmbiguous = { nodes: semanticFlow.nodes, edges: semanticFlow.edges }
-      await window.webContents.executeJavaScript(`(() => {
-        const input = document.querySelector('.composer textarea');
-        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
-        setter.call(input, 'tạo thêm đi chứ');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      })()`)
+      console.log(`[smoke-stage] semantic ambiguous edit lock=${activeRuns.has(semanticThreadId)}`)
+      await window.webContents.executeJavaScript(`window.pmAgent.chat.send({
+        threadId: ${JSON.stringify(semanticThreadId)},
+        content: 'Sửa canvas nhưng chưa chọn target'
+      })`)
       for (let attempt = 0; attempt < 160; attempt += 1) {
         await wait(500)
-        semanticFlow.ambiguousEditBlocked = await window.webContents.executeJavaScript(`(async () => {
-          const [thread] = await window.pmAgent.threads.list();
-          const detail = await window.pmAgent.threads.get(thread.id);
-          const snapshot = JSON.stringify(detail.canvasSnapshot ?? {});
-          return detail.messages.some((message) => message.role === 'assistant' && message.content.includes('Hãy chọn một hoặc nhiều node'))
-            && (snapshot.match(/\"nodeKind\"/g) || []).length === ${beforeAmbiguous.nodes}
-            && (snapshot.match(/\"type\":\"arrow\"/g) || []).length === ${beforeAmbiguous.edges};
-        })()`) as boolean
+        const ambiguousDetail = history.getThread(semanticThreadId)
+        const ambiguousSnapshot = JSON.stringify(ambiguousDetail.canvasSnapshot ?? {})
+        semanticFlow.ambiguousEditBlocked = ambiguousDetail.messages.some((message) =>
+          message.role === 'assistant' && message.content.includes('Hãy chọn một hoặc nhiều node'))
+          && (ambiguousSnapshot.match(/"nodeKind"/g) || []).length === beforeAmbiguous.nodes
+          && (ambiguousSnapshot.match(/"type":"arrow"/g) || []).length === beforeAmbiguous.edges
         if (semanticFlow.ambiguousEditBlocked) break
       }
+      for (let attempt = 0; attempt < 100 && activeRuns.has(semanticThreadId); attempt += 1) await wait(50)
+      console.log('[smoke-stage] semantic selected edit')
       const feedback = await window.webContents.executeJavaScript(`(async () => {
-        const [thread] = await window.pmAgent.threads.list();
+        const detail = await window.pmAgent.threads.get(${JSON.stringify(semanticThreadId)});
+        const store = detail.canvasSnapshot?.document?.store ?? {};
+        const target = Object.values(store).find((shape) =>
+          shape?.typeName === 'shape' && shape?.meta?.semanticId && shape?.meta?.nodeKind === 'decision'
+        ) ?? Object.values(store).find((shape) =>
+          shape?.typeName === 'shape' && shape?.meta?.semanticId && shape?.meta?.nodeKind
+        );
+        if (!target) throw new Error('Smoke không tìm thấy semantic node để feedback');
+        const semanticId = target.meta.semanticId;
+        const label = target.meta.label || target.props?.name || semanticId;
         return window.pmAgent.chat.send({
-          threadId: thread.id,
+          threadId: ${JSON.stringify(semanticThreadId)},
           content: 'Thêm retry và nhánh lỗi vào bước đang chọn',
-          selection: { entityId: 'chon-diem-den', label: 'Chọn điểm đến', selectedShapeCount: 1, shapeIds: ['shape:canvas-chon-diem-den'] },
+          selection: { entityId: semanticId, label, selectedShapeCount: 1, shapeIds: [target.id] },
           canvas: {
             schemaVersion: 1,
             revision: 2,
-            selectedShapeIds: ['shape:canvas-chon-diem-den'],
+            selectedShapeIds: [target.id],
             shapes: [{
-              id: 'shape:canvas-chon-diem-den',
-              semanticId: 'chon-diem-den',
-              type: 'geo',
-              label: 'Chọn điểm đến',
-              nodeKind: 'screen',
-              x: 960,
-              y: 0,
-              width: 220,
-              height: 150
+              id: target.id,
+              semanticId,
+              type: target.type,
+              label,
+              nodeKind: target.meta.nodeKind,
+              x: target.x,
+              y: target.y,
+              width: target.props?.w ?? 300,
+              height: target.props?.h ?? 220
             }]
           }
         });
@@ -1646,7 +2300,12 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
         canvasProgramSource: 'provider' | 'provider_augmented' | 'deterministic_fallback' | 'none'
         canvasRequestId: string | null
       }
-      const feedbackThreadId = history.listThreads()[0]!.id
+      const feedbackThreadId = semanticThreadId
+      const feedbackNodeIds = feedback.canvasProgram.operations
+        .filter((operation) => operation.op === 'create_node')
+        .map((operation) => operation.id)
+      semanticFlow.feedbackProgramSource = feedback.canvasProgramSource
+      semanticFlow.feedbackOperations = feedback.canvasProgram.operations.length
       window.webContents.send('canvas:external-program', {
         threadId: feedbackThreadId,
         batchId: Date.now(),
@@ -1658,12 +2317,13 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
         await wait(250)
         const detail = history.getThread(feedbackThreadId)
         const snapshot = JSON.stringify(detail.canvasSnapshot ?? {})
-        semanticFlow.feedbackApplied = snapshot.includes('chon-diem-den-retry') && snapshot.includes('chon-diem-den-error')
+        semanticFlow.feedbackApplied = feedbackNodeIds.length > 0 && feedbackNodeIds.every((id) => snapshot.includes(id))
         semanticFlow.feedbackReceiptConfirmed = detail.messages.some((message) => message.role === 'assistant' && message.content.startsWith('Đã cập nhật vùng canvas đã chọn'))
         if (semanticFlow.feedbackApplied && semanticFlow.feedbackReceiptConfirmed) break
       }
       const flowImage = await window.webContents.capturePage()
       writeFileSync(process.env.PM_AGENT_SMOKE_CAPTURE!.replace(/\.png$/, '-canvas-flow.png'), flowImage.toPNG())
+      console.log('[smoke-stage] semantic promote')
       await window.webContents.executeJavaScript(`(() => {
         const input = document.querySelector('.composer textarea');
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
@@ -1680,14 +2340,13 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       for (let attempt = 0; attempt < 40; attempt += 1) {
         await wait(250)
         semanticFlow.promoted = await window.webContents.executeJavaScript(`(async () => {
-          const [thread] = await window.pmAgent.threads.list();
-          const workspace = await window.pmAgent.lifecycle.getWorkspace(thread.id);
+          const workspace = await window.pmAgent.lifecycle.getWorkspace(${JSON.stringify(semanticThreadId)});
           return workspace.runState.phase === 'DELIVERY' && workspace.runState.productSpec.version === 2
             && workspace.runState.productSpec.requirements.length >= 3;
         })()`) as boolean
         if (semanticFlow.promoted) break
       }
-      const activeThreadId = await window.webContents.executeJavaScript(`document.querySelector('.thread-row.active')?.getAttribute('data-thread-id')`) as string
+      const activeThreadId = semanticThreadId
       window.webContents.send('canvas:external-program', {
         threadId: activeThreadId,
         batchId: Date.now(),
@@ -1737,6 +2396,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     const passed = initial.hasApi && initial.hasCanvas && initial.hasSeed
       && reset.controlReady && reset.deterministic
       && providerSwitch.paidDialogReady && providerSwitch.paidBlocked && providerSwitch.stableThread && providerSwitch.stableSpec
+      && slashControl.menuReady && slashControl.statusRouted
       && (!lifecycleFlow.required || (lifecycleFlow.blankCanvas && lifecycleFlow.questions > 0 && lifecycleFlow.questions <= 3
         && lifecycleFlow.options >= 3 && lifecycleFlow.options <= 4
         && lifecycleFlow.customAnswerReady && lifecycleFlow.customDecisionReady && lifecycleFlow.delivered
@@ -1747,8 +2407,8 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
         && lifecycleFlow.optionsCleared && lifecycleFlow.resumed))
       && (!rejection.required || (rejection.rejected && rejection.preservedVersion && rejection.noExecution && rejection.previewedAgain))
       && (!canvasGesture.required || (canvasGesture.targetFound && canvasGesture.dragPresentationOnly && canvasGesture.undoPresentationOnly
-        && canvasGesture.shapePreserved && canvasGesture.specUnchanged
-        && canvasGesture.previewReady && canvasGesture.historyRecorded && canvasGesture.invalidRejected))
+        && canvasGesture.deletionPresentationOnly && canvasGesture.specUnchanged
+        && canvasGesture.noPreview && canvasGesture.checkpointRecorded && canvasGesture.invalidRejected))
       && (!ambiguity.required || (ambiguity.needsInput && ambiguity.panelReady && ambiguity.specUnchanged
         && ambiguity.noPreview && ambiguity.noActions))
       && (!semanticFlow.required || (semanticFlow.blankAfterKickoff && semanticFlow.kickoffConfirmed
@@ -1765,7 +2425,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       && recovery.verified && recovery.preservedTargets
       && figmaSetup.hasSetupDialog && figmaSetup.runtimeReady && figmaSetup.pluginBuilt && figmaSetup.waitingForPlugin
       && (!figmaLive.required || (figmaLive.targetAllowed && figmaLive.contextReady && figmaLive.liveReceipt))
-    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, lifecycleFlow, rejection, canvasGesture, ambiguity, semanticFlow, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
+    console.log(`[smoke] ${JSON.stringify({ passed, reset, providerSwitch, slashControl, lifecycleFlow, rejection, canvasGesture, ambiguity, semanticFlow, ...initial, ...final, ...approval, expectedFailureTarget, recovery, ...figmaSetup, ...figmaLive, screenshot: process.env.PM_AGENT_SMOKE_CAPTURE })}`)
     app.exit(passed ? 0 : 1)
   } catch (error) {
     console.error('[smoke] failed', error)

@@ -48,7 +48,7 @@ func NewCapabilityRegistry() *CapabilityRegistry {
 	}
 	heavyReads := []string{
 		"get_document", "get_node", "get_nodes_info", "get_node_context", "get_design_context",
-		"search_nodes", "scan_text_nodes", "scan_nodes_by_types", "get_fonts",
+		"search_nodes", "scan_text_nodes", "scan_nodes_by_types", "discover_design_system_instances", "get_fonts",
 		"get_styles", "get_variable_defs", "get_local_components",
 	}
 	writeOps := []string{
@@ -154,6 +154,23 @@ func NewCapabilityRegistry() *CapabilityRegistry {
 			SupportsTruncation: true,
 		})
 	}
+	r.Register(Capability{
+		Name:             "apply_lifecycle_artifact_plan",
+		Kind:             CapabilityKindWrite,
+		Profile:          ExecutionProfileWrite,
+		DefaultTimeout:   30 * time.Minute,
+		SupportsProgress: true,
+		ResultShapeClass: "complete",
+	})
+	r.Register(Capability{
+		Name:               "read_lifecycle_artifact",
+		Kind:               CapabilityKindRead,
+		Profile:            ExecutionProfileHeavyRead,
+		DefaultTimeout:     3 * time.Minute,
+		SupportsProgress:   false,
+		ResultShapeClass:   "complete",
+		SupportsTruncation: false,
+	})
 
 	return r
 }

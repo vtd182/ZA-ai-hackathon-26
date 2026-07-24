@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { handleLifecycleArtifactRequest } from "./lifecycle-artifact";
 
 let page: any;
+let documentRoot: any;
 let nextId: number;
 let commitCount: number;
 
@@ -29,13 +30,15 @@ const containerNode = (type: string) => {
     y: 0,
     width: 100,
     height: 100,
+    reactions: [],
   });
   node.appendChild = (child: any) => {
     child.parent = node;
     node.children.push(child);
   };
-  node.resize = () => {};
-  node.resizeWithoutConstraints = () => {};
+  node.resize = (width: number, height: number) => { node.width = width; node.height = height; };
+  node.resizeWithoutConstraints = (width: number, height: number) => { node.width = width; node.height = height; };
+  node.setReactionsAsync = async (reactions: any[]) => { node.reactions = reactions; };
   return node;
 };
 
@@ -48,6 +51,17 @@ const preflight = () => ({
     kind: "figma_design_system_plan",
     mode: "strict",
     target: { targetHash: "target-hash", pageId: "0:1" },
+    designDirection: {
+      conceptName: "Quiet confidence",
+      productPromise: "Keep important data safe without unnecessary interruption.",
+      tone: "calm",
+      density: "comfortable",
+      palette: "trust-green",
+      principles: [
+        { title: "Safety at a glance", detail: "Show status immediately." },
+        { title: "Reversible control", detail: "Keep every action understandable." },
+      ],
+    },
     metadata: {
       namespace: "za.pm-lifecycle/v1",
       runId: "RUN-1",
@@ -56,12 +70,28 @@ const preflight = () => ({
       specId: "SPEC-1",
       specVersion: 1,
       idempotencyKey: "figma:RUN-1:v1",
+      artifactPageName: "PM · Remind backup · v1",
       targetHash: "target-hash",
     },
     screens: [{
       screenId: "SCREEN-MENU",
       name: "Menu",
       requirementIds: ["REQ-ORDER"],
+      presentation: {
+        archetype: "dashboard",
+        eyebrow: "SYSTEM STATUS",
+        headline: "Your data is safe",
+        supportingText: "Latest backup and upcoming schedule.",
+        navigationLabel: "Overview",
+        sections: [{
+          key: "backup-health",
+          kind: "status",
+          title: "Safe",
+          body: "Last backup yesterday",
+          tone: "success",
+          items: [{ label: "Protected", value: "12.4 GB" }],
+        }],
+      },
       prototypeEdges: [],
     }],
   },
@@ -79,7 +109,9 @@ beforeEach(() => {
   commitCount = 0;
   page = containerNode("PAGE");
   page.id = "0:1";
+  page.name = "Zalo Mini App Framework 2.0";
   page.selection = [];
+  page.loadAsync = async () => {};
   const component: any = metadataNode({
     id: "component:menu",
     key: "component/menu",
@@ -87,20 +119,59 @@ beforeEach(() => {
     type: "COMPONENT",
     createInstance: () => metadataNode({ id: `instance:${nextId++}`, name: "Menu Card", type: "INSTANCE", parent: null }),
   });
+  page.findAllWithCriteria = () => [component];
+  documentRoot = { children: [page] };
   (globalThis as any).figma = {
     currentPage: page,
-    root: {
-      children: [{
-        loadAsync: async () => {},
-        findAllWithCriteria: () => [component],
-      }],
+    root: documentRoot,
+    createPage: () => {
+      const output = containerNode("PAGE");
+      output.name = "Page";
+      output.selection = [];
+      output.loadAsync = async () => {};
+      output.findAllWithCriteria = () => [];
+      output.remove = () => {
+        const index = documentRoot.children.indexOf(output);
+        if (index >= 0) documentRoot.children.splice(index, 1);
+      };
+      documentRoot.children.push(output);
+      return output;
     },
     createSection: () => containerNode("SECTION"),
     createFrame: () => containerNode("FRAME"),
-    createText: () => metadataNode({ id: `text:${nextId++}`, name: "Text", type: "TEXT", parent: null }),
+    createText: () => {
+      const text: any = metadataNode({ id: `text:${nextId++}`, name: "Text", type: "TEXT", parent: null });
+      text.resize = (width: number, height: number) => { text.width = width; text.height = height; };
+      return text;
+    },
+    createRectangle: () => {
+      const rectangle: any = metadataNode({ id: `rectangle:${nextId++}`, name: "Rectangle", type: "RECTANGLE", parent: null });
+      rectangle.resize = (width: number, height: number) => { rectangle.width = width; rectangle.height = height; };
+      return rectangle;
+    },
+    createEllipse: () => {
+      const ellipse: any = metadataNode({ id: `ellipse:${nextId++}`, name: "Ellipse", type: "ELLIPSE", parent: null });
+      ellipse.resize = (width: number, height: number) => { ellipse.width = width; ellipse.height = height; };
+      return ellipse;
+    },
     loadFontAsync: async () => {},
     viewport: { scrollAndZoomIntoView: () => {} },
     importComponentByKeyAsync: async () => { throw new Error("not published"); },
+    getNodeByIdAsync: async (id: string) => {
+      const visit = (node: any): any => {
+        if (node.id === id) return node;
+        for (const child of node.children ?? []) {
+          const found = visit(child);
+          if (found) return found;
+        }
+        return null;
+      };
+      for (const candidate of documentRoot.children) {
+        const found = visit(candidate);
+        if (found) return found;
+      }
+      return null;
+    },
     commitUndo: () => { commitCount += 1; },
   };
 });
@@ -111,15 +182,67 @@ describe("lifecycle artifact plugin handlers", () => {
     const applied = await handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", params) as any);
     const retried = await handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", params) as any);
     const read = await handleLifecycleArtifactRequest(request("read_lifecycle_artifact", {
-      targetPageId: "0:1", idempotencyKey: "figma:RUN-1:v1",
+      targetPageId: "0:1", idempotencyKey: "figma:RUN-1:v1", rootNodeId: applied?.data.rootNodeIds[0],
     }) as any);
 
     expect(applied?.data.idempotent).toBe(false);
     expect(retried?.data.idempotent).toBe(true);
-    expect(page.children).toHaveLength(1);
+    expect(page.children).toHaveLength(0);
+    expect(documentRoot.children).toHaveLength(2);
+    expect(applied?.data).toMatchObject({
+      artifactPageName: "PM · Remind backup · v1",
+      artifactPageId: documentRoot.children[1].id,
+    });
+    expect(read?.data).toMatchObject({
+      designConceptName: "Quiet confidence",
+    });
+    expect(read?.data.screens[0]).toMatchObject({
+      archetype: "dashboard",
+      sectionKeys: ["backup-health"],
+    });
     expect(read?.data.screens[0].metadata.requirementIds).toEqual(["REQ-ORDER"]);
     expect(read?.data.screens[0].childSlots[0]).toMatchObject({ componentKey: "component/menu", semanticRole: "menu-card" });
     expect(commitCount).toBe(1);
+
+    const outputRoot = documentRoot.children[1].children[0];
+    const visit = (node: any): any[] => [node, ...(node.children ?? []).flatMap(visit)];
+    const renderedNodes = visit(outputRoot);
+    renderedNodes.find((node) => node.getPluginData?.("za-pm-lifecycle").includes("presentation_section"))?.remove();
+    renderedNodes.find((node) => node.getPluginData?.("za-pm-lifecycle").includes("design_brief"))?.remove();
+    const tampered = await handleLifecycleArtifactRequest(request("read_lifecycle_artifact", {
+      targetPageId: "0:1", idempotencyKey: "figma:RUN-1:v1",
+    }) as any);
+    expect(tampered?.data.designConceptName).toBe("");
+    expect(tampered?.data.screens[0].sectionKeys).toEqual([]);
+  });
+
+  it("recovers only an incomplete agent-owned artifact page", async () => {
+    const stalePage = (globalThis as any).figma.createPage();
+    stalePage.name = "PM · Remind backup · v1";
+    const staleRoot = containerNode("SECTION");
+    staleRoot.setPluginData("za-pm-lifecycle", JSON.stringify({
+      namespace: "za.pm-lifecycle/v1",
+      kind: "artifact_root",
+      specId: "SPEC-1",
+      specVersion: 1,
+      idempotencyKey: "figma:stale",
+      planHash: "b".repeat(64),
+    }));
+    stalePage.appendChild(staleRoot);
+    const prepared = preflight();
+    prepared.source.metadata.pageStrategy = "create_or_recover_incomplete";
+    prepared.source.metadata.idempotencyKey = "figma:RUN-1:creative-new";
+
+    const applied = await handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {
+      preflightPlan: prepared,
+      planHash: "c".repeat(64),
+      targetPageId: "0:1",
+    }) as any);
+
+    expect(documentRoot.children).toHaveLength(2);
+    expect(applied?.data.artifactPageId).toBe(stalePage.id);
+    expect(stalePage.children).toHaveLength(1);
+    expect(stalePage.children[0]).not.toBe(staleRoot);
   });
 
   it("rejects a mismatched page with zero writes", async () => {
@@ -127,14 +250,194 @@ describe("lifecycle artifact plugin handlers", () => {
       preflightPlan: preflight(), planHash: "a".repeat(64), targetPageId: "9:9",
     }) as any)).rejects.toThrow("TARGET_NOT_ALLOWED");
     expect(page.children).toHaveLength(0);
+    expect(documentRoot.children).toHaveLength(1);
+  });
+
+  it("clones an allowlisted same-file ZDS instance and proves instance-backed read-back", async () => {
+    const source: any = metadataNode({
+      id: "411:20533",
+      name: "[ZDS] Button / Solid",
+      type: "INSTANCE",
+      parent: null,
+      children: [],
+      findAllWithCriteria: () => [],
+    });
+    source.clone = () => metadataNode({
+      id: `instance:${nextId++}`,
+      name: source.name,
+      type: "INSTANCE",
+      parent: null,
+      children: [],
+      findAllWithCriteria: () => [],
+    });
+    page.appendChild(source);
+    const instancePreflight = preflight();
+    instancePreflight.resolvedSlots[0].componentKey = "same-file:0:1:411:20533:primary-button";
+    (instancePreflight.resolvedSlots[0] as any).componentBinding = {
+      kind: "same_file_instance",
+      nodeId: "411:20533",
+      pageId: "0:1",
+    };
+
+    const applied = await handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {
+      preflightPlan: instancePreflight,
+      planHash: "b".repeat(64),
+      targetPageId: "0:1",
+    }) as any);
+    const read = await handleLifecycleArtifactRequest(request("read_lifecycle_artifact", {
+      targetPageId: "0:1",
+      idempotencyKey: "figma:RUN-1:v1",
+      rootNodeId: applied?.data.rootNodeIds[0],
+    }) as any);
+
+    expect(read?.data.screens[0].childSlots[0]).toMatchObject({
+      componentBinding: { kind: "same_file_instance", nodeId: "411:20533", pageId: "0:1" },
+      instanceBacked: true,
+      primitiveFallback: false,
+    });
+    expect(page.children).toHaveLength(1);
+    expect(documentRoot.children).toHaveLength(2);
+  });
+
+  it("creates real prototype reactions and derives edges from rendered nodes", async () => {
+    const flowPreflight = preflight();
+    flowPreflight.source.screens[0].prototypeEdges = [{
+      key: "edge:SCREEN-MENU:SCREEN-DETAIL",
+      fromScreenId: "SCREEN-MENU",
+      toScreenId: "SCREEN-DETAIL",
+      trigger: "on_tap",
+      action: "navigate",
+    }];
+    flowPreflight.source.screens.push({
+      ...structuredClone(flowPreflight.source.screens[0]),
+      screenId: "SCREEN-DETAIL",
+      name: "Detail",
+      prototypeEdges: [],
+    });
+    flowPreflight.resolvedSlots.push({
+      ...structuredClone(flowPreflight.resolvedSlots[0]),
+      screenId: "SCREEN-DETAIL",
+      slotKey: "detail",
+    });
+
+    const applied = await handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {
+      preflightPlan: flowPreflight,
+      planHash: "c".repeat(64),
+      targetPageId: "0:1",
+    }) as any);
+    const read = await handleLifecycleArtifactRequest(request("read_lifecycle_artifact", {
+      targetPageId: "0:1",
+      idempotencyKey: "figma:RUN-1:v1",
+      rootNodeId: applied?.data.rootNodeIds[0],
+    }) as any);
+
+    expect(read?.data.prototypeEdges).toEqual(flowPreflight.source.screens[0].prototypeEdges);
+    const artifactRoot = documentRoot.children[1].children[0];
+    const sourceFrame = artifactRoot.children.find((node: any) =>
+      node.getPluginData("za-pm-lifecycle").includes('"screenId":"SCREEN-MENU"'),
+    );
+    expect(sourceFrame.reactions[0].actions[0]).toMatchObject({
+      type: "NODE",
+      navigation: "NAVIGATE",
+    });
+    sourceFrame.reactions = [];
+    const tampered = await handleLifecycleArtifactRequest(request("read_lifecycle_artifact", {
+      targetPageId: "0:1", idempotencyKey: "figma:RUN-1:v1",
+    }) as any);
+    expect(tampered?.data.prototypeEdges).toEqual([]);
   });
 
   it("rolls back the artifact root when a strict component is unavailable", async () => {
-    (globalThis as any).figma.root.children[0].findAllWithCriteria = () => [];
+    page.findAllWithCriteria = () => [];
     await expect(handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {
       preflightPlan: preflight(), planHash: "a".repeat(64), targetPageId: "0:1",
     }) as any)).rejects.toThrow("COMPONENT_UNAVAILABLE");
     expect(page.children).toHaveLength(0);
+    expect(documentRoot.children).toHaveLength(1);
     expect(commitCount).toBe(0);
+  });
+
+  it("renders a creative blueprint with free primitives and ZDS-backed controls", async () => {
+    const creative = preflight();
+    creative.source.creativeBlueprint = {
+      schemaVersion: 1,
+      conceptName: "Lunch without the queue",
+      productPromise: "Order quickly and collect with confidence.",
+      visualNarrative: "A product-specific menu moment.",
+      principles: ["Clear food hierarchy", "Confident action"],
+      screens: [{
+        screenId: "SCREEN-MENU",
+        name: "Menu",
+        purpose: "Choose lunch",
+        requirementIds: ["REQ-ORDER"],
+        width: 390,
+        height: 844,
+        background: "#F7F9FC",
+        presentationNote: "Menu-first composition",
+        elements: [
+          {
+            id: "root-menu", kind: "frame", parentId: null, name: "Menu composition", x: 0, y: 0,
+            width: 390, height: 844, layout: "vertical", gap: 16,
+            paddingTop: 24, paddingRight: 20, paddingBottom: 24, paddingLeft: 20,
+            fill: "#F7F9FC", stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+            text: null, fontSize: null, fontWeight: null, textAlign: null,
+            componentRole: null, componentText: null, layoutGrow: 0,
+          },
+          {
+            id: "menu-visual", kind: "rectangle", parentId: "root-menu", name: "Featured meal visual", x: null, y: null,
+            width: 350, height: 220, layout: "none", gap: 0,
+            paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+            fill: "#EAF3FF", stroke: null, strokeWidth: 0, radius: 20, opacity: 1,
+            text: null, fontSize: null, fontWeight: null, textAlign: null,
+            componentRole: null, componentText: null, layoutGrow: 0,
+          },
+          {
+            id: "menu-title", kind: "text", parentId: "root-menu", name: "Menu headline", x: null, y: null,
+            width: 350, height: 64, layout: "none", gap: 0,
+            paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+            fill: "#101828", stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+            text: "Bữa trưa ngon, không cần xếp hàng", fontSize: 28, fontWeight: "bold", textAlign: "left",
+            componentRole: null, componentText: null, layoutGrow: 0,
+          },
+          {
+            id: "menu", kind: "component", parentId: "root-menu", name: "ZDS menu card", x: null, y: null,
+            width: 350, height: 72, layout: "none", gap: 0,
+            paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+            fill: null, stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+            text: null, fontSize: null, fontWeight: null, textAlign: null,
+            componentRole: "menu-card", componentText: "Cơm gà nướng · còn 12 suất", layoutGrow: 0,
+          },
+        ],
+      }],
+      prototypeEdges: [],
+    };
+
+    const applied = await handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {
+      preflightPlan: creative,
+      planHash: "d".repeat(64),
+      targetPageId: "0:1",
+    }) as any);
+    const read = await handleLifecycleArtifactRequest(request("read_lifecycle_artifact", {
+      targetPageId: "0:1",
+      idempotencyKey: "figma:RUN-1:v1",
+      rootNodeId: applied?.data.rootNodeIds[0],
+    }) as any);
+
+    expect(read?.data.designConceptName).toBe("Lunch without the queue");
+    expect(read?.data.screens[0].childSlots[0]).toMatchObject({
+      slotKey: "menu",
+      semanticRole: "menu-card",
+      instanceBacked: true,
+    });
+    expect(read?.data.screens[0].creativeMetrics).toEqual({
+      elementCount: 4,
+      instanceCount: 1,
+      primitiveCount: 2,
+      textCount: 1,
+    });
+    const artifactRoot = documentRoot.children[1].children[0];
+    const screen = artifactRoot.children.find((node: any) => node.getPluginData?.("za-pm-lifecycle").includes('"kind":"screen"'));
+    expect(screen.children.some((node: any) => node.type === "RECTANGLE")).toBe(true);
+    expect(screen.children.some((node: any) => node.type === "TEXT")).toBe(true);
   });
 });

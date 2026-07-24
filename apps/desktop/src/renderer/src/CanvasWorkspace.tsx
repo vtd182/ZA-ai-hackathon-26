@@ -28,8 +28,8 @@ import {
   type TLStoreSnapshot,
   type TLUiStylePanelProps,
 } from 'tldraw'
-import type { CanvasDocumentContext, CanvasExecutionFailure, CanvasExecutionReceipt, CanvasProgram, CanvasSelectionContext } from '@pm-agent/domain'
-import { executeCanvasProgram, inspectCanvas, reflowCanvas } from './canvas-service'
+import type { CanvasDiffContext, CanvasDocumentContext, CanvasExecutionFailure, CanvasExecutionReceipt, CanvasProgram, CanvasSelectionContext } from '@pm-agent/domain'
+import { diffCanvasContexts, executeCanvasProgram, inspectCanvas, reflowCanvas } from './canvas-service'
 
 interface CanvasWorkspaceProps {
   threadId: string
@@ -39,7 +39,7 @@ interface CanvasWorkspaceProps {
   onContextChange(context: CanvasDocumentContext, selection?: CanvasSelectionContext): void
   onExecution(receipt: CanvasExecutionReceipt): Promise<void>
   onExecutionError(failure: CanvasExecutionFailure): Promise<void>
-  onSync(context: CanvasDocumentContext, selection?: CanvasSelectionContext): Promise<void>
+  onSync(context: CanvasDocumentContext, selection: CanvasSelectionContext | undefined, diff: CanvasDiffContext): Promise<void>
   onError(message: string): void
 }
 
@@ -147,6 +147,7 @@ export function CanvasWorkspace({
   const applyingProgram = useRef(false)
   const activityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const revision = useRef(0)
+  const syncedContext = useRef<CanvasDocumentContext | null>(null)
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
   const [editorEpoch, setEditorEpoch] = useState(0)
   const [sceneContext, setSceneContext] = useState<CanvasDocumentContext | null>(null)
@@ -161,12 +162,13 @@ export function CanvasWorkspace({
     if (clearAfter) activityTimer.current = setTimeout(() => setActivityStage('idle'), clearAfter)
   }, [])
 
-  const emitContext = useCallback((editor: Editor) => {
+  const emitContext = useCallback((editor: Editor): CanvasDocumentContext => {
     revision.current += 1
     const context = inspectCanvas(editor, revision.current)
     setSceneContext(context)
     setActiveTool(editor.getCurrentToolId())
     onContextChange(context, selectionFromContext(context))
+    return context
   }, [onContextChange])
 
   const schedulePersistence = useCallback((editor: Editor) => {
@@ -183,7 +185,7 @@ export function CanvasWorkspace({
   const handleMount = useCallback((editor: Editor) => {
     editorRef.current = editor
     setEditorEpoch((value) => value + 1)
-    emitContext(editor)
+    syncedContext.current = emitContext(editor)
     const stopDocument = editor.store.listen(() => schedulePersistence(editor), { scope: 'document' })
     const stopSession = editor.store.listen(() => emitContext(editor), { scope: 'session' })
     cleanup.current = () => { stopDocument(); stopSession() }
@@ -206,7 +208,7 @@ export function CanvasWorkspace({
         showActivity('checkpoint')
         await window.pmAgent.canvas.save(threadId, getSnapshot(editor.store))
         setSaveState('saved')
-        emitContext(editor)
+        syncedContext.current = emitContext(editor)
         showActivity('verifying')
         await onExecution({ ...receipt, batchId: programBatch.id })
         setDirty(false)
@@ -253,6 +255,7 @@ export function CanvasWorkspace({
     if (!editor || syncing) return
     const context = inspectCanvas(editor, revision.current + 1)
     const nextSelection = selectionFromContext(context)
+    const diff = diffCanvasContexts(syncedContext.current ?? context, context)
     setSyncing(true)
     showActivity('reasoning')
     try {
@@ -260,7 +263,8 @@ export function CanvasWorkspace({
       await window.pmAgent.canvas.save(threadId, getSnapshot(editor.store))
       setSaveState('saved')
       showActivity('verifying')
-      await onSync(context, nextSelection)
+      await onSync(context, nextSelection, diff)
+      syncedContext.current = context
       setDirty(false)
       showActivity('verified', 2_200)
     } catch {

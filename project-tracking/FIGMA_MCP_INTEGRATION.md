@@ -1,5 +1,32 @@
 # Figma MCP Integration Review
 
+## Current implementation - 2026-07-24
+
+The original generic-recipe proposal below remains historical context. The active product-grade path is now:
+
+```text
+ProductSpec + bounded live ZDS manifest
+  -> provider-owned Creative Figma Blueprint
+  -> Agent Core traceability/content-fit validation
+  -> MCP strict preflight + connector-native plan hash
+  -> immutable approval containing the exact prepared preflight
+  -> plugin composition from free primitives + cloned same-file ZDS instances
+  -> root-targeted read-back and verification
+```
+
+Important current rules:
+
+- Live strict mode never writes synthetic fixture component keys. Failed capture blocks prepare and asks for a DS refresh.
+- The public framework page is consumed primarily through copied `INSTANCE` bindings; local component/style/variable capture is supplemental.
+- Reads prefer already loaded Figma nodes before network-backed async lookup.
+- The provider controls visual composition; required ZDS roles, ProductSpec IDs and external-write policy remain guarded.
+- Follower HTTP calls inherit the caller deadline; apply budget is 5-30 minutes and operation-aware.
+- The approved payload persists the exact preflight. TypeScript does not recompute a Go-owned hash with a different JSON escaping algorithm.
+- Creative idempotency includes the blueprint hash. A dedicated page may be recovered only when it contains one incomplete agent-owned lifecycle root and no rendered screens.
+- Content-fit guard limits only compact control copy; long supporting content remains free in primitive text/cards.
+
+Live evidence: 190 ZDS instances -> 25 semantic bindings, 9 tokens, 4 screens, 51 layers, 16 instance-backed controls, 4 prototype edges, 4.7s write, 0.5s read-back and verified root `489:16542`.
+
 ## 1. Existing runtime assessment
 
 The repository already contains `mcp-tool/za-talk-to-figma`, a local MCP server and Figma Desktop plugin. It is a strong base and should be extended rather than replaced.
@@ -235,7 +262,7 @@ PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke
 
 ## 12. Implemented connection baseline
 
-`P0-FIG-001` is complete:
+`P0-FIG-001` and `P0-FIG-007` are complete:
 
 - official MCP SDK stdio follower; provider/runtime SDK types stay inside the connector;
 - typed runtime error mapping and bounded call deadlines;
@@ -243,30 +270,35 @@ PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke
 - one active target persisted in SQLite; a changed session/page removes ready state;
 - bounded `capture_design_system_context`, normalized deterministic manifest fingerprint and cache reuse;
 - raw document/capture payloads are not persisted;
-- explicit `fixture_fallback` when the live source has no relevant component mappings.
+- explicit `fixture_fallback` when the live source has neither usable local components nor copied instances;
+- bounded discovery of copied ZDS `INSTANCE` nodes with component properties, nearby labels and ancestor context;
+- same-file source bindings, light/default variant selection and strict instance-backed read-back.
 
-The connected public framework duplicate currently exposes no usable component map in the bounded allowlisted scan. This is not treated as live DS compliance. The UI shows `Synthetic fixture guard`; generic semantic planning, strict zero-write preflight and a separate labeled live primitive path are implemented.
+The connected public framework duplicate is now treated as a usable allowlisted same-file ZDS catalog. Its ZDS controls are mostly copied external-library instances, so local-component-only scans are insufficient. Synthetic fallback remains available for genuinely empty or unreadable sources, but it is not used by the verified public-framework demo path.
 
 ## 13. Current live demo behavior
 
 The complete approved path is now implemented and verified:
 
-1. Agent Core creates a semantic screen recipe from the committed ProductSpec.
+1. Agent Core creates a Design Blueprint from the committed ProductSpec: concept, product promise, palette, design principles, screen archetypes, domain content/states and semantic ZDS slots.
 2. The app pins an exact live Figma session/file/page and persists the target hash.
-3. A bounded component-map capture selects either strict live mapping or a labeled `fixture_fallback`.
-4. Fixture fallback removes all fixture component keys and executes a `mode=free` primitive plan against the live page.
+3. A bounded capture discovers local definitions plus representative copied ZDS instances and produces semantic source bindings.
+4. Strict preflight resolves every recipe slot to an allowlisted component key or same-file instance; unresolved required roles produce zero writes.
 5. The user approves the immutable plan hash before the outbox dispatches it.
-6. The plugin creates a direct page-level artifact section, screen frames and slot metadata without overlapping existing page content.
-7. The connector independently reads the artifact by idempotency metadata and audits target, plan, screens, slots, requirements and edges.
+6. The plugin treats the selected Page as the guarded ZDS source, creates a dedicated `PM · <Product> · vN` output Page, renders the concept brief and product-specific compositions, clones selected ZDS instances, applies business text overrides and creates real prototype reactions.
+7. The connector independently reads the artifact across the file by idempotency metadata. Concept and section coverage come from rendered design nodes, while prototype edges come from actual reactions and destinations; audit also checks the output Page, target, plan, screens, requirements, instance type and immutable source binding.
 
-The public framework file currently demonstrates **live Figma write with synthetic primitive fallback**, not production Zalo Design System compliance. Strict compliance is available only when the allowlisted source yields usable live component-role mappings.
+The public framework demo now demonstrates **strict same-file ZDS instance reuse**, not synthetic primitive fallback. It does not claim to publish or mutate the upstream ZDS library; it composes an artifact from copied instances already present on the allowlisted sandbox page.
 
 Performance and hash rules discovered during live verification:
 
 - resolved plan hashes use recursively canonicalized JSON in both Go and TypeScript;
 - component/text discovery uses bounded node/time budgets and records an explicit fallback reason when exhausted;
-- lifecycle artifact roots are direct page children, so idempotency lookup never traverses the full design tree;
-- compositor recipe revisions belong in the idempotency namespace to avoid collisions with artifacts rendered by older recipes.
+- representative discovery preserves role-relevant component properties while deduplicating the much larger raw instance population;
+- catalog scoring prefers light mode, default state, correct button level, large size and no-icon variants;
+- lifecycle artifact roots are direct children of dedicated output Pages; idempotency scans only Page children and never traverses the full design tree;
+- compositor recipe revisions belong in the idempotency namespace to avoid collisions with artifacts rendered by older recipes;
+- Figma is the near-product design realization surface, not a wireframe exporter. ZDS guards controls and interaction consistency, while the Design Blueprint owns product hierarchy, content, states and art direction.
 
 Latest evidence on 2026-07-23:
 
@@ -277,4 +309,4 @@ PM_AGENT_FIGMA_LIVE=1 pnpm exec vitest run packages/connectors/src/figma-mcp.liv
 PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke
 ```
 
-The app smoke completed with a non-mock Figma node receipt, independent verification, Mock Jira/Mock Zdoc receipts and a generated Markdown PRD.
+The app smoke completed with live Figma node `449:16909`, strict instance-backed verification, Mock Jira/Mock Zdoc receipts and a generated Markdown PRD.

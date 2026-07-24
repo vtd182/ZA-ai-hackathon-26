@@ -32,7 +32,7 @@ Signature moment:
 
 ## 3. Current status
 
-- **Date:** 2026-07-23
+- **Date:** 2026-07-24
 - **Milestone:** M2 guarded artifact execution and demo readiness.
 - **Completed task:** `P0-FND-001` Bootstrap workspace.
 - **Completed tasks:** Foundation/fixtures/domain schemas, workflow state machine, ProductSpec invariants, deterministic impact graph and immutable approval policy.
@@ -64,11 +64,14 @@ Signature moment:
 - **Completed task:** `P0-CAN-006` application-owned intent routing and receipt-confirmed bidirectional canvas collaboration.
 - **Completed task:** `P0-UI-005` guided continuation, custom answers and canvas prototypes.
 - **Completed task:** `P0-CAN-008` canvas co-creation and prototype scene transformation.
+- **Completed task:** `P0-CAN-009` creative conversation, provider-authored native scenes and typed CanvasDiff sync.
 - **Completed task:** `P0-AGT-006` thread-specific decision-to-ProductSpec synthesis with atomic empty-draft replacement.
-- **Current task:** `P0-QA-001` critical test-matrix reconciliation is `IN_PROGRESS`.
-- **Current slice:** Keep the verified chat -> canvas -> ProductSpec -> approval -> live Figma + Markdown path green, then close the remaining release-provider, Electron E2E and packaging/rehearsal gaps.
-- **Last known repository state:** Runnable Electron app with one blank-first infinite canvas per thread, typed Canvas Programs, Mock/Codex provider paths, thread-specific ProductSpec synthesis, editable prototypes, deterministic impact preview, Markdown PRD export and approved live Figma write/read-back verification.
-- **Known blockers:** Connected public framework page exposes no usable component map in the bounded allowlisted scan, so live writes use a labeled free-mode primitive fallback rather than claiming strict Zalo DS compliance; cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
+- **Completed task:** `P0-FIG-007` allowlisted same-file ZDS instance catalog, strict clone/apply and instance-backed read-back.
+- **Completed task:** `P0-FIG-008` provider-owned product-grade Figma synthesis with live ZDS capture, guarded creative execution and visual review.
+- **Current task:** `P0-UX-001` remains paused; `P0-FIG-008` and its post-close regression audit are complete.
+- **Current slice:** provider-owned Figma composition, strict live ZDS capture, immutable prepared execution and connected read-back are verified; release work now moves to clean demo rehearsal and packaging gates.
+- **Last known repository state:** Runnable Electron app with one blank-first infinite canvas per thread, typed Canvas Programs, Mock/Codex provider paths, thread-specific ProductSpec synthesis, editable prototypes, deterministic impact preview, Markdown PRD export and approved strict live Figma ZDS write/read-back verification.
+- **Known blockers:** cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
 
 ## 4. Important implementation notes
@@ -106,8 +109,10 @@ Signature moment:
 - MCP hiện có 98 tools, stdio transport, local WebSocket plugin bridge, multi-session routing và typed error contract.
 - Existing DS apply đang hard-code registration form slots và cho phép primitive fallback; strict hackathon flow cần generic recipe + zero-write preflight.
 - Pin explicit Figma `sessionId`; không dựa vào global active route.
-- Live primitive fallback is allowed only after the exact file/page target is pinned. The plan records `mode=free`, removes fixture component keys and retains only labeled synthetic tokens.
-- Strict Zalo DS compliance requires a captured live component map. A public page with no mappings must never be pitched as a production DS write.
+- The public framework duplicate is an allowlisted same-file ZDS catalog: most DS definitions are exposed as copied `INSTANCE` nodes rather than local `COMPONENT` nodes.
+- Strict plans bind semantic roles to exact source instance/page IDs, clone those instances, and verify actual `INSTANCE` type plus immutable source binding on read-back.
+- The selected Figma Page is a guarded component source, not an artifact destination. Recipe-versioned artifacts live on a dedicated `PM · <Product> · vN` Page; read-back records and audits `artifactPageId` and `artifactPageName`.
+- Fixture/free-mode fallback remains available only when neither local components nor usable same-file instances are captured; it must stay visibly labeled and must not be pitched as strict ZDS compliance.
 
 ### Providers
 
@@ -407,6 +412,187 @@ Signature moment:
 - **Regression test:** 256 plugin tests, Go suite, live adapter test completes in about two seconds, and app live smoke verifies Figma/Jira/Zdoc plus Markdown.
 - **Caveat:** A dedicated compact DS source page remains preferable for strict component-map capture; fallback does not imply strict Zalo DS compliance.
 
+### BUG-026 - Copied ZDS catalog was misclassified as empty
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, `P0-FIG-007` live inspection.
+- **Symptom:** The app labeled the public Zalo Mini App Framework page as synthetic fallback even though the page visibly contained the ZDS controls needed by the demo.
+- **Trigger:** Capture a page where external ZDS components were copied in as `INSTANCE` nodes and no matching local `COMPONENT` definitions existed in the bounded subtree.
+- **Root cause:** Capture treated only local component definitions as a usable design-system map and ignored copied instances, so a valid same-file catalog produced a false zero-component result.
+- **Fix:** Added bounded instance discovery, semantic role normalization, light/default variant scoring, typed same-file bindings, strict cloning, text overrides and independent instance-backed read-back.
+- **Regression test:** connector normalization tests, plugin discovery/apply tests, Go strict binding tests and `PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke` pass; live node `449:16909` uses light/default ZDS instances.
+- **Caveat:** The binding is intentionally page-scoped. Moving or deleting source catalog instances invalidates preflight/read-back and requires recapture.
+
+### BUG-027 - Reasoning activity leaked across history threads
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, `P0-UX-001`.
+- **Symptom:** Switching from a thread with a running provider turn made every thread show the same pending state and allowed confusing cross-thread UI updates.
+- **Trigger:** Start a slow turn in thread A, then open thread B before it completes.
+- **Root cause:** Renderer activity was one global boolean and async completion wrote through a stale `activeThread` closure. Main only rejected another turn for the same thread.
+- **Fix:** Track the running thread ID, guard async state application with the currently requested thread, show pending only on the owner thread and enforce one global provider turn in main.
+- **Regression test:** `apps/desktop/src/main/active-turns.test.ts` covers empty, same-thread and cross-thread locking; workspace typecheck and non-socket test suite pass.
+- **Caveat:** A running turn is process-local by design; interrupted turns are recovered from persisted terminal/checkpoint state after restart.
+
+### BUG-028 - Generic canvas fallback duplicated context and stacked scenes
+
+- **Status:** FIXED
+- **Found:** 2026-07-23, `P0-UX-001` reminder-backup review.
+- **Symptom:** Reminder-backup requests produced a generic flow, the first node repeated transcript text, prototypes contained placeholder rows and subsequent draws overlapped old agent layers.
+- **Trigger:** Discuss a reminder-backup idea, request the full flow, then request a prototype on the same canvas.
+- **Root cause:** The deterministic planner had no backup-reminder domain, generic start labels embedded recent messages, and explicit redraws only upserted new IDs without removing the previous scene.
+- **Fix:** Added a 17-node reminder-backup workflow, five detailed prototype screens, duplicate filtering and type-aware replace-scene operations. Executor deletes an old scene of the same type before creating new furniture/frames while preserving complementary workflow/prototype scenes.
+- **Regression test:** `packages/canvas/src/index.test.ts` checks domain nodes, unique labels, detailed screens and old-scene deletion; ProductSpec synthesis has a matching five-screen regression test.
+- **Caveat:** Visual screenshot review still requires an unrestricted Electron run; semantic/layout tests do not replace human review.
+
+### BUG-029 - Figma output repeated low-fidelity wireframe slots
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, `P0-FIG-008`.
+- **Symptom:** Approved Figma output looked like repeated generic phone wireframes and could not serve as a credible near-product design reference.
+- **Trigger:** Generate a reminder-backup artifact from a valid ProductSpec and compare its screens, hierarchy and transitions.
+- **Root cause:** The artifact plan described only a vertical list of semantic component slots. The compositor owned layout and copied the same placeholder structure to every screen; prototype edges and concept coverage were trusted from root metadata instead of the rendered design.
+- **Fix:** Added a cross-runtime Design Blueprint with art direction, archetypes and structured product content; added kind-specific product composition, strict ZDS instance integration and real Figma navigation reactions on a dedicated output Page.
+- **Regression test:** reminder-backup blueprint tests lock five distinct archetypes and domain content; plugin tests delete rendered design nodes/reactions and prove read-back loses the corresponding concept, section and edge; TypeScript and Go audits reject those mismatches.
+- **Caveat:** Automated structure/audit tests cannot certify visual taste. Close `P0-FIG-008` only after the newly generated live Page is reviewed at normal Figma zoom; future provider-assisted art-direction enrichment must still produce the validated Blueprint contract.
+
+### BUG-030 - Interleaved provider edges executed before their nodes
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, `P0-CAN-009` real Codex canvas smoke.
+- **Symptom:** A valid selected-node edit rendered only 7 of 10 proposed operations and failed durable read-back.
+- **Trigger:** Let a provider interleave `create_node` and `connect` operations where an edge appears before one of its endpoint nodes.
+- **Root cause:** The renderer executed provider array order literally, so tldraw rejected connections whose endpoints had not been created yet.
+- **Fix:** Execute deletes first, then all node creation, updates and finally all connections while preserving the immutable validated program for receipt comparison.
+- **Regression test:** real `./run.sh smoke-codex-canvas` now applies every provider-created feedback node and receives `Đã cập nhật vùng canvas đã chọn` after read-back.
+- **Caveat:** A connection to a genuinely absent semantic ID still fails verification by design.
+
+### BUG-031 - Conversation-only turns carried the full creative schema
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, `P0-CAN-009` real Codex canvas smoke.
+- **Symptom:** An ordinary idea discussion could spend the full 120-second provider timeout even though no canvas mutation was requested.
+- **Trigger:** Send a normal product idea through Codex while the output schema still requires the complete rich Canvas Program contract.
+- **Root cause:** Chat prose and creative scene generation shared one large structured-output schema.
+- **Fix:** Classify provider requests into lightweight conversation turns and creative canvas turns. Only explicit draw/edit, selection or CanvasDiff context includes the rich canvas schema; ambiguous edits return a fast app-owned clarification.
+- **Regression test:** domain contract test covers the lean schema; real Codex smoke completes normal discussion, leaves canvas blank, then independently produces a provider-authored scene.
+- **Caveat:** Rich Codex scenes still take roughly 45-105 seconds in observed runs; keep Mock/Offline ready for a time-boxed stage demo.
+
+### BUG-032 - Long provider descriptions overlapped workflow lanes
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, `P0-CAN-009` live screenshot review.
+- **Symptom:** Long provider-authored card descriptions crossed the lane label near the bottom of a workflow node.
+- **Trigger:** Render a workflow node with a description substantially longer than deterministic fallback copy.
+- **Root cause:** Rich card height growth was capped at 72 pixels regardless of wrapped line count.
+- **Fix:** Estimate wrapped lines at the renderer width and allow up to 220 pixels of additional height; layout and collision handling consume the same dimensions.
+- **Regression test:** workspace typecheck/tests and `./run.sh smoke-flow` pass after the geometry change; screenshot review confirms description and lane occupy separate regions.
+- **Caveat:** Renderer layout protects readability, but visual taste still requires screenshot review for each primary demo scenario.
+
+### BUG-033 - Natural Figma approval produced promises instead of execution
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, `P0-FIG-008`.
+- **Symptom:** After the agent described a Figma export, messages such as “hãy làm đi” produced another explanation but no immutable plan, approval card or external write.
+- **Trigger:** Confirm a Figma action through the chat composer instead of the dedicated artifact button.
+- **Root cause:** Every chat message went to the reasoning provider; natural artifact intent was never routed to the app-owned artifact orchestrator.
+- **Fix:** Added bounded natural-language artifact intent classification. Explicit creation prepares the immutable plan; contextual confirmation approves only an already-persisted pending plan; ordinary prototype/canvas requests stay with the canvas path.
+- **Regression test:** `apps/desktop/src/main/artifact-intent.test.ts` covers explicit Figma creation, contextual approval, ordinary product chat and prototype non-hijacking. `./run.sh smoke-lifecycle` verifies the full prototype path still runs.
+- **Caveat:** External write still requires a persisted payload-hash approval. A first request may prepare the plan; execution starts only after the approval card or a subsequent unambiguous confirmation.
+
+### BUG-034 - Figma artifact work had mismatched timeouts and duplicate full-document reads
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, `P0-FIG-008`.
+- **Symptom:** Figma creation could appear frozen, exceed the bridge timeout, and spend extra time scanning the document immediately after apply.
+- **Trigger:** Apply a multi-screen lifecycle artifact through the live MCP/plugin path.
+- **Root cause:** Desktop, capability registry and plugin bridge used different timeout budgets; apply emitted no heartbeat; the plugin returned a full read snapshot and Agent Core then performed a second independent full scan.
+- **Fix:** Replaced the fixed budget with an operation-aware client timeout: five-minute minimum plus five seconds per estimated operation, capped at 30 minutes. The bridge/capability ceiling is 30 minutes, heartbeat inactivity is five minutes and root-targeted read-back is three minutes. Apply emits per-screen heartbeats, the renderer shows stage/elapsed telemetry, the lightweight receipt avoids a duplicate traversal and target validation is cached for 10 seconds.
+- **Regression test:** workspace typecheck and 132 tests pass; timeout bound tests, plugin lifecycle apply/idempotency/root-read tests, full Go suite, rebuilt runtime/plugin, `./run.sh smoke` and `./run.sh smoke-lifecycle` pass.
+- **Caveat:** `PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke` on 2026-07-24 found no connected plugin session (`targetAllowed=false`), so this slice still needs a connected-session live timing and normal-zoom visual review before `P0-FIG-008` can close.
+
+### BUG-035 - Kick-off Discovery promised choices but persisted no checkpoint
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, exported ride-booking thread review.
+- **Symptom:** `Kick off cho ý tưởng đặt xe` received Discovery prose promising choices, but no choices appeared. A three-line free-form answer then received the unrelated canvas message asking the user to select a node.
+- **Trigger:** Start a thread with spaced `kick off`, then answer with content containing `tài xế đối tác` or `theo dõi chuyến`.
+- **Root cause:** The lifecycle transition only recognized the single token `kickoff`, leaving RunState at `IDEA_INTAKE` with no reasoning checkpoint. Separately, accent normalization turned `đối tác` and `theo dõi` into text containing the overly broad canvas edit keyword `doi`.
+- **Fix:** Every provider response now carries a typed semantic intent. `discovery` persists the checkpoint, while `conversation` cannot mutate canvas. Structured three-line answers still advance the visible Discovery checkpoint through the same validated boundary.
+- **Regression test:** provider contract/mock tests cover Discovery versus conversation; `./run.sh smoke-lifecycle` reports 3 Discovery questions and 3 Decision options; real `./run.sh smoke-codex-canvas` keeps ordinary discussion blank-first.
+- **Caveat:** Free-form auto-advance intentionally requires one structured line per visible question; partial or unstructured discussion remains provider-owned conversation instead of guessing business decisions.
+
+### BUG-036 - Application regex duplicated LLM semantic intent
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, follow-up architecture review of `BUG-035`.
+- **Symptom:** Correct Vietnamese product language could trigger unrelated canvas or lifecycle actions, and each new wording required another keyword exception.
+- **Trigger:** Accent-fold or keyword-match natural language before calling the reasoning provider.
+- **Root cause:** Application code owned both semantic interpretation and execution policy. Accent folding destroyed distinctions such as `đổi`, `đối` and `dõi`, while a large creative schema could not be sent to every ordinary turn without latency cost.
+- **Fix:** Added provider-neutral typed intents (`conversation`, `discovery`, `draw`, `edit`, `promote`, `change`, `artifact`). Natural turns first use a lightweight route schema; only `draw/edit` load the rich creative schema. Slash canvas commands go directly to creative mode. Agent Core requires a selected or uniquely resolved target for edit and keeps all approval guards.
+- **Regression test:** domain/reasoning/canvas contracts verify typed routing and accent-safe target resolution; Mock `./run.sh smoke-flow`, `./run.sh smoke-lifecycle` and real `./run.sh smoke-codex-canvas` pass. The real provider produced a 20-node flow and an 11-operation selected edit.
+- **Caveat:** Natural `draw/edit` uses two provider turns and may be slower than `/canvas flow|prototype`; the real-provider smoke budget accounts for both bounded turns.
+
+### BUG-037 - Live Figma silently degraded to a synthetic wireframe path
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, live `P0-FIG-008` visual review.
+- **Symptom:** Figma appeared to generate in 1-2 seconds, looked generic and later tried to import `fixture/*` component keys.
+- **Root cause:** Live DS capture failure was persisted as a fixture fallback and the execution context converted it into a free-mode live write.
+- **Fix:** Live strict preparation now blocks without real bindings. Capture keeps copied same-file instances even when supplemental component/style/variable APIs fail.
+- **Regression test:** live capture returned 190 instances, 25 semantic bindings, 9 tokens and `fallbackReason: null`; strict apply/read-back verified 16 instance-backed controls.
+- **Caveat:** Mock Figma remains a labeled offline rehearsal path, not visual quality evidence.
+
+### BUG-038 - Figma approval and Go plan hash disagreed across runtimes
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, connected Figma approval.
+- **Symptom:** Approved apply failed immediately with `Approved action does not cover this immutable Figma plan`.
+- **Root cause:** execution reran preflight, and TypeScript recomputed a Go-owned hash using different JSON escaping semantics.
+- **Fix:** Persist the exact prepared preflight in the approved payload. Agent Core validates the payload hash and matching connector plan hash; Go recomputes its own hash before write.
+- **Regression test:** prepared-preflight execution test proves zero second preflight; live approved action completed and verified.
+- **Caveat:** Connector-native hashes are opaque outside their adapter.
+
+### BUG-039 - Long Figma apply was cut by a hidden follower deadline
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, first creative live apply.
+- **Symptom:** a 9-minute approved budget still failed near 35 seconds.
+- **Root cause:** the follower used a fixed 35-second `http.Client.Timeout`.
+- **Fix:** follower calls inherit MCP/caller context deadlines; health ping keeps its own 2-second bound. Creative element count contributes to estimated operations.
+- **Regression test:** `TestFollowerUsesCallerDeadlineInsteadOfFixedHTTPTimeout`, Go suite and connected apply.
+- **Caveat:** total apply remains bounded to 30 minutes.
+
+### BUG-040 - Figma async lookup timed out for nodes already loaded locally
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, live capture and apply recovery.
+- **Symptom:** `get_node_context` and apply returned Figma's 10-second connection error although the file/page was visibly open.
+- **Root cause:** plugin reads always called network-backed `getNodeByIdAsync`; artifact lookup also loaded every page before checking the current one.
+- **Fix:** read and lifecycle handlers resolve loaded page trees first, scan current page first and skip unavailable non-current pages. Supplemental capture failures no longer erase a successful instance catalog.
+- **Regression test:** direct live page read completed in 0.35s and full 102KB DS capture in 1.4s.
+- **Caveat:** genuinely unloaded remote pages may still require Figma connectivity.
+
+### BUG-041 - Creative reruns collided with stale idempotency and page limits
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, repeated live visual tests in a Figma Free file.
+- **Symptom:** different blueprints shared `creative-v1`; a failed write left an empty agent page and all free page slots were consumed.
+- **Root cause:** idempotency did not include creative content, and timeout could outlive the caller after creating a page.
+- **Fix:** idempotency includes the blueprint hash. An approved `create_or_recover_incomplete` strategy may reuse only a same-spec page with exactly one agent-owned root and no screen metadata.
+- **Regression test:** plugin recovery test and live run reused the incomplete page, then verified root `489:16542`.
+- **Caveat:** completed artifacts and user pages are never replaced automatically.
+
+### BUG-042 - Compact ZDS messages could clip long provider copy
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, 2248x1024 live artifact bitmap review.
+- **Symptom:** long status/error text was clipped inside compact copied instances.
+- **Root cause:** the design prompt had no control-specific copy budget.
+- **Fix:** provider policy and plan validation limit only app-header, button and status/error control copy; supporting prose stays unconstrained in primitive composition. The deterministic fallback compacts its own control copy at word boundaries while preserving Vietnamese text.
+- **Regression test:** artifact-plan content-fit rejects a 65-character provider message; reasoning fallback tests enforce 32-character headers and 64-character status messages; `./run.sh smoke-flow` verifies the promoted 17-screen journey.
+- **Caveat:** final visual review remains required because structural verification cannot judge taste.
+
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 
 ```md
@@ -436,13 +622,13 @@ Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 - Setup adapter starts or reuses the local HTTP/WebSocket runtime on port 1802, detects the built manifest/bundle and polls session health without requiring a Figma REST token.
 - The import gate intentionally performs no Figma write. Session pinning, target page allowlist and DS context capture start only after the user runs the plugin.
 - Live verification used the imported plugin against a public sandbox duplicate. MCP follower health, `get_pages` and bounded `capture_design_system_context` all succeeded with an explicit session ID.
-- The public page exposed 6 paint styles, 3 text styles and 312 text nodes, but zero relevant components in the allowlisted subtree. The app stores only normalized counts/manifest data and switches to the clearly labeled synthetic fixture guard.
+- The public page exposes copied ZDS controls primarily as external-library `INSTANCE` nodes, not local component definitions. Bounded discovery now retains 199 representative variants and normalizes them into semantic same-file bindings.
 - Plugin connection is not permission: readiness requires an immutable hash over exact session/file/page identity plus cached DS context. A session/page mismatch removes ready state.
 - MCP tool `plan_design_system_screens` is intentionally pure: it receives the host-approved target and normalized manifest, computes the full strict decision and plan hash, and has no `Runtime` parameter capable of issuing plugin writes.
 - Lifecycle Figma apply uses plugin data key `za-pm-lifecycle`; root metadata owns idempotency/plan/target identity, screen metadata owns requirement traceability, and slot metadata owns resolved component role. Strict apply removes the root before returning an error if any component cannot be instantiated.
 - Cross-runtime approval hashes use recursively canonicalized JSON in both Go and TypeScript. Go struct serialization order is not an approval-hash contract.
 - Lifecycle artifact roots are direct page children by contract; idempotency/read-back inspects that bounded set rather than traversing the full design file.
-- If bounded live component-map capture cannot finish, the app persists the pinned target plus a labeled `fixture_fallback` context. Live writes then use `mode=free` and primitives with no fixture component keys.
+- Same-file catalog selection prefers light/default, correctly leveled variants and rejects bindings outside the pinned page. If bounded live capture cannot produce either component definitions or usable instances, the app persists a labeled `fixture_fallback`; free-mode writes use primitives with no fixture component keys.
 
 Khi tiếp tục spike Figma bridge, ghi lại:
 
@@ -465,8 +651,8 @@ App commands đã chạy thành công:
 ./run.sh             # verified 2026-07-22; Electron dev app opens
 ./run.sh setup       # verified 2026-07-22; installs/builds app, Go runtime and Figma plugin bundle
 ./run.sh reset       # verified by shared reset path 2026-07-22; resets then opens dev app
-./run.sh typecheck   # verified 2026-07-23
-./run.sh test        # verified 2026-07-23; 112 tests pass, 1 optional live test skipped
+./run.sh typecheck   # verified 2026-07-24
+./run.sh test        # verified 2026-07-24; 134 tests pass, 1 optional live test skipped
 ./run.sh build       # verified 2026-07-23
 ./run.sh smoke       # verified 2026-07-23; Mock provider + canvas + Markdown artifact
 ./run.sh smoke-recovery  # verified 2026-07-22; injected Jira failure + target-only UI retry
@@ -476,7 +662,7 @@ App commands đã chạy thành công:
 ./run.sh smoke-canvas-agent  # verified 2026-07-23; draw + selected feedback + script + promotion + verified artifacts
 ./run.sh smoke-codex-canvas  # verified 2026-07-23; real Codex Canvas Program + topology guard + verified artifacts
 PM_AGENT_SMOKE_PROVIDER=codex-local ./run.sh smoke  # verified 2026-07-22
-PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke  # verified 2026-07-23; approved live write + read-back/audit + non-mock receipt
+PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke  # verified 2026-07-23; strict same-file ZDS write + read-back/audit + non-mock receipt
 ```
 
 Command MCP đã chạy thành công:
@@ -484,8 +670,9 @@ Command MCP đã chạy thành công:
 ```text
 cd mcp-tool/za-talk-to-figma && go test ./...  # verified 2026-07-23
 cd mcp-tool/za-talk-to-figma/plugin && bun run typecheck  # verified 2026-07-23
-cd mcp-tool/za-talk-to-figma/plugin && bun test  # verified 2026-07-23; 256 tests pass
+cd mcp-tool/za-talk-to-figma/plugin && bun test  # verified 2026-07-23; 259 tests pass
 PM_AGENT_FIGMA_LIVE=1 pnpm exec vitest run packages/connectors/src/figma-mcp.live.test.ts  # verified 2026-07-23
+pnpm vitest run --exclude apps/desktop/src/main/canvas-bridge.test.ts --exclude packages/connectors/src/figma-runtime.test.ts  # verified 2026-07-23; 118 pass, 1 optional live skip
 ```
 
 Chỉ thêm command mới sau khi đã chạy thành công trong workspace hiện tại.
@@ -506,6 +693,7 @@ pnpm typecheck     # verified YYYY-MM-DD
 - Dùng default tldraw CDN mâu thuẫn local-first CSP; dùng `@tldraw/assets` self-hosted.
 - Clone toàn bộ `tldraw/tldraw` không cần cho SDK embedding; official package `tldraw` + `@tldraw/assets` nhỏ hơn, versioned và đúng quick-start. Chỉ clone monorepo nếu sửa upstream SDK hoặc chạy examples/source development.
 - Fit một graph lớn bằng Dagre thuần tạo strip rộng hơn 4,000 canvas units và zoom 16%; giữ Dagre cho graph nhỏ/local edit, còn graph lớn cần main-journey wrapping và exception lanes.
+- Restricted execution sandbox không cho Node/Go test mở localhost listener và Electron GUI kết thúc bằng `SIGABRT`; dùng non-socket suite plus targeted lifecycle/plugin tests here, then run smoke and live Figma review in the normal desktop session.
 
 Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví dụ native SQLite packaging, Figma bridge mutation semantics, tldraw serialization hoặc Electron IPC issue. Mỗi entry cần nêu cách nhận biết và phương án thay thế đã chọn.
 
@@ -725,6 +913,82 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Fixed cross-runtime plan-hash canonicalization and removed deep-tree idempotency scans that caused live timeouts on large files.
 - Verification: 112 tests + 1 optional live skip, workspace typecheck/build, `./run.sh smoke-lifecycle`, 256 plugin tests, Go suite, live adapter test and `PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke` pass. App smoke recorded live Figma node `444:16250` and verified Figma/Jira/Zdoc plus Markdown.
 - Next action: finish `P0-QA-001`, then select/live-test one API provider and complete Electron E2E plus packaging/rehearsal.
+
+### 2026-07-23 - Strict same-file ZDS catalog
+
+- Reclassified `[PUBLIC] Zalo Mini App Framework 2.0 - dup` from a false empty-component fallback to an allowlisted same-file ZDS catalog by discovering copied external-library instances.
+- Added role-aware representative capture, component-property preservation and light/default variant scoring for headers, buttons, inputs, OTP, lists, status messages, modals and selection controls.
+- Strict Figma plans now carry typed source bindings, clone exact page-scoped instances, apply ProductSpec text, and independently verify both actual `INSTANCE` nodes and immutable bindings.
+- Onboarding ProductSpec synthesis now requests concrete text/phone/OTP/status roles rather than generic controls.
+- Verification: 114 workspace tests pass plus one optional live skip; 259 plugin tests, plugin typecheck/build, Go suite, workspace typecheck/build and live smoke pass. Live Figma node `449:16909` was visually reviewed and verified with light/default list and primary-button variants.
+- Next action: continue `P0-QA-001` critical-matrix reconciliation, then Electron E2E and packaging/rehearsal.
+
+### 2026-07-23 - Reviewable reminder-backup artifacts and thread activity
+
+- Replaced global renderer `sending` state with an owning thread ID, guarded stale async completion and added a main-process global one-turn lock. Other histories remain readable but cannot send while a turn is active.
+- Reserved a stable selection-context slot so canvas selection no longer moves the chat/product inspector. Added one-click export for chronological chat, ProductSpec Markdown/JSON, canvas, workspace and a single `review-bundle.json`.
+- Added a reminder-backup flow with setup, due reminder, immediate backup, snooze, skip, failure and retry paths. Prototype output now has five distinct detailed backup screens; redraw replaces only the same scene type and keeps workflow plus prototype available on one canvas.
+- ProductSpec synthesis and Figma slot content now preserve the same reminder-backup journey. Strict recipe-v3 apply keeps the selected public framework Page as the ZDS source and writes each new artifact to a named dedicated Page with audited page identity.
+- Verification: workspace typecheck/build, 118 non-socket tests plus one optional skip, 259 plugin tests/typecheck/build and targeted lifecycle Go tests pass. Full socket tests and Electron smoke are blocked by this execution sandbox; normal-session visual canvas/Figma review is the only remaining acceptance item.
+- Next action: run `./run.sh reset`, review the reminder-backup canvas and dedicated Figma Page, then close `P0-UX-001` and resume `P0-QA-001`.
+
+### 2026-07-24 - Product-grade Figma Design Blueprint
+
+- Reframed Figma as the near-product design realization surface: ProductSpec remains business truth, the Design Blueprint owns concept/hierarchy/content/states, and the allowlisted ZDS catalog guards interaction controls.
+- Added reminder-backup concept `Quiet confidence` with five distinct product archetypes and domain content; the compositor now varies status, metric, choice, timeline, progress, info and confirmation treatments instead of repeating one wireframe.
+- Dedicated output Pages include a rendered design brief, strict same-file ZDS instances, tailored navigation and real smart-animate navigation reactions.
+- Read-back derives concept/sections/edges from rendered nodes and reactions. Removing those nodes or reactions causes TypeScript/Go audit mismatch instead of a false verified receipt.
+- Verification: workspace typecheck, 122 tests + 1 optional skip, production build, `./run.sh smoke-lifecycle`, 260 plugin tests/typecheck/build, full Go suite and rebuilt MCP/plugin artifacts pass.
+- Next action: generate recipe-v4 through the approved live Figma path, visually review the dedicated reminder-backup Page, then close `P0-FIG-008` and resume `P0-UX-001`.
+
+### 2026-07-24 - Creative chat and provider-authored native scenes
+
+- Split provider work into lightweight conversation turns and rich creative canvas turns. Ordinary product discussion stays conversational and preserves a blank canvas; explicit drawing, selected feedback and typed CanvasDiff sync load the scene contract.
+- Extended Canvas Programs with scene identity, workflow hierarchy, tone/lane/icon metadata and authored prototype screen blocks. Provider output is the creative authority; Agent Core owns policy, dependency-ordered execution, checkpoint and read-back. Deterministic planning is fallback only.
+- Upgraded tldraw rendering to editable workflow cards and five-screen product concepts with native text, variable content-aware geometry, semantic connections, local-edit camera focus and one stable canvas per thread.
+- Sync now compares against a thread canvas baseline and sends bounded created, updated, moved and deleted changes. Ambiguous edits ask for a target immediately; selected edits use the actual semantic ID instead of a template ID.
+- Verification: `./run.sh typecheck`, `./run.sh test` (124 pass + 1 optional skip), `./run.sh build`, `./run.sh smoke-lifecycle`, `./run.sh smoke-flow` and `./run.sh smoke-codex-canvas` pass. The live Codex smoke verifies blank-first discussion, a provider-authored 20-node scene, selected retry/error feedback, ProductSpec promotion, developer Canvas Program and artifact read-back.
+- Performance note: observed Codex conversation turns completed in roughly 20-25 seconds and rich workflow turns in roughly 94-102 seconds. Use Codex live to prove creative authority; keep Mock/Offline as the deterministic rehearsal fallback.
+- Next action: choose one remaining slice: visually finish the dedicated live Figma Page under `P0-FIG-008`, or complete export/thread UX review under `P0-UX-001`.
+
+### 2026-07-24 - Observable natural-language Figma execution
+
+- Routed explicit Figma/package requests and contextual approval into Agent Core instead of allowing the reasoning provider to promise an action it cannot execute.
+- Preserved the immutable approval boundary: preparation persists the exact preflight payload, while approval executes only that pending payload hash.
+- Added planning, availability, preflight, write, read-back, verification and completion progress with a stable UI region and live elapsed time. Final chat confirmation records Figma total, write and read-back durations.
+- Removed duplicate post-apply traversal. Apply returns root/page receipt data; independent verification reads by the returned root ID and falls back to bounded idempotency lookup only when needed.
+- Replaced fixed Figma apply limits with a size-aware 5-30 minute client budget. The MCP bridge/capability ceiling is 30 minutes, read-back is three minutes and five minutes without heartbeat is treated as inactivity.
+- Expanded the labeled synthetic strict fixture with backup-flow roles without weakening strict live ZDS mapping.
+- Added deterministic `/figma prepare|approve|create|status|retry`, `/canvas flow`, `/canvas prototype` and `/help` commands with composer discovery, keyboard selection and `/artifact` alias. Natural-language routing remains enabled.
+- Verification: workspace typecheck, 132 tests plus one optional skip, production build, regular smoke and lifecycle smoke pass; smoke proves slash discovery/status routing stays app-owned, and lifecycle smoke proves five prototype frames, 58 editable children and bidirectional canvas sync. All 260 plugin tests/typecheck/build and full Go tests pass. Live smoke was attempted but no Figma plugin session connected to the isolated smoke runtime.
+- Next action: keep Figma Desktop/plugin open against the launched runtime, run `PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke`, record the final Figma timing message and visually review the dedicated output Page.
+
+### 2026-07-24 - Discovery checkpoint and free-form answer recovery
+
+- Audited the exported ride-booking thread and confirmed canonical RunState never left `IDEA_INTAKE`; the missing choices were a lifecycle intent bug, not a renderer-only problem.
+- Recognized `kickoff`, `kick off` and `kick-off` consistently, and persisted the Discovery checkpoint before the UI promises selectable clarification options.
+- Accepted complete colon-delimited or Markdown three-line answers in chat and advanced them through the same validated Discovery-to-Decision boundary used by the option controls.
+- Removed confirmed `doi` false positives from canvas edit classification so `tài xế đối tác` and `theo dõi chuyến` remain product conversation.
+- Verification: targeted 20 tests, workspace typecheck, all 140 tests plus one optional skip and `./run.sh smoke-lifecycle` pass; smoke reports 3 questions, 3 options, custom-answer support, five prototype frames and no renderer error.
+- Next action: rerun the exact ride-booking transcript in a new thread, then return to live Figma timing and normal-zoom visual review for `P0-FIG-008`.
+
+### 2026-07-24 - Provider-owned semantic intent
+
+- Removed production Vietnamese keyword classifiers for kickoff, canvas interaction and natural Figma routing.
+- Added a provider-neutral intent envelope across Mock, Codex, OpenAI, Gemini and Anthropic structured outputs. The route schema stays small; only provider-approved `draw/edit` requests load Canvas Program.
+- Kept slash commands deterministic and direct. Agent Core still blocks an edit without selection or a uniquely resolved semantic target, controls ProductSpec promotion and requires immutable approval for artifact writes.
+- Target resolution now prefers exact Unicode Vietnamese and uses accent-folded matching only as a unique fallback after intent is already `edit`; ambiguous folded matches return no target.
+- Verification: workspace typecheck, 134 tests plus one optional skip, lifecycle smoke, Mock canvas flow smoke and real Codex canvas smoke pass. Codex kept conversation blank, authored a 20-node scene, proposed an 11-operation selected edit, promoted ProductSpec and verified artifacts.
+- Performance note: natural visual requests use two bounded provider turns; `/canvas flow|prototype` skips routing and remains the fast deterministic demo control.
+- Next action: manually replay the ride-booking kickoff in the dev app, then return to connected-session Figma timing and visual review for `P0-FIG-008`.
+
+### 2026-07-24 - Connected creative Figma close-out
+
+- Moved visual authorship from the fixed compositor into a provider-owned Creative Figma Blueprint: arbitrary nested composition, product copy, primitives, ZDS roles and prototype edges. Agent Core now guards traceability, live target, content fit, immutable approval and read-back instead of prescribing the layout.
+- Live strict capture retained 190 copied same-file ZDS instances, normalized 25 semantic bindings and 9 tokens with no fixture fallback. Codex planned 4 screens/51 layers in 181 seconds.
+- Approved live apply recovered only an incomplete agent-owned Page, wrote in 4.7 seconds, read back in 0.5 seconds and verified root `489:16542`, 4 distinct screens, 16 real ZDS instances and 4 prototype edges.
+- Final regression: workspace typecheck/build; 144 tests plus one optional skip; 262 plugin tests and plugin typecheck; full Go suite; canvas, semantic flow and approval-reject smokes. The semantic smoke caught and fixed overlong deterministic header copy before close-out.
+- Next action: rehearse the exact hackathon script in a clean workspace, export the review bundle and capture final canvas/progress/Figma visuals.
 
 ## 10. End-of-session checklist
 

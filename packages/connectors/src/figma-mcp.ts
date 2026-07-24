@@ -41,6 +41,18 @@ export interface FigmaJsonToolTransport {
   close(): Promise<void>
 }
 
+export const FIGMA_APPLY_MIN_TIMEOUT_MS = 5 * 60_000
+export const FIGMA_APPLY_MAX_TIMEOUT_MS = 30 * 60_000
+export const FIGMA_APPLY_OPERATION_TIMEOUT_MS = 5_000
+
+export function figmaApplyTimeoutMs(estimatedOperations: number): number {
+  const operations = Number.isFinite(estimatedOperations) ? Math.max(0, Math.floor(estimatedOperations)) : 0
+  return Math.min(
+    FIGMA_APPLY_MAX_TIMEOUT_MS,
+    FIGMA_APPLY_MIN_TIMEOUT_MS + operations * FIGMA_APPLY_OPERATION_TIMEOUT_MS,
+  )
+}
+
 export class FigmaMcpError extends Error {
   constructor(
     message: string,
@@ -124,6 +136,7 @@ function targetHash(target: Omit<FigmaTargetBinding, 'schemaVersion' | 'targetHa
 
 export class FigmaMcpAdapter {
   private readonly transport: FigmaJsonToolTransport
+  private readonly verifiedTargets = new Map<string, number>()
 
   constructor(options: FigmaMcpOptions, transport?: FigmaJsonToolTransport) {
     this.transport = transport ?? new SdkFigmaJsonToolTransport(options)
@@ -160,10 +173,13 @@ export class FigmaMcpAdapter {
   }
 
   async verifyTarget(target: FigmaTargetBinding): Promise<FigmaTargetBinding> {
+    const verifiedAt = this.verifiedTargets.get(target.targetHash)
+    if (verifiedAt && Date.now() - verifiedAt < 10_000) return target
     const verified = await this.pinTarget(target.sessionId, target.pageId, target.allowedAt)
     if (verified.targetHash !== target.targetHash || verified.fileName !== target.fileName || verified.pageName !== target.pageName) {
       throw new FigmaMcpError('Figma target không còn khớp allowlist đã duyệt.', 'VALIDATION_ERROR', false)
     }
+    this.verifiedTargets.set(target.targetHash, Date.now())
     return verified
   }
 
@@ -172,7 +188,7 @@ export class FigmaMcpAdapter {
     return this.call('capture_design_system_context', {
       sessionId: target.sessionId,
       sourcePageId: target.pageId,
-    }, figmaDesignSystemCaptureSchema, 45_000)
+    }, figmaDesignSystemCaptureSchema, 180_000)
   }
 
   async preflightArtifactPlan(
@@ -186,26 +202,28 @@ export class FigmaMcpAdapter {
       artifactPlan: plan,
       manifest,
       allowedTarget,
-    }, figmaPreflightResultSchema, 15_000)
+    }, figmaPreflightResultSchema, 60_000)
   }
 
   async applyArtifactPlan(preflight: FigmaPreflightResult, approvedPlanHash: string): Promise<FigmaApplyResult> {
     await this.verifyTarget(preflight.plan.source.target)
+    const timeoutMs = figmaApplyTimeoutMs(preflight.plan.estimatedOperations)
     return this.call('apply_design_system_plan', {
       sessionId: preflight.plan.source.target.sessionId,
       preflight,
       planHash: preflight.planHash,
       approvedPlanHash,
-    }, figmaApplyResultSchema, 60_000)
+    }, figmaApplyResultSchema, timeoutMs)
   }
 
-  async readArtifact(target: FigmaTargetBinding, idempotencyKey: string): Promise<FigmaArtifactSnapshot> {
+  async readArtifact(target: FigmaTargetBinding, idempotencyKey: string, rootNodeId?: string): Promise<FigmaArtifactSnapshot> {
     await this.verifyTarget(target)
     return this.call('read_lifecycle_artifact', {
       sessionId: target.sessionId,
       targetPageId: target.pageId,
       idempotencyKey,
-    }, figmaArtifactSnapshotSchema, 15_000)
+      ...(rootNodeId ? { rootNodeId } : {}),
+    }, figmaArtifactSnapshotSchema, 180_000)
   }
 
   async auditArtifact(preflight: FigmaPreflightResult): Promise<FigmaArtifactAuditResult> {
@@ -218,6 +236,7 @@ export class FigmaMcpAdapter {
   }
 
   close(): Promise<void> {
+    this.verifiedTargets.clear()
     return this.transport.close()
   }
 

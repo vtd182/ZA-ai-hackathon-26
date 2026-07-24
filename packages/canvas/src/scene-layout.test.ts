@@ -28,7 +28,7 @@ function operationProgram(): CanvasProgram {
 
 describe('scene-aware canvas layout', () => {
   it('reserves a stable mobile-frame size for prototype screens', () => {
-    expect(canvasNodeDimensions('screen', 'Giỏ hàng', 'prototype-cart')).toEqual({ width: 320, height: 520 })
+    expect(canvasNodeDimensions('screen', 'Giỏ hàng', 'prototype-cart')).toEqual({ width: 360, height: 720 })
   })
 
   it('wraps a prototype journey into a readable two-row deck', () => {

@@ -73,6 +73,19 @@ const figmaRawComponentSchema = z.object({
   variantProperties: z.record(z.string(), z.unknown()).optional(),
 })
 
+const figmaCatalogInstanceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.literal('INSTANCE'),
+  pageId: z.string(),
+  mainComponentId: z.string().nullable().optional(),
+  mainComponentName: z.string().nullable().optional(),
+  mainComponentKey: z.string().nullable().optional(),
+  componentProperties: z.record(z.string(), z.string()).default({}),
+  contextLabels: z.array(z.string()).default([]),
+  ancestorNames: z.array(z.string()).default([]),
+})
+
 export const figmaDesignSystemCaptureSchema = z.object({
   sourceRoot: z.object({
     id: z.string(),
@@ -85,6 +98,7 @@ export const figmaDesignSystemCaptureSchema = z.object({
     name: z.string(),
     key: z.string().optional(),
   })).default([]),
+  relevantInstances: z.array(figmaCatalogInstanceSchema).default([]),
   styles: z.unknown(),
   variables: z.unknown(),
   textNodes: z.array(z.object({

@@ -4,13 +4,54 @@ import type { ProductSpec } from './product-spec'
 export const canvasNodeKindSchema = z.enum(['note', 'process', 'decision', 'screen'])
 export type CanvasNodeKind = z.infer<typeof canvasNodeKindSchema>
 
+export const canvasToneSchema = z.enum(['neutral', 'brand', 'success', 'warning', 'danger', 'info', 'accent'])
+export type CanvasTone = z.infer<typeof canvasToneSchema>
+
+export const canvasIconSchema = z.enum(['sparkles', 'user', 'shield', 'bell', 'clock', 'database', 'check', 'warning', 'phone', 'settings', 'search', 'cloud'])
+export type CanvasIcon = z.infer<typeof canvasIconSchema>
+
+export const canvasScreenBlockSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(['hero', 'metric', 'field', 'choice', 'status', 'list', 'timeline', 'toggle', 'info']),
+  label: z.string().min(1).max(120),
+  value: z.string().max(180).nullable().default(null),
+  helper: z.string().max(180).nullable().default(null),
+  tone: canvasToneSchema.default('neutral'),
+  span: z.enum(['full', 'half']).default('full'),
+})
+export type CanvasScreenBlock = z.infer<typeof canvasScreenBlockSchema>
+
+export const canvasScreenSpecSchema = z.object({
+  eyebrow: z.string().max(80).nullable().default(null),
+  title: z.string().min(1).max(120),
+  subtitle: z.string().max(220).nullable().default(null),
+  blocks: z.array(canvasScreenBlockSchema).min(2).max(10),
+  primaryAction: z.string().min(1).max(80),
+  secondaryAction: z.string().max(80).nullable().default(null),
+  navItems: z.array(z.string().min(1).max(30)).max(5).default([]),
+  activeNav: z.string().max(30).nullable().default(null),
+})
+export type CanvasScreenSpec = z.infer<typeof canvasScreenSpecSchema>
+
 const positionSchema = {
   x: z.number().finite().optional(),
   y: z.number().finite().optional(),
 }
 
 export const canvasOperationSchema = z.discriminatedUnion('op', [
-  z.object({ op: z.literal('create_node'), id: z.string().min(1), label: z.string().min(1), kind: canvasNodeKindSchema, ...positionSchema }),
+  z.object({
+    op: z.literal('create_node'),
+    id: z.string().min(1),
+    label: z.string().min(1),
+    kind: canvasNodeKindSchema,
+    description: z.string().max(240).optional(),
+    badge: z.string().max(50).optional(),
+    lane: z.string().max(80).optional(),
+    icon: canvasIconSchema.optional(),
+    tone: canvasToneSchema.optional(),
+    screen: canvasScreenSpecSchema.optional(),
+    ...positionSchema,
+  }),
   z.object({ op: z.literal('connect'), id: z.string().min(1), fromId: z.string().min(1), toId: z.string().min(1), label: z.string().min(1).optional() }),
   z.object({ op: z.literal('update'), id: z.string().min(1), label: z.string().min(1).optional(), color: z.enum(['black', 'grey', 'blue', 'green', 'yellow', 'red', 'violet', 'orange']).optional() }),
   z.object({ op: z.literal('delete'), id: z.string().min(1) }),
@@ -23,6 +64,9 @@ export const canvasProgramSchema = z.object({
   summary: z.string().max(500),
   operations: z.array(canvasOperationSchema).max(200),
   script: z.string().max(20_000).nullable(),
+  sceneType: z.enum(['workflow', 'prototype', 'board']).optional(),
+  title: z.string().max(120).optional(),
+  description: z.string().max(300).optional(),
 }).superRefine((program, context) => {
   if (program.mode === 'operations' && program.operations.length === 0) {
     context.addIssue({ code: 'custom', message: 'An operations program must contain at least one operation', path: ['operations'] })
@@ -51,6 +95,11 @@ export interface CanvasShapeContext {
   semanticId?: string
   nodeKind?: CanvasNodeKind
   visualRole?: string
+  parentId?: string
+  description?: string
+  lane?: string
+  tone?: CanvasTone
+  content?: string[]
   x: number
   y: number
   width: number
@@ -91,6 +140,23 @@ export interface CanvasDocumentContext {
   lints?: CanvasLintIssue[]
 }
 
+export interface CanvasShapeChange {
+  id: string
+  label: string
+  change: 'created' | 'updated' | 'moved' | 'deleted'
+  before?: CanvasBoundsContext
+  after?: CanvasBoundsContext
+}
+
+export interface CanvasDiffContext {
+  schemaVersion: 1
+  fromRevision: number
+  toRevision: number
+  changes: CanvasShapeChange[]
+  selectedShapeIds: string[]
+  summary: string
+}
+
 export interface CanvasExecutionReceipt {
   schemaVersion: 1
   receiptId: string
@@ -126,19 +192,22 @@ const nullableString = { type: ['string', 'null'] } as const
 export const canvasProgramJsonSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['schemaVersion', 'mode', 'summary', 'script', 'operations'],
+  required: ['schemaVersion', 'mode', 'summary', 'script', 'operations', 'sceneType', 'title', 'description'],
   properties: {
     schemaVersion: { type: 'integer', const: 1 },
     mode: { type: 'string', enum: ['none', 'operations', 'script'] },
     summary: { type: 'string' },
     script: nullableString,
+    sceneType: { type: ['string', 'null'], enum: ['workflow', 'prototype', 'board', null] },
+    title: nullableString,
+    description: nullableString,
     operations: {
       type: 'array',
       maxItems: 200,
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['op', 'id', 'label', 'kind', 'fromId', 'toId', 'color', 'x', 'y'],
+        required: ['op', 'id', 'label', 'kind', 'fromId', 'toId', 'color', 'x', 'y', 'description', 'badge', 'lane', 'icon', 'tone', 'screen'],
         properties: {
           op: { type: 'string', enum: ['create_node', 'connect', 'update', 'delete'] },
           id: { type: 'string' },
@@ -149,6 +218,44 @@ export const canvasProgramJsonSchema = {
           color: { type: ['string', 'null'], enum: ['black', 'grey', 'blue', 'green', 'yellow', 'red', 'violet', 'orange', null] },
           x: { type: ['number', 'null'] },
           y: { type: ['number', 'null'] },
+          description: nullableString,
+          badge: nullableString,
+          lane: nullableString,
+          icon: { type: ['string', 'null'], enum: ['sparkles', 'user', 'shield', 'bell', 'clock', 'database', 'check', 'warning', 'phone', 'settings', 'search', 'cloud', null] },
+          tone: { type: ['string', 'null'], enum: ['neutral', 'brand', 'success', 'warning', 'danger', 'info', 'accent', null] },
+          screen: {
+            type: ['object', 'null'],
+            additionalProperties: false,
+            required: ['eyebrow', 'title', 'subtitle', 'blocks', 'primaryAction', 'secondaryAction', 'navItems', 'activeNav'],
+            properties: {
+              eyebrow: nullableString,
+              title: { type: 'string' },
+              subtitle: nullableString,
+              blocks: {
+                type: 'array',
+                minItems: 2,
+                maxItems: 10,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['id', 'kind', 'label', 'value', 'helper', 'tone', 'span'],
+                  properties: {
+                    id: { type: 'string' },
+                    kind: { type: 'string', enum: ['hero', 'metric', 'field', 'choice', 'status', 'list', 'timeline', 'toggle', 'info'] },
+                    label: { type: 'string' },
+                    value: nullableString,
+                    helper: nullableString,
+                    tone: { type: 'string', enum: ['neutral', 'brand', 'success', 'warning', 'danger', 'info', 'accent'] },
+                    span: { type: 'string', enum: ['full', 'half'] },
+                  },
+                },
+              },
+              primaryAction: { type: 'string' },
+              secondaryAction: nullableString,
+              navItems: { type: 'array', maxItems: 5, items: { type: 'string' } },
+              activeNav: nullableString,
+            },
+          },
         },
       },
     },
@@ -166,7 +273,16 @@ export function normalizeCanvasProgram(value: unknown): CanvasProgram | undefine
   if (mode === 'none') return emptyCanvasProgram
   if (mode === 'script') {
     const script = stringValue(wire.script)
-    return script ? canvasProgramSchema.parse({ schemaVersion: 1, mode, summary: stringValue(wire.summary) ?? '', operations: [], script }) : undefined
+    return script ? canvasProgramSchema.parse({
+      schemaVersion: 1,
+      mode,
+      summary: stringValue(wire.summary) ?? '',
+      operations: [],
+      script,
+      ...(stringValue(wire.sceneType) ? { sceneType: wire.sceneType } : {}),
+      ...(stringValue(wire.title) ? { title: stringValue(wire.title) } : {}),
+      ...(stringValue(wire.description) ? { description: stringValue(wire.description) } : {}),
+    }) : undefined
   }
   if (mode !== 'operations' || !Array.isArray(wire.operations)) return undefined
   const operations: CanvasOperation[] = []
@@ -178,7 +294,23 @@ export function normalizeCanvasProgram(value: unknown): CanvasProgram | undefine
     if (!id) continue
     if (operation.op === 'create_node' && label) {
       const kind = canvasNodeKindSchema.safeParse(operation.kind)
-      operations.push({ op: 'create_node', id, label, kind: kind.success ? kind.data : 'process', ...(typeof operation.x === 'number' ? { x: operation.x } : {}), ...(typeof operation.y === 'number' ? { y: operation.y } : {}) })
+      const icon = canvasIconSchema.safeParse(operation.icon)
+      const tone = canvasToneSchema.safeParse(operation.tone)
+      const screen = canvasScreenSpecSchema.safeParse(operation.screen)
+      operations.push({
+        op: 'create_node',
+        id,
+        label,
+        kind: kind.success ? kind.data : 'process',
+        ...(stringValue(operation.description) ? { description: stringValue(operation.description) } : {}),
+        ...(stringValue(operation.badge) ? { badge: stringValue(operation.badge) } : {}),
+        ...(stringValue(operation.lane) ? { lane: stringValue(operation.lane) } : {}),
+        ...(icon.success ? { icon: icon.data } : {}),
+        ...(tone.success ? { tone: tone.data } : {}),
+        ...(screen.success ? { screen: screen.data } : {}),
+        ...(typeof operation.x === 'number' ? { x: operation.x } : {}),
+        ...(typeof operation.y === 'number' ? { y: operation.y } : {}),
+      })
     } else if (operation.op === 'connect') {
       const fromId = stringValue(operation.fromId)
       const toId = stringValue(operation.toId)
@@ -191,6 +323,15 @@ export function normalizeCanvasProgram(value: unknown): CanvasProgram | undefine
     }
   }
   return operations.length > 0
-    ? canvasProgramSchema.parse({ schemaVersion: 1, mode, summary: stringValue(wire.summary) ?? '', operations, script: null })
+    ? canvasProgramSchema.parse({
+      schemaVersion: 1,
+      mode,
+      summary: stringValue(wire.summary) ?? '',
+      operations,
+      script: null,
+      ...(['workflow', 'prototype', 'board'].includes(String(wire.sceneType)) ? { sceneType: wire.sceneType } : {}),
+      ...(stringValue(wire.title) ? { title: stringValue(wire.title) } : {}),
+      ...(stringValue(wire.description) ? { description: stringValue(wire.description) } : {}),
+    })
     : undefined
 }

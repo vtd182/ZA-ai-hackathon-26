@@ -1,7 +1,28 @@
 import { describe, expect, it } from 'vitest'
-import { extractJson, parsePhaseReasoningResult, parseReasoningResult } from './index'
+import { extractJson, parsePhaseReasoningResult, parseReasoningResult, reasoningJsonSchemaForPhase } from './index'
 
 describe('reasoning result contract', () => {
+  it('can omit the creative canvas contract for conversation-only turns', () => {
+    const schema = reasoningJsonSchemaForPhase('discover', { includeCanvasProgram: false }) as {
+      required: string[]
+      properties: Record<string, unknown>
+    }
+    expect(schema.required).not.toContain('canvasProgram')
+    expect(schema.properties).not.toHaveProperty('canvasProgram')
+    expect(schema.required).toContain('intent')
+    expect(schema.properties).toHaveProperty('intent')
+  })
+
+  it('can constrain a creative response to the LLM-routed intent', () => {
+    const schema = reasoningJsonSchemaForPhase('discover', {
+      includeCanvasProgram: true,
+      intentKind: 'draw',
+    }) as {
+      properties: { intent: { properties: { kind: unknown } } }
+    }
+    expect(schema.properties.intent.properties.kind).toEqual({ type: 'string', const: 'draw' })
+  })
+
   it('accepts a valid canvas command', () => {
     const result = parseReasoningResult({
       schemaVersion: 1,
@@ -34,6 +55,7 @@ describe('reasoning result contract', () => {
       { type: 'create_canvas_node', label: 'Đủ dữ liệu?', nodeId: 'validate', nodeKind: 'decision' },
       { type: 'connect_canvas_nodes', fromId: 'intake', toId: 'validate', label: 'tiếp tục' },
     ])
+    expect(result.intent.kind).toBe('conversation')
   })
 
   it('still rejects unknown provider commands after envelope normalization', () => {
@@ -66,6 +88,54 @@ describe('reasoning result contract', () => {
     }, 'discover')
     expect(result.commands).toEqual([])
     expect(result.canvasProgram?.operations).toHaveLength(1)
+  })
+
+  it('keeps provider-authored scene and screen content', () => {
+    const result = parsePhaseReasoningResult({
+      schemaVersion: 1,
+      phase: 'discover',
+      message: 'Mình đã chuẩn bị một product concept để review.',
+      commands: [],
+      canvasProgram: {
+        schemaVersion: 1,
+        mode: 'operations',
+        summary: 'Backup concept',
+        sceneType: 'prototype',
+        title: 'Backup Reminder',
+        description: 'Quiet confidence',
+        script: null,
+        operations: [{
+          op: 'create_node',
+          id: 'prototype-home',
+          label: 'Tổng quan',
+          kind: 'screen',
+          description: 'Cho người dùng biết dữ liệu đang an toàn.',
+          badge: '01',
+          lane: 'Người dùng',
+          icon: 'shield',
+          tone: 'success',
+          screen: {
+            eyebrow: 'BACKUP',
+            title: 'Dữ liệu đang an toàn',
+            subtitle: 'Lần gần nhất 22:30',
+            blocks: [
+              { id: 'health', kind: 'hero', label: 'Trạng thái', value: 'Đã bảo vệ', helper: '510 tệp', tone: 'success', span: 'full' },
+              { id: 'next', kind: 'metric', label: 'Lần tiếp theo', value: '22:30', helper: null, tone: 'accent', span: 'half' },
+            ],
+            primaryAction: 'Backup ngay',
+            secondaryAction: 'Xem lịch sử',
+            navItems: ['Tổng quan', 'Lịch'],
+            activeNav: 'Tổng quan',
+          },
+        }],
+      },
+      phaseData: { questions: [], assumptions: [] },
+    }, 'discover')
+    expect(result.canvasProgram).toMatchObject({
+      sceneType: 'prototype',
+      title: 'Backup Reminder',
+      operations: [{ screen: { primaryAction: 'Backup ngay', blocks: [{ label: 'Trạng thái' }, { label: 'Lần tiếp theo' }] } }],
+    })
   })
 
   it('extracts fenced JSON', () => {

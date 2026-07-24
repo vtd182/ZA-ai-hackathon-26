@@ -160,6 +160,46 @@ Mỗi quyết định dùng trạng thái `Proposed`, `Accepted`, `Superseded` h
 - **Consequence:** The user controls when manual work becomes reasoning context, can address a selected region directly, and sees a dirty/synced state. Scene furniture remains editable and inspectable but is excluded from business promotion. Future automatic sync may be added as a deliberate mode over the same checkpoint contract.
 - **Validation:** 106 tests + 1 optional live skip, workspace typecheck, production build and `smoke-lifecycle` proving pointer edit -> dirty state -> selected feedback -> Sync receipt while ProductSpec remains v1.
 
+## ADR-018 - Creative authority belongs to the provider; execution authority belongs to Agent Core
+
+- **Status:** Accepted
+- **Date:** 2026-07-24
+- **Decision:** The provider authors conversational prose and rich semantic scene content. Agent Core decides whether a proposed canvas mutation may execute, while the renderer translates validated scene intent into safe tldraw primitives. Deterministic scene planning is an offline fallback and never a completeness oracle.
+- **Reason:** Comparing provider output against hard-coded labels and rendering domain UI from renderer lookup tables suppressed model creativity and produced generic workflows/prototypes. The security boundary is permission to mutate, not restriction of what the provider may propose.
+- **Alternatives:** unrestricted editor JavaScript from providers; renderer-owned product templates; deterministic planner augmentation of every provider result.
+- **Consequence:** Canvas Programs gain richer authored content while remaining bounded and undoable. Explicit draw/edit requests can auto-apply locally; ordinary chat stays non-mutating. ProductSpec promotion and Figma/Jira/Zdoc writes retain explicit approval and verification.
+- **Validation needed:** reminder-backup chat -> provider/fallback scene -> manual edit and typed Sync -> prototype -> promotion happy path in a production Electron build.
+
+## ADR-019 - Explicit slash routing and size-aware Figma execution budgets
+
+- **Status:** Accepted
+- **Date:** 2026-07-24
+- **Decision:** Keep natural-language intent as a convenience layer, while slash commands provide deterministic app-owned routing for Figma lifecycle actions and canvas scene types. Figma apply uses a five-minute minimum plus five seconds per estimated operation, capped at 30 minutes; heartbeat inactivity is tracked separately from the total client budget.
+- **Reason:** Natural language is useful but can be ambiguous, and a fixed 120-second timeout underbudgets large multi-screen design work. A longer unbounded timeout would hide stalls rather than distinguish slow progress from no progress.
+- **Alternatives:** slash-only interaction; provider-only intent inference; one fixed large timeout; no total timeout while heartbeats continue.
+- **Consequence:** `/figma prepare|approve|create|status|retry` and `/canvas flow|prototype` bypass provider guessing without bypassing immutable approval. Plan size and timeout budget become inspectable payload metadata; the bridge can tolerate legitimate long work while the client still enforces a finite ceiling.
+- **Validation:** parser/timeout tests, 132 workspace tests, Go policy tests, rebuilt runtime/plugin, regular Electron smoke with slash discovery/status routing and full lifecycle smoke.
+
+## ADR-020 - Provider-owned semantic intent, Agent Core-owned execution policy
+
+- **Status:** Accepted
+- **Date:** 2026-07-24
+- **Decision:** Natural-language requests are classified by every reasoning provider into a typed `conversation | discovery | draw | edit | promote | change | artifact` intent. Application code no longer accent-folds or keyword-matches Vietnamese to decide those actions. Agent Core validates targets, state transitions, approval and execution. Slash commands remain deterministic direct routes.
+- **Reason:** Accent folding collapsed distinct Vietnamese words such as `đổi`, `đối` and `dõi`; maintaining keyword cases duplicated LLM semantic understanding and produced unrelated canvas responses during Discovery.
+- **Alternatives:** continue expanding regex exceptions; always send the full Canvas Program schema; trust provider output to execute without policy validation.
+- **Consequence:** Ordinary turns use a small route schema. Natural `draw/edit` takes a route response followed by a rich creative response; `/canvas flow|prototype` goes directly to creative mode. Edit still requires selection or a uniquely resolved target, and artifact writes still require immutable approval.
+- **Validation:** domain/provider intent contracts, accent-safe target resolution, workspace typecheck/tests, lifecycle smoke and Mock canvas-agent smoke.
+
+## ADR-021 - Provider owns Figma composition; Agent Core guards the artifact contract
+
+- **Status:** Accepted
+- **Date:** 2026-07-24
+- **Decision:** The reasoning provider authors a Creative Figma Blueprint with art direction, arbitrary nested composition, product copy, primitives, ZDS control roles and prototype edges. Agent Core guards ProductSpec traceability, the exact allowlisted session/page, live component bindings, immutable approval, idempotency and independent read-back. The plugin executes the approved blueprint; it is not the product designer.
+- **Reason:** A deterministic screen compositor generated generic wireframes in one or two seconds and suppressed the same model creativity that produced good results through direct Codex + Figma MCP use. Security and compliance require control of target, business scope and external writes, not hard-coded visual templates.
+- **Alternatives:** fixed recipe renderer; unrestricted provider JavaScript; provider-direct Figma writes; synthetic DS fallback in live strict mode.
+- **Consequence:** Primitives and custom composition are first-class, while required interaction controls must resolve to live same-file ZDS instances. A failed live capture blocks strict preparation instead of silently writing fixture components. Prepared preflight is persisted with the approved payload; connector-native plan hash is validated by its own runtime. Blueprint-derived idempotency permits creative revisions, and only incomplete agent-owned pages may be recovered.
+- **Validation:** live capture produced 25 semantic bindings from 190 ZDS instances; Codex produced 4 screens/51 layers; Figma write/read-back verified in 5.2s with 16 instance-backed controls and 4 prototype edges. A 2248x1024 artifact export was visually reviewed.
+
 ## Decision template
 
 ```md

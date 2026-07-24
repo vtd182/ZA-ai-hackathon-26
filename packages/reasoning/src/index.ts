@@ -8,13 +8,18 @@ import {
   parsePhaseReasoningResult,
   reasoningJsonSchemaForPhase,
   type CanvasSelectionContext,
+  type CanvasDiffContext,
   type CanvasDocumentContext,
   type ChatMessage,
   type ProviderProbe,
   type PhaseReasoningResult,
   type ProviderCapabilities,
   type ProviderEvent,
+  type ProviderIntent,
+  type ProductSpec,
+  type FigmaCreativeBlueprint,
   type WorkflowView,
+  validateFigmaCreativeBlueprintStructure,
 } from '@pm-agent/domain'
 
 const execFileAsync = promisify(execFile)
@@ -26,6 +31,11 @@ export interface ReasoningRequest {
   recentMessages: ChatMessage[]
   selection?: CanvasSelectionContext
   canvas?: CanvasDocumentContext
+  canvasDiff?: CanvasDiffContext
+  responseMode?: 'route' | 'creative' | 'figma'
+  intentHint?: ProviderIntent
+  productSpec?: ProductSpec
+  figmaComponentRoles?: string[]
   remoteRef: string | null
 }
 
@@ -74,15 +84,51 @@ const anthropicCapabilities: ProviderCapabilities = { structuredOutput: true, st
 const systemPolicy = `Bạn là reasoning provider cho PM Lifecycle Agent.
 Mục tiêu: giúp PM biến ý tưởng thành ProductSpec có traceability và thay đổi scope có kiểm soát.
 Chỉ trả về JSON đúng schema được cung cấp. Không dùng markdown.
+Luôn phân loại yêu cầu bằng intent:
+- conversation: trao đổi sản phẩm, trả lời hoặc phân tích mà không thực thi hành động;
+- discovery: người dùng chủ động bắt đầu/tiếp tục guided discovery;
+- draw: tạo mới workflow, prototype hoặc scene trực quan;
+- edit: sửa canvas hiện có; target là tên/ID vùng cần sửa nếu người dùng nêu rõ;
+- promote: chốt canvas thành ProductSpec preview;
+- change: thêm/sửa/bỏ business scope trong ProductSpec;
+- artifact: chuẩn bị, duyệt, xem trạng thái hoặc retry Figma/artifact; artifactAction phải tương ứng.
+Không suy ra canvas mutation chỉ vì câu có các động từ chung. Khi không chắc, dùng conversation.
 Mỗi legacy command luôn có đủ type, label, query, view, nodeId, nodeKind, fromId, toId; field không áp dụng phải là null.
-Mỗi response luôn có canvasProgram. Dùng mode operations để vẽ/sửa canvas, mode script chỉ khi lặp hoặc bố cục phức tạp, và mode none khi không cần đổi canvas.
-Mỗi canvas operation luôn có đủ op, id, label, kind, fromId, toId, color, x, y; field không áp dụng phải là null.
+Canvas là không gian sáng tạo, không phải một lifecycle form. Chỉ đề xuất thay đổi canvas khi người dùng yêu cầu vẽ/sửa rõ ràng hoặc đang feedback vùng chọn; hội thoại bình thường phải dùng mode none.
+Khi schema có canvasProgram, luôn trả field này. Với flow/prototype, ưu tiên mode operations. Mode script chỉ dành cho developer automation lặp lại; mode none khi không cần đổi canvas.
+Mỗi canvas operation luôn có đủ op, id, label, kind, fromId, toId, color, x, y, description, badge, lane, icon, tone, screen; field không áp dụng phải là null.
+CanvasProgram luôn có sceneType, title, description; field không áp dụng phải là null.
 Luôn trả phase đúng phase hiện tại và phaseData đúng schema phase được cung cấp.
 Các lệnh canvas chỉ là đề xuất hiển thị; không tuyên bố đã ghi Figma, Jira hay Zdoc.
-Trả lời bằng tiếng Việt, ngắn gọn, nêu outcome và bước quyết định tiếp theo.
+Trả lời tiếng Việt tự nhiên như một product/design collaborator: nói rõ giả định, lựa chọn và điều người dùng có thể feedback. Không ép mọi lượt hội thoại thành một bước lifecycle.
 Khi người dùng yêu cầu bỏ một scope, dùng remove_card. Khi yêu cầu thêm, dùng add_card.
 Khi yêu cầu xem một vùng lifecycle, dùng switch_view. Khi muốn tìm/nhấn mạnh entity, dùng focus_card.
-Khi người dùng muốn brainstorm, vẽ workflow hoặc prototype, canvasProgram phải tạo đúng các node người dùng nêu và nối chúng bằng ID ổn định. Không thay bằng một flow mẫu chung. Canvas presentation được tự do dùng tọa độ; ProductSpec và Figma không nhận raw tọa độ này.`
+Khi vẽ workflow, mỗi create_node cần title cụ thể, mô tả outcome/logic, lane, badge, icon và tone; nối đầy đủ happy path cùng ngoại lệ cần thiết bằng ID ổn định.
+Khi vẽ prototype, mỗi screen node phải có screen spec riêng gồm content blocks, dữ liệu mẫu, trạng thái, CTA và navigation phù hợp sản phẩm. Không dùng placeholder kiểu "Thông tin chính" hoặc lặp cùng layout cho mọi màn.
+Không thay yêu cầu bằng flow mẫu chung. Không cần sinh tọa độ trừ khi người dùng yêu cầu bố cục cụ thể; renderer sẽ layout an toàn. ProductSpec và Figma không nhận raw tọa độ canvas.`
+
+const figmaDesignPolicy = `Bạn đang làm việc như một senior product designer cho Zalo Mini App.
+Hãy tạo một Creative Figma Blueprint gần sản phẩm thật, không phải wireframe và không lặp một template cho mọi màn hình.
+Mỗi màn hình phải có hierarchy, content, state và interaction riêng theo đúng ProductSpec. Dùng dữ liệu mẫu cụ thể, không dùng placeholder như "Thông tin chính", "Lựa chọn của người dùng" hay "Trạng thái hiện tại".
+Giữ mỗi màn hình trong 7-14 element có chủ đích: một root frame, 2-4 vùng composition, text cần thiết và toàn bộ ZDS controls bắt buộc. Không vẽ từng chi tiết nhỏ thành một element riêng.
+ZDS component chỉ dành cho interaction controls phù hợp như app header, button, input, switch, checkbox, list và status. Dùng primitives frame/text/rectangle/ellipse/divider tự do để tạo composition, visual hierarchy, data visualization và product-specific moments.
+Element được khai báo theo thứ tự cha trước con. parentId null nghĩa là đặt trực tiếp trong screen. Với parent có auto-layout vertical/horizontal, x/y nên null. Với layout none, đặt x/y cụ thể.
+Mỗi component element phải dùng đúng một componentRole trong danh sách được cung cấp. Không bịa component role.
+Giữ copy trong ZDS control ngắn và đúng chức năng: app header tối đa 32 ký tự, button tối đa 28 ký tự, status/error message tối đa 64 ký tự. Đưa giải thích dài sang text primitive hoặc supporting card thay vì nhồi vào component.
+Thiết kế cho frame mobile 390x844, giữ touch target tối thiểu 44px, text có tương phản, không để nội dung tràn frame.
+Tạo prototype edge từ CTA component thật đến màn hình đích. fromElementId phải tồn tại trong fromScreenId.
+Ưu tiên 4-7 màn hình quan trọng thay vì nhiều màn hình hời hợt. Giữ screenId và requirementIds đúng ProductSpec.
+Chỉ trả JSON đúng schema.`
+
+function outputSchemaFor(request: ReasoningRequest): Record<string, unknown> {
+  const creative = request.responseMode === 'creative'
+  const figma = request.responseMode === 'figma'
+  return reasoningJsonSchemaForPhase(request.phase, {
+    includeCanvasProgram: creative,
+    includeFigmaBlueprint: figma,
+    ...(creative && request.intentHint ? { intentKind: request.intentHint.kind } : {}),
+  })
+}
 
 function buildPrompt(request: ReasoningRequest): string {
   const transcript = request.recentMessages
@@ -96,9 +142,28 @@ function buildPrompt(request: ReasoningRequest): string {
       .join(' | ') || request.selection.entityId}`
     : 'Canvas không có entity được chọn.'
   const canvas = request.canvas
-    ? `Canvas revision ${request.canvas.revision}, ${request.canvas.shapes.length} shapes: ${request.canvas.shapes.slice(0, 40).map((shape) => `${shape.semanticId ?? shape.id}:${shape.label || shape.type}`).join(' | ') || 'trống'}`
+    ? `Canvas revision ${request.canvas.revision}, ${request.canvas.shapes.length} shapes:\n${request.canvas.shapes.slice(0, 80).map((shape) => {
+      const details = [shape.description, shape.lane ? `lane=${shape.lane}` : '', ...(shape.content ?? []).slice(0, 4)].filter(Boolean).join(' · ')
+      return `- ${shape.semanticId ?? shape.id} [${shape.type}/${shape.visualRole ?? shape.nodeKind ?? 'free'}] ${shape.label || ''}${details ? ` — ${details}` : ''}`
+    }).join('\n') || '- trống'}`
     : 'Canvas chưa có read-back context.'
-  return `${systemPolicy}\n\nPhase hiện tại: ${request.phase}\n${selection}\n${canvas}\n\nLịch sử gần đây:\n${transcript}\n\nYêu cầu mới:\n${request.message}`
+  const diff = request.canvasDiff
+    ? `Thay đổi người dùng vừa Sync (${request.canvasDiff.fromRevision} -> ${request.canvasDiff.toRevision}): ${request.canvasDiff.summary}\n${request.canvasDiff.changes.slice(0, 30).map((item) => `- ${item.change}: ${item.id} ${item.label}`).join('\n')}`
+    : 'Không có CanvasDiff mới trong lượt này.'
+  const responseInstruction = request.responseMode === 'figma'
+    ? `${figmaDesignPolicy}
+
+ProductSpec:
+${JSON.stringify(request.productSpec)}
+
+ZDS semantic roles được phép:
+${(request.figmaComponentRoles ?? []).join(', ')}
+
+Hãy trả figmaBlueprint. message chỉ tóm tắt design direction và những lựa chọn quan trọng. intent phải là artifact/prepare. commands để trống.`
+    : request.responseMode === 'creative'
+    ? `Agent Core đã khóa intent ${request.intentHint?.kind ?? 'draw'}. Hãy hiện thực hóa đúng yêu cầu bằng Canvas Program có thể chỉnh sửa; không đổi sang intent khác.`
+    : 'Hãy phân loại intent trước. Đây là route nhẹ: không tạo Canvas Program trong lượt này.'
+  return `${systemPolicy}\n\n${responseInstruction}\n\nPhase hiện tại: ${request.phase}\n${selection}\n${canvas}\n${diff}\n\nLịch sử gần đây:\n${transcript}\n\nYêu cầu mới:\n${request.message}`
 }
 
 function parseProviderText(text: string, phase: WorkflowView): PhaseReasoningResult {
@@ -108,6 +173,179 @@ function parseProviderText(text: string, phase: WorkflowView): PhaseReasoningRes
     const detail = error instanceof Error ? error.message : 'invalid output'
     throw new Error(`Provider trả về dữ liệu không đúng schema: ${detail}`)
   }
+}
+
+function parseProviderFigmaBlueprint(text: string, phase: WorkflowView): PhaseReasoningResult {
+  const result = parseProviderText(text, phase)
+  if (!result.figmaBlueprint) throw new Error('Provider không trả Creative Figma Blueprint')
+  validateFigmaCreativeBlueprintStructure(result.figmaBlueprint)
+  return result
+}
+
+function parseProviderOutput(text: string, request: ReasoningRequest): PhaseReasoningResult {
+  return request.responseMode === 'figma'
+    ? parseProviderFigmaBlueprint(text, request.phase)
+    : parseProviderText(text, request.phase)
+}
+
+function compactControlCopy(value: string, limit: number): string {
+  const copy = value.trim().replace(/\s+/g, ' ')
+  if (copy.length <= limit) return copy
+  const candidate = copy.slice(0, limit + 1)
+  const wordBoundary = candidate.lastIndexOf(' ')
+  return candidate.slice(0, wordBoundary >= Math.floor(limit * 0.6) ? wordBoundary : limit).trim()
+}
+
+function mockCreativeBlueprint(spec: ProductSpec, roles: string[]): FigmaCreativeBlueprint {
+  const available = new Set(roles)
+  const activeRequirements = new Set(spec.requirements.filter((item) => item.status !== 'removed').map((item) => item.id))
+  const screens = spec.screens
+    .filter((screen) => screen.requirementIds.some((id) => activeRequirements.has(id)))
+  const primaryRole = available.has('primary-button') ? 'primary-button' : roles[0] ?? 'primary-button'
+  const headerRole = available.has('app-header') ? 'app-header' : null
+  const outputScreens = screens.map((screen, index) => {
+    const root = `root-${screen.id}`
+    const hero = `hero-${screen.id}`
+    const action = `action-${screen.id}`
+    const elements: FigmaCreativeBlueprint['screens'][number]['elements'] = [
+      {
+        id: root, kind: 'frame', parentId: null, name: `${screen.title} content`, x: 0, y: 0, width: 390, height: 844,
+        layout: 'vertical', gap: 16, paddingTop: 24, paddingRight: 20, paddingBottom: 24, paddingLeft: 20,
+        fill: index === 0 ? '#F2F7FF' : '#FFFFFF', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+        text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: null, componentText: null, layoutGrow: 0,
+      },
+    ]
+    if (headerRole) {
+      elements.push({
+        id: `header-${screen.id}`, kind: 'component', parentId: root, name: 'ZDS app header', x: null, y: null, width: 350, height: 52,
+        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+        fill: null, stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+        text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: headerRole,
+        componentText: compactControlCopy(screen.title, 32), layoutGrow: 0,
+      })
+    }
+    elements.push(
+      {
+        id: hero, kind: 'frame', parentId: root, name: 'Product moment', x: null, y: null, width: 350, height: 220,
+        layout: 'vertical', gap: 10, paddingTop: 24, paddingRight: 20, paddingBottom: 24, paddingLeft: 20,
+        fill: index === screens.length - 1 ? '#E8F8EF' : '#EAF3FF', stroke: null, strokeWidth: 0, radius: 20, opacity: 1,
+        text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: null, componentText: null, layoutGrow: 0,
+      },
+      {
+        id: `eyebrow-${screen.id}`, kind: 'text', parentId: hero, name: 'Journey label', x: null, y: null, width: 310, height: 20,
+        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+        fill: '#0068FF', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+        text: `BƯỚC ${index + 1} · ${screen.title.toUpperCase()}`, fontSize: 12, fontWeight: 'semibold', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
+      },
+      {
+        id: `title-${screen.id}`, kind: 'text', parentId: hero, name: 'Screen headline', x: null, y: null, width: 310, height: 66,
+        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+        fill: '#101828', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+        text: screen.title, fontSize: 30, fontWeight: 'bold', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
+      },
+      {
+        id: `purpose-${screen.id}`, kind: 'text', parentId: hero, name: 'Outcome copy', x: null, y: null, width: 310, height: 56,
+        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+        fill: '#475467', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+        text: screen.purpose, fontSize: 15, fontWeight: 'regular', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
+      },
+      {
+        id: `detail-${screen.id}`, kind: 'frame', parentId: root, name: 'Product detail', x: null, y: null, width: 350, height: 230,
+        layout: 'vertical', gap: 12, paddingTop: 18, paddingRight: 18, paddingBottom: 18, paddingLeft: 18,
+        fill: '#FFFFFF', stroke: '#E4E7EC', strokeWidth: 1, radius: 16, opacity: 1,
+        text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: null, componentText: null, layoutGrow: 0,
+      },
+      {
+        id: `detail-title-${screen.id}`, kind: 'text', parentId: `detail-${screen.id}`, name: 'Detail title', x: null, y: null, width: 314, height: 28,
+        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+        fill: '#101828', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+        text: index === 0 ? 'Mọi thứ cần biết trong một nhịp nhìn' : `Điều người dùng cần hoàn tất tại ${screen.title}`,
+        fontSize: 18, fontWeight: 'semibold', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
+      },
+      {
+        id: `detail-body-${screen.id}`, kind: 'text', parentId: `detail-${screen.id}`, name: 'Concrete product content', x: null, y: null, width: 314, height: 96,
+        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+        fill: '#344054', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+        text: `${screen.purpose}\n\nTrạng thái được lưu ngay trên thiết bị và có thể tiếp tục ở lần mở sau.`,
+        fontSize: 14, fontWeight: 'regular', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
+      },
+    )
+    const screenRoles = [...new Set(screen.designSystemRoles.filter((role) => available.has(role) && role !== 'app-header'))]
+    let actionRoleIndex = -1
+    screenRoles.forEach((role, roleIndex) => {
+      if (role.includes('button')) actionRoleIndex = roleIndex
+    })
+    for (const [roleIndex, role] of screenRoles.entries()) {
+      elements.push({
+        id: roleIndex === actionRoleIndex ? action : `${role}-${screen.id}`,
+        kind: 'component',
+        parentId: root,
+        name: `ZDS ${role}`,
+        x: null,
+        y: null,
+        width: 350,
+        height: role.includes('button') ? 52 : 64,
+        layout: 'none',
+        gap: 0,
+        paddingTop: 0,
+        paddingRight: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        fill: null,
+        stroke: null,
+        strokeWidth: 0,
+        radius: 0,
+        opacity: 1,
+        text: null,
+        fontSize: null,
+        fontWeight: null,
+        textAlign: null,
+        componentRole: role,
+        componentText: role.includes('button')
+          ? index === screens.length - 1 ? 'Hoàn tất' : 'Tiếp tục'
+          : role.includes('message')
+            ? compactControlCopy(screen.title, 64)
+            : screen.title,
+        layoutGrow: 0,
+      })
+    }
+    if (actionRoleIndex < 0) {
+      elements.push({
+        id: action, kind: 'component', parentId: root, name: 'Primary journey action', x: null, y: null, width: 350, height: 52,
+        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+        fill: null, stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+        text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: primaryRole,
+        componentText: index === screens.length - 1 ? 'Hoàn tất' : 'Tiếp tục', layoutGrow: 0,
+      })
+    }
+    return {
+      screenId: screen.id,
+      name: screen.title,
+      purpose: screen.purpose,
+      requirementIds: screen.requirementIds.filter((id) => activeRequirements.has(id)),
+      width: 390,
+      height: 844,
+      background: index === 0 ? '#F2F7FF' : '#FFFFFF',
+      presentationNote: `Màn ${index + 1} ưu tiên outcome ${screen.purpose}`,
+      elements,
+    }
+  })
+  return validateFigmaCreativeBlueprintStructure({
+    schemaVersion: 1,
+    conceptName: `Product story · ${spec.title}`,
+    productPromise: spec.idea.summary,
+    visualNarrative: 'Một hành trình Mini App rõ nhịp, dùng ZDS cho interaction và composition riêng cho từng product moment.',
+    principles: ['Một nhiệm vụ chính trên mỗi màn hình', 'Nội dung thật trước trang trí', 'ZDS cho controls, primitives cho product expression'],
+    screens: outputScreens,
+    prototypeEdges: outputScreens.slice(0, -1).map((screen, index) => ({
+      key: `edge:${screen.screenId}:${outputScreens[index + 1]!.screenId}`,
+      fromElementId: `action-${screen.screenId}`,
+      fromScreenId: screen.screenId,
+      toScreenId: outputScreens[index + 1]!.screenId,
+      trigger: 'on_tap',
+      action: 'navigate',
+    })),
+  })
 }
 
 function normalizeText(value: string): string {
@@ -146,6 +384,7 @@ function phaseData(phase: WorkflowView, normalized: string): PhaseReasoningResul
 export function inferLocalCommands(message: string, phase: WorkflowView = 'discover'): PhaseReasoningResult {
   const normalized = normalizeText(message)
   const commands: PhaseReasoningResult['commands'] = []
+  const visualRequest = /(workflow|user flow|prototype|so do|luong xu ly)/.test(normalized) && /(ve|tao|phac|draw)/.test(normalized)
 
   const viewMatchers: Array<[WorkflowView, string[]]> = [
     ['discover', ['discover', 'discovery', 'kham pha']],
@@ -158,14 +397,8 @@ export function inferLocalCommands(message: string, phase: WorkflowView = 'disco
     commands.push({ type: 'switch_view', view: matchedView[0] })
   }
 
-  if (/(workflow|user flow|prototype|so do|luong xu ly)/.test(normalized) && /(ve|tao|phac|draw)/.test(normalized)) {
-    commands.push(
-      { type: 'create_canvas_node', nodeId: 'user-intent', label: 'Người dùng gửi yêu cầu', nodeKind: 'process' },
-      { type: 'create_canvas_node', nodeId: 'agent-check', label: 'Đủ dữ liệu để tiếp tục?', nodeKind: 'decision' },
-      { type: 'create_canvas_node', nodeId: 'artifact-preview', label: 'Xem trước artifact', nodeKind: 'screen' },
-      { type: 'connect_canvas_nodes', fromId: 'user-intent', toId: 'agent-check', label: 'phân tích' },
-      { type: 'connect_canvas_nodes', fromId: 'agent-check', toId: 'artifact-preview', label: 'đã rõ' },
-    )
+  if (visualRequest) {
+    // The offline planner in Agent Core owns the same rich scene contract used by live providers.
   } else if (/(bo|xoa|remove|loai)/.test(normalized)) {
     const query = /(payment|thanh toan|vi noi bo)/.test(normalized) ? 'payment' : message.replace(/^(hãy\s+)?(bỏ|xóa|remove|loại)\s*/i, '').trim()
     if (query) commands.push({ type: 'remove_card', query })
@@ -183,10 +416,64 @@ export function inferLocalCommands(message: string, phase: WorkflowView = 'disco
     deliver: 'ProductSpec đã sẵn sàng lập artifact plan có approval và read-back verification.',
     change: 'Mình cần target entity và operation cụ thể trước khi tạo impact preview.',
   }
-  const messageText = commands.length > 0
+  const messageText = visualRequest
+    ? /prototype/.test(normalized)
+      ? 'Mình sẽ hiện thực hóa các màn hình như một product concept có nội dung, trạng thái và hành động riêng để bạn review trực tiếp.'
+      : 'Mình sẽ dựng journey theo outcome của từng bước, làm rõ điểm quyết định và các nhánh phục hồi để bạn có đủ chất liệu feedback.'
+    : commands.length > 0
     ? 'Mình đã tạo đề xuất trên canvas. Thay đổi business scope vẫn cần được review trước khi đồng bộ artifact.'
-    : phaseMessage[phase]
-  return { schemaVersion: 1, phase, message: messageText, commands, phaseData: phaseData(phase, normalized) } as PhaseReasoningResult
+    : /(backup|sao luu)/.test(normalized)
+      ? 'Ý tưởng này có một product moment khá rõ: giúp người dùng cảm thấy dữ liệu đang an toàn mà vẫn giữ quyền kiểm soát thời điểm backup. Canvas sẽ để trống cho đến khi bạn muốn trực quan hóa; trước mắt mình có thể cùng bạn làm rõ trigger, hành động hoãn và cách phục hồi khi backup lỗi.'
+      : phaseMessage[phase]
+  return {
+    schemaVersion: 1,
+    phase,
+    message: messageText,
+    commands,
+    intent: inferMockIntent(message),
+    phaseData: phaseData(phase, normalized),
+  } as PhaseReasoningResult
+}
+
+function inferMockIntent(request: string | ReasoningRequest): ProviderIntent {
+  const message = typeof request === 'string' ? request : request.message
+  if (typeof request !== 'string' && request.intentHint) return request.intentHint
+  if (typeof request !== 'string' && request.canvasDiff) {
+    return { kind: 'conversation', target: null, artifactAction: null }
+  }
+  const text = message.toLocaleLowerCase('vi').trim()
+  if (typeof request !== 'string' && request.selection) {
+    return { kind: 'edit', target: request.selection.entityId, artifactAction: null }
+  }
+  if (/(^|\s)(kick[\s-]*off|bắt đầu discovery|khởi động discovery)(\s|$)/i.test(text)) {
+    return { kind: 'discovery', target: null, artifactAction: null }
+  }
+  if (/(chốt|xác nhận|promote).*(flow|canvas|mvp|productspec)/i.test(text)) {
+    return { kind: 'promote', target: null, artifactAction: null }
+  }
+  if (/(vẽ|draw|phác thảo|tạo).*(workflow|user flow|flow|sơ đồ|prototype|wireframe|journey)/i.test(text)) {
+    return { kind: 'draw', target: null, artifactAction: null }
+  }
+  if (/(sửa|chỉnh).*(canvas|node|workflow|prototype)/i.test(text)) {
+    return { kind: 'edit', target: null, artifactAction: null }
+  }
+  if (/^bỏ cái (đó|này)[.!?]?$/iu.test(text)) {
+    return { kind: 'change', target: null, artifactAction: null }
+  }
+  if (/figma|kickoff package|artifact/i.test(text)) {
+    const artifactAction = /trạng thái|status/i.test(text)
+      ? 'status'
+      : /retry|thử lại/i.test(text)
+        ? 'retry'
+        : /duyệt|đồng ý|xác nhận|hãy làm|làm đi/i.test(text)
+          ? 'approve'
+          : 'prepare'
+    return { kind: 'artifact', target: null, artifactAction }
+  }
+  if (/(bỏ|xóa|remove|loại).*(scope|requirement|payment|thanh toán)/i.test(text)) {
+    return { kind: 'change', target: null, artifactAction: null }
+  }
+  return { kind: 'conversation', target: null, artifactAction: null }
 }
 
 class MockProvider implements ReasoningProvider {
@@ -198,7 +485,18 @@ class MockProvider implements ReasoningProvider {
   }
 
   async reason(request: ReasoningRequest): Promise<ProviderResponse> {
-    return normalizedResponse(inferLocalCommands(request.message, request.phase), null, this.capabilities)
+    const result = inferLocalCommands(request.message, request.phase)
+    result.intent = inferMockIntent(request)
+    if (request.responseMode === 'figma') {
+      if (!request.productSpec) throw new Error('Mock Figma design requires ProductSpec')
+      result.intent = { kind: 'artifact', target: null, artifactAction: 'prepare' }
+      result.figmaBlueprint = mockCreativeBlueprint(request.productSpec, request.figmaComponentRoles ?? [])
+      result.message = `Đã tạo creative blueprint cho ${result.figmaBlueprint.screens.length} màn hình.`
+    }
+    if (request.canvasDiff) {
+      result.message = `Mình đã đọc phần bạn vừa thay đổi: ${request.canvasDiff.summary}. Vùng chọn và scene hiện tại sẽ là context ưu tiên cho lượt chỉnh tiếp theo.`
+    }
+    return normalizedResponse(result, null, this.capabilities)
   }
 }
 
@@ -222,11 +520,11 @@ class OpenAIProvider implements ReasoningProvider {
           type: 'json_schema',
           name: 'pm_lifecycle_reasoning',
           strict: true,
-          schema: reasoningJsonSchemaForPhase(request.phase),
+          schema: outputSchemaFor(request),
         },
       },
     }, { signal })
-    return normalizedResponse(parseProviderText(response.output_text, request.phase), response.id, this.capabilities, response.usage
+    return normalizedResponse(parseProviderOutput(response.output_text, request), response.id, this.capabilities, response.usage
       ? { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens }
       : undefined)
   }
@@ -249,11 +547,11 @@ class GeminiProvider implements ReasoningProvider {
       contents: buildPrompt(request),
       config: {
         responseMimeType: 'application/json',
-        responseJsonSchema: reasoningJsonSchemaForPhase(request.phase),
+        responseJsonSchema: outputSchemaFor(request),
       },
     })
     const usage = response.usageMetadata
-    return normalizedResponse(parseProviderText(response.text ?? '', request.phase), null, this.capabilities, usage
+    return normalizedResponse(parseProviderOutput(response.text ?? '', request), null, this.capabilities, usage
       ? { inputTokens: usage.promptTokenCount ?? 0, outputTokens: usage.candidatesTokenCount ?? 0 }
       : undefined)
   }
@@ -272,18 +570,18 @@ class AnthropicProvider implements ReasoningProvider {
     const client = new Anthropic({ apiKey })
     const response = await client.messages.create({
       model: config.modelId,
-      max_tokens: 1400,
+      max_tokens: request.responseMode === 'figma' ? 16_000 : 1_400,
       system: systemPolicy,
       messages: [{ role: 'user', content: buildPrompt(request) }],
       output_config: {
-        format: { type: 'json_schema', schema: reasoningJsonSchemaForPhase(request.phase) },
+        format: { type: 'json_schema', schema: outputSchemaFor(request) },
       },
     }, { signal })
     const text = response.content
       .filter((block): block is Anthropic.TextBlock => block.type === 'text')
       .map((block) => block.text)
       .join('')
-    return normalizedResponse(parseProviderText(text, request.phase), response.id, this.capabilities, {
+    return normalizedResponse(parseProviderOutput(text, request), response.id, this.capabilities, {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
     })
@@ -416,7 +714,8 @@ class CodexProvider implements ReasoningProvider {
 
       let output = ''
       const completed = new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Codex timeout sau 120 giây')), 120_000)
+        const timeoutMs = request.responseMode === 'figma' ? 10 * 60_000 : 120_000
+        const timeout = setTimeout(() => reject(new Error(`Codex timeout sau ${Math.round(timeoutMs / 60_000)} phút`)), timeoutMs)
         const unsubscribe = client.onNotification((notification) => {
           const method = notification.method
           const params = notification.params as JsonObject | undefined
@@ -434,10 +733,10 @@ class CodexProvider implements ReasoningProvider {
       await client.request('turn/start', {
         threadId,
         input: [{ type: 'text', text: buildPrompt(request), text_elements: [] }],
-        outputSchema: reasoningJsonSchemaForPhase(request.phase),
+        outputSchema: outputSchemaFor(request),
       })
       await completed
-      return normalizedResponse(parseProviderText(output, request.phase), threadId, this.capabilities)
+      return normalizedResponse(parseProviderOutput(output, request), threadId, this.capabilities)
     } finally {
       signal.removeEventListener('abort', abort)
       client.stop()

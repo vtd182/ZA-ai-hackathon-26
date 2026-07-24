@@ -368,6 +368,14 @@ export class HistoryStore {
     return rows.map(messageFromRow)
   }
 
+  allMessages(threadId: string, limit = 10_000): ChatMessage[] {
+    const rows = this.db.prepare(`
+      SELECT id, thread_id, role, content, created_at FROM messages
+      WHERE thread_id = ? ORDER BY rowid ASC LIMIT ?
+    `).all(threadId, Math.max(1, Math.min(10_000, limit))) as MessageRow[]
+    return rows.map(messageFromRow)
+  }
+
   listProfiles(): Omit<ProviderProfile, 'hasCredential'>[] {
     const rows = this.db.prepare('SELECT * FROM provider_profiles WHERE enabled = 1 ORDER BY sort_order ASC').all() as ProfileRow[]
     return rows.map((row) => ({

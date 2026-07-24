@@ -1,4 +1,4 @@
-import { canvasProgramSchema, parseProductSpec, type CanvasDocumentContext, type CanvasProgram, type CanvasSelectionContext, type ChatMessage, type EntityKind, type ProductSpec, type ProviderCommand, type WorkflowView } from '@pm-agent/domain'
+import { canvasProgramSchema, parseProductSpec, type CanvasDocumentContext, type CanvasOperation, type CanvasProgram, type CanvasSelectionContext, type ChatMessage, type EntityKind, type ProductSpec, type ProviderCommand, type WorkflowView } from '@pm-agent/domain'
 
 export * from './scene-layout'
 
@@ -54,23 +54,11 @@ function requestedWorkflowSteps(message: string): string[] {
     .slice(0, 12)
 }
 
-export type CanvasInteractionKind = 'conversation' | 'draw' | 'edit' | 'clarify_edit' | 'promote'
-
-export interface CanvasInteractionDecision {
-  kind: CanvasInteractionKind
-  selection?: CanvasSelectionContext
+function normalizeVietnameseText(value: string): string {
+  return value.normalize('NFC').toLocaleLowerCase('vi').trim()
 }
 
-function selectionForMention(message: string, canvas?: CanvasDocumentContext): CanvasSelectionContext | undefined {
-  if (!canvas) return undefined
-  const normalized = normalizeText(message)
-  const shape = canvas.shapes.find((item) => {
-    const semanticId = item.semanticId ? normalizeText(item.semanticId) : ''
-    const label = normalizeText(item.label)
-    return (semanticId.length >= 3 && normalized.includes(semanticId))
-      || (label.length >= 3 && normalized.includes(label))
-  })
-  if (!shape) return undefined
+function selectionContextForShape(shape: CanvasDocumentContext['shapes'][number]): CanvasSelectionContext {
   return {
     entityId: shape.semanticId ?? shape.id,
     label: shape.label || shape.semanticId || shape.type,
@@ -80,39 +68,108 @@ function selectionForMention(message: string, canvas?: CanvasDocumentContext): C
   }
 }
 
-export function classifyCanvasInteraction(
-  message: string,
-  selection?: CanvasSelectionContext,
-  canvas?: CanvasDocumentContext,
-): CanvasInteractionDecision {
-  const normalized = normalizeText(message)
-  if (/(chot|xac nhan|promote).*(flow|canvas|mvp|productspec)|chot flow/.test(normalized)) return { kind: 'promote' }
+export function resolveCanvasSelection(target: string, canvas?: CanvasDocumentContext): CanvasSelectionContext | undefined {
+  if (!canvas) return undefined
+  const normalizedTarget = normalizeVietnameseText(target)
+  const exactMatches = canvas.shapes.filter((item) => {
+    const semanticId = item.semanticId ? normalizeVietnameseText(item.semanticId) : ''
+    const label = normalizeVietnameseText(item.label)
+    return (semanticId.length >= 3 && normalizedTarget.includes(semanticId))
+      || (label.length >= 3 && normalizedTarget.includes(label))
+  })
+  if (exactMatches.length === 1) return selectionContextForShape(exactMatches[0]!)
 
-  const explicitDraw = /(ve|draw|phac thao|tao|lap|cho toi|hien thi).{0,36}(workflow|user flow|flow|so do|prototype|wireframe|mindmap|ban do)/.test(normalized)
-    || /(workflow|user flow|flow|so do|prototype).{0,28}(day du|toan bo)/.test(normalized)
-  if (explicitDraw) return { kind: 'draw' }
-
-  const editIntent = /(tao them|them|sua|doi|xoa|mo rong|cap nhat|bo sung|thu lai|retry|nhanh loi|error)/.test(normalized)
-  if (!editIntent) return { kind: 'conversation' }
-  const resolvedSelection = selection ?? selectionForMention(message, canvas)
-  return resolvedSelection ? { kind: 'edit', selection: resolvedSelection } : { kind: 'clarify_edit' }
+  const foldedTarget = normalizeText(target)
+  const foldedMatches = canvas.shapes.filter((item) => {
+    const semanticId = item.semanticId ? normalizeText(item.semanticId) : ''
+    const label = normalizeText(item.label)
+    return (semanticId.length >= 3 && foldedTarget.includes(semanticId))
+      || (label.length >= 3 && foldedTarget.includes(label))
+  })
+  return foldedMatches.length === 1 ? selectionContextForShape(foldedMatches[0]!) : undefined
 }
 
 export interface CanvasPlanningContext {
   recentMessages?: ChatMessage[]
   canvas?: CanvasDocumentContext
+  intent?: 'draw' | 'edit'
 }
 
-function operationsProgram(summary: string, nodes: Array<{ id: string; label: string; kind: 'note' | 'process' | 'decision' | 'screen'; x?: number; y?: number }>, connections: Array<{ fromId: string; toId: string; label?: string }>): CanvasProgram {
+type CanvasNodeInput = Omit<Extract<CanvasOperation, { op: 'create_node' }>, 'op'>
+
+function operationsProgram(
+  summary: string,
+  nodes: CanvasNodeInput[],
+  connections: Array<{ fromId: string; toId: string; label?: string }>,
+  scene?: { sceneType: 'workflow' | 'prototype' | 'board'; title: string; description: string },
+): CanvasProgram {
+  const seenIds = new Set<string>()
+  const seenLabels = new Set<string>()
+  const uniqueNodes = nodes.filter((node) => {
+    const label = normalizeText(node.label).trim()
+    if (seenIds.has(node.id) || seenLabels.has(label)) return false
+    seenIds.add(node.id)
+    seenLabels.add(label)
+    return true
+  })
+  const seenConnections = new Set<string>()
+  const uniqueConnections = connections.filter((connection) => {
+    if (!seenIds.has(connection.fromId) || !seenIds.has(connection.toId)) return false
+    const key = `${connection.fromId}:${connection.toId}:${normalizeText(connection.label ?? '')}`
+    if (seenConnections.has(key)) return false
+    seenConnections.add(key)
+    return true
+  })
   return canvasProgramSchema.parse({
     schemaVersion: 1,
     mode: 'operations',
     summary,
     operations: [
-      ...nodes.map((node) => ({ op: 'create_node' as const, id: node.id, label: node.label, kind: node.kind })),
-      ...connections.map((connection, index) => ({ op: 'connect' as const, id: `edge-${connection.fromId}-${connection.toId}-${index + 1}`, ...connection })),
+      ...uniqueNodes.map((node) => ({ op: 'create_node' as const, ...node })),
+      ...uniqueConnections.map((connection, index) => ({ op: 'connect' as const, id: `edge-${connection.fromId}-${connection.toId}-${index + 1}`, ...connection })),
     ],
     script: null,
+    ...(scene ?? {}),
+  })
+}
+
+function conversationTopic(message: string, context: CanvasPlanningContext): string {
+  return normalizeText([
+    ...(context.recentMessages ?? []).map((item) => item.content),
+    message,
+  ].join(' '))
+}
+
+function isBackupReminderTopic(topic: string): boolean {
+  return /(remind|reminder|nhac).{0,40}(backup|sao luu)|(?:backup|sao luu).{0,40}(remind|reminder|nhac)/.test(topic)
+}
+
+function replaceAgentScene(program: CanvasProgram, context: CanvasPlanningContext): CanvasProgram {
+  if (!context.canvas || program.mode !== 'operations') return program
+  const creatingPrototype = program.operations.some(
+    (operation) => operation.op === 'create_node' && operation.id.startsWith('prototype-')
+  )
+  const ids = new Set<string>()
+  for (const binding of context.canvas.bindings ?? []) {
+    const prototypeBinding = binding.fromId.startsWith('prototype-') || binding.toId.startsWith('prototype-')
+    if (prototypeBinding === creatingPrototype) ids.add(binding.id)
+  }
+  for (const shape of context.canvas.shapes) {
+    const prototypeShape = Boolean(
+      shape.semanticId?.startsWith('prototype-')
+      || shape.visualRole?.startsWith('prototype-')
+    )
+    if (prototypeShape === creatingPrototype && (shape.nodeKind || prototypeShape)) {
+      ids.add(shape.semanticId ?? shape.id)
+    }
+  }
+  if (ids.size === 0) return program
+  return canvasProgramSchema.parse({
+    ...program,
+    operations: [
+      ...[...ids].slice(0, Math.max(0, 200 - program.operations.length)).map((id) => ({ op: 'delete' as const, id })),
+      ...program.operations,
+    ],
   })
 }
 
@@ -166,13 +223,8 @@ function rideBookingWorkflow(): CanvasProgram {
 }
 
 function genericFullWorkflow(context: CanvasPlanningContext): CanvasProgram {
-  const topic = context.recentMessages
-    ?.filter((message) => message.role === 'user')
-    .map((message) => message.content)
-    .join(' ')
-    .slice(0, 180) || 'sản phẩm'
   const nodes = [
-    { id: 'bat-dau', label: `Bắt đầu: ${topic}`, kind: 'note' as const },
+    { id: 'bat-dau', label: 'Mở tính năng', kind: 'screen' as const },
     { id: 'nhap-thong-tin', label: 'Nhập thông tin', kind: 'screen' as const },
     { id: 'kiem-tra', label: 'Kiểm tra dữ liệu', kind: 'decision' as const },
     { id: 'xac-nhan', label: 'Xác nhận', kind: 'screen' as const },
@@ -191,9 +243,194 @@ function genericFullWorkflow(context: CanvasPlanningContext): CanvasProgram {
   ])
 }
 
+function backupReminderWorkflow(): CanvasProgram {
+  const nodes = [
+    { id: 'backup-dashboard', label: 'Mở tổng quan backup', kind: 'screen' as const, description: 'Xem trạng thái an toàn, nguồn dữ liệu và lịch gần nhất.', badge: 'ENTRY', lane: 'Người dùng', icon: 'cloud' as const, tone: 'brand' as const },
+    { id: 'backup-source-ready', label: 'Nguồn backup đã sẵn sàng?', kind: 'decision' as const, description: 'Kiểm tra quyền truy cập và kết nối cloud trước khi lập lịch.', badge: 'GATE', lane: 'Hệ thống', icon: 'database' as const, tone: 'warning' as const },
+    { id: 'backup-connect-source', label: 'Kết nối nguồn backup', kind: 'screen' as const, description: 'Chọn thiết bị hoặc Cloud Drive và cấp quyền truy cập.', badge: 'SETUP', lane: 'Người dùng', icon: 'database' as const, tone: 'info' as const },
+    { id: 'backup-select-data', label: 'Chọn dữ liệu cần bảo vệ', kind: 'screen' as const, description: 'Chọn ảnh, video, tài liệu và điều kiện mạng phù hợp.', badge: 'SCOPE', lane: 'Người dùng', icon: 'shield' as const, tone: 'brand' as const },
+    { id: 'backup-schedule', label: 'Đặt lịch backup', kind: 'screen' as const, description: 'Chọn tần suất, giờ chạy và điều kiện pin/Wi-Fi.', badge: 'PLAN', lane: 'Người dùng', icon: 'clock' as const, tone: 'accent' as const },
+    { id: 'backup-notification', label: 'Cho phép nhắc backup?', kind: 'decision' as const, description: 'Quyết định kênh nhắc và khả năng theo sát lịch đã đặt.', badge: 'CONSENT', lane: 'Hệ thống', icon: 'bell' as const, tone: 'warning' as const },
+    { id: 'backup-confirm-plan', label: 'Xác nhận kế hoạch', kind: 'screen' as const, description: 'Review nguồn, phạm vi, lịch và chính sách nhắc trước khi lưu.', badge: 'REVIEW', lane: 'Người dùng', icon: 'check' as const, tone: 'success' as const },
+    { id: 'backup-due', label: 'Đến hạn backup', kind: 'process' as const, description: 'Scheduler đánh giá mạng, pin và dữ liệu mới.', badge: 'TRIGGER', lane: 'Tự động', icon: 'clock' as const, tone: 'neutral' as const },
+    { id: 'backup-reminder', label: 'Hiển thị nhắc backup', kind: 'screen' as const, description: 'Hiển thị dung lượng, thời gian dự kiến và các hành động rõ ràng.', badge: 'MOMENT', lane: 'Người dùng', icon: 'bell' as const, tone: 'accent' as const },
+    { id: 'backup-reminder-action', label: 'Người dùng chọn hành động', kind: 'decision' as const, description: 'Backup ngay, hoãn có chủ đích hoặc bỏ qua lần này.', badge: 'CHOICE', lane: 'Người dùng', icon: 'user' as const, tone: 'warning' as const },
+    { id: 'backup-run', label: 'Bắt đầu backup', kind: 'process' as const, description: 'Khóa manifest phiên và tải dữ liệu theo batch có thể retry.', badge: 'RUN', lane: 'Tự động', icon: 'cloud' as const, tone: 'brand' as const },
+    { id: 'backup-progress', label: 'Theo dõi tiến độ', kind: 'screen' as const, description: 'Hiển thị phần trăm, dữ liệu còn lại và khả năng chạy nền.', badge: 'LIVE', lane: 'Người dùng', icon: 'cloud' as const, tone: 'info' as const },
+    { id: 'backup-success', label: 'Backup thành công', kind: 'screen' as const, description: 'Xác nhận dữ liệu an toàn và lịch tiếp theo.', badge: 'DONE', lane: 'Người dùng', icon: 'check' as const, tone: 'success' as const },
+    { id: 'backup-failure', label: 'Backup thất bại', kind: 'note' as const, description: 'Giữ checkpoint, giải thích nguyên nhân và cho phép thử lại.', badge: 'RECOVERY', lane: 'Ngoại lệ', icon: 'warning' as const, tone: 'danger' as const },
+    { id: 'backup-snooze', label: 'Hoãn nhắc', kind: 'process' as const, description: 'Lưu giờ nhắc mới và tránh gửi thông báo trùng.', badge: '+30 PHÚT', lane: 'Tự động', icon: 'clock' as const, tone: 'accent' as const },
+    { id: 'backup-skip', label: 'Bỏ qua lần này', kind: 'note' as const, description: 'Ghi nhận lựa chọn nhưng giữ lịch backup tiếp theo.', badge: 'SKIP', lane: 'Ngoại lệ', icon: 'warning' as const, tone: 'neutral' as const },
+    { id: 'backup-manual', label: 'Backup thủ công', kind: 'process' as const, description: 'Cho phép chủ động chạy mà không chờ lịch.', badge: 'SHORTCUT', lane: 'Người dùng', icon: 'sparkles' as const, tone: 'info' as const },
+  ]
+  const pairs: Array<[string, string, string?]> = [
+    ['backup-dashboard', 'backup-source-ready'],
+    ['backup-source-ready', 'backup-select-data', 'Đã kết nối'],
+    ['backup-source-ready', 'backup-connect-source', 'Chưa kết nối'],
+    ['backup-connect-source', 'backup-select-data', 'Kết nối xong'],
+    ['backup-select-data', 'backup-schedule'],
+    ['backup-schedule', 'backup-notification'],
+    ['backup-notification', 'backup-confirm-plan', 'Tiếp tục'],
+    ['backup-confirm-plan', 'backup-due', 'Lưu kế hoạch'],
+    ['backup-dashboard', 'backup-manual', 'Backup ngay'],
+    ['backup-manual', 'backup-run'],
+    ['backup-due', 'backup-reminder'],
+    ['backup-reminder', 'backup-reminder-action'],
+    ['backup-reminder-action', 'backup-run', 'Backup ngay'],
+    ['backup-reminder-action', 'backup-snooze', 'Nhắc lại sau'],
+    ['backup-reminder-action', 'backup-skip', 'Bỏ qua'],
+    ['backup-snooze', 'backup-due', 'Đến giờ mới'],
+    ['backup-run', 'backup-progress'],
+    ['backup-progress', 'backup-success', 'Thành công'],
+    ['backup-progress', 'backup-failure', 'Thất bại'],
+    ['backup-failure', 'backup-run', 'Thử lại'],
+  ]
+  return operationsProgram(
+    'User flow nhắc backup gồm thiết lập, nhắc đúng hạn, backup thủ công và các nhánh ngoại lệ',
+    nodes,
+    pairs.map(([fromId, toId, label]) => ({ fromId, toId, ...(label ? { label } : {}) })),
+    {
+      sceneType: 'workflow',
+      title: 'Backup Reminder · MVP Journey',
+      description: 'Từ thiết lập niềm tin đến khoảnh khắc nhắc đúng lúc, có đường lui rõ ràng khi người dùng hoãn hoặc phiên backup lỗi.',
+    },
+  )
+}
+
+function backupPrototypeScreens(): CanvasNodeInput[] {
+  return [
+    {
+      id: 'prototype-backup-dashboard',
+      label: 'Tổng quan backup',
+      kind: 'screen',
+      description: 'Home ưu tiên cảm giác an toàn và hành động tiếp theo.',
+      tone: 'brand',
+      badge: '01 · OVERVIEW',
+      screen: {
+        eyebrow: 'BACKUP REMINDER',
+        title: 'Dữ liệu của bạn đang an toàn',
+        subtitle: 'Lần backup gần nhất hôm qua lúc 22:30.',
+        blocks: [
+          { id: 'health', kind: 'hero', label: 'Trạng thái', value: 'Đã bảo vệ', helper: '510 tệp · 12,4 GB', tone: 'success', span: 'full' },
+          { id: 'next', kind: 'metric', label: 'Lịch tiếp theo', value: '22:30 hôm nay', helper: 'Còn 6 giờ 12 phút', tone: 'accent', span: 'half' },
+          { id: 'storage', kind: 'metric', label: 'Cloud Drive', value: '64%', helper: 'Đã sử dụng', tone: 'info', span: 'half' },
+          { id: 'new-files', kind: 'status', label: 'Có 24 tệp mới', value: '1,8 GB đang chờ', helper: 'Wi-Fi ổn định', tone: 'warning', span: 'full' },
+        ],
+        primaryAction: 'Backup ngay',
+        secondaryAction: 'Xem lịch sử',
+        navItems: ['Tổng quan', 'Lịch', 'Nhật ký'],
+        activeNav: 'Tổng quan',
+      },
+    },
+    {
+      id: 'prototype-backup-source',
+      label: 'Kết nối nguồn backup',
+      kind: 'screen',
+      description: 'Chọn nguồn và phạm vi dữ liệu bằng lựa chọn có trạng thái.',
+      tone: 'info',
+      badge: '02 · SOURCE',
+      screen: {
+        eyebrow: 'THIẾT LẬP 1/2',
+        title: 'Bạn muốn bảo vệ dữ liệu nào?',
+        subtitle: 'Có thể thay đổi lựa chọn này bất cứ lúc nào.',
+        blocks: [
+          { id: 'device', kind: 'choice', label: 'Thiết bị này', value: 'Đã chọn', helper: 'Ảnh, video và tài liệu', tone: 'brand', span: 'full' },
+          { id: 'cloud', kind: 'choice', label: 'Cloud Drive', value: 'Đã kết nối', helper: 'minh@work.vn', tone: 'success', span: 'full' },
+          { id: 'folders', kind: 'list', label: 'Thư mục', value: 'Camera · Screenshots · Documents', helper: '510 tệp', tone: 'neutral', span: 'full' },
+          { id: 'wifi', kind: 'toggle', label: 'Chỉ backup khi có Wi-Fi', value: 'Bật', helper: null, tone: 'info', span: 'full' },
+        ],
+        primaryAction: 'Tiếp tục',
+        secondaryAction: 'Để sau',
+        navItems: ['Tổng quan', 'Lịch', 'Nhật ký'],
+        activeNav: 'Tổng quan',
+      },
+    },
+    {
+      id: 'prototype-backup-schedule',
+      label: 'Lịch & nhắc backup',
+      kind: 'screen',
+      description: 'Cấu hình lịch bằng dữ liệu thực thay cho input placeholder.',
+      tone: 'accent',
+      badge: '03 · SCHEDULE',
+      screen: {
+        eyebrow: 'THIẾT LẬP 2/2',
+        title: 'Lịch backup phù hợp với bạn',
+        subtitle: 'Ứng dụng chỉ chạy khi điều kiện an toàn.',
+        blocks: [
+          { id: 'frequency', kind: 'field', label: 'Tần suất', value: 'Mỗi ngày', helper: null, tone: 'brand', span: 'half' },
+          { id: 'time', kind: 'field', label: 'Thời gian', value: '22:30', helper: null, tone: 'accent', span: 'half' },
+          { id: 'reminder', kind: 'toggle', label: 'Nhắc trước 15 phút', value: 'Bật', helper: 'Có thể hoãn 30 phút', tone: 'success', span: 'full' },
+          { id: 'conditions', kind: 'info', label: 'Điều kiện chạy', value: 'Wi-Fi · Pin trên 30%', helper: 'Ưu tiên khi đang sạc', tone: 'neutral', span: 'full' },
+        ],
+        primaryAction: 'Lưu kế hoạch',
+        secondaryAction: 'Quay lại',
+        navItems: ['Tổng quan', 'Lịch', 'Nhật ký'],
+        activeNav: 'Lịch',
+      },
+    },
+    {
+      id: 'prototype-backup-reminder',
+      label: 'Nhắc backup đến hạn',
+      kind: 'screen',
+      description: 'Khoảnh khắc quyết định: rõ dung lượng, thời gian và ba lựa chọn.',
+      tone: 'warning',
+      badge: '04 · REMINDER',
+      screen: {
+        eyebrow: 'ĐẾN LỊCH · 22:30',
+        title: '24 tệp đang chờ được bảo vệ',
+        subtitle: 'Khoảng 8 phút qua Wi-Fi hiện tại.',
+        blocks: [
+          { id: 'payload', kind: 'hero', label: 'Dữ liệu mới', value: '1,8 GB', helper: 'Ảnh & video · Documents', tone: 'brand', span: 'full' },
+          { id: 'network', kind: 'status', label: 'Điều kiện sẵn sàng', value: 'Wi-Fi tốt · Pin 68%', helper: 'Có thể chạy nền', tone: 'success', span: 'full' },
+          { id: 'snooze', kind: 'choice', label: 'Chưa tiện lúc này?', value: 'Nhắc lại sau 30 phút', helper: 'Lịch gốc vẫn được giữ', tone: 'accent', span: 'full' },
+        ],
+        primaryAction: 'Backup ngay',
+        secondaryAction: 'Bỏ qua lần này',
+        navItems: [],
+        activeNav: null,
+      },
+    },
+    {
+      id: 'prototype-backup-result',
+      label: 'Kết quả backup',
+      kind: 'screen',
+      description: 'Kết thúc bằng bằng chứng rõ ràng và bước tiếp theo.',
+      tone: 'success',
+      badge: '05 · COMPLETE',
+      screen: {
+        eyebrow: 'HOÀN TẤT',
+        title: '24 tệp mới đã an toàn',
+        subtitle: 'Phiên BK-0724 hoàn thành trong 7 phút 42 giây.',
+        blocks: [
+          { id: 'result', kind: 'hero', label: 'Đã backup', value: '1,8 GB', helper: 'Không có lỗi', tone: 'success', span: 'full' },
+          { id: 'destination', kind: 'info', label: 'Đích lưu', value: 'Cloud Drive', helper: 'minh@work.vn', tone: 'info', span: 'half' },
+          { id: 'next-run', kind: 'metric', label: 'Lần tiếp theo', value: '22:30 mai', helper: 'Tự động', tone: 'accent', span: 'half' },
+          { id: 'timeline', kind: 'timeline', label: 'Nhật ký phiên', value: 'Chuẩn bị → Tải lên → Xác minh', helper: 'Đã read-back', tone: 'neutral', span: 'full' },
+        ],
+        primaryAction: 'Về tổng quan',
+        secondaryAction: 'Xem nhật ký',
+        navItems: ['Tổng quan', 'Lịch', 'Nhật ký'],
+        activeNav: 'Nhật ký',
+      },
+    },
+  ]
+}
+
 function prototypeScreens(message: string, context: CanvasPlanningContext): CanvasProgram {
-  const conversation = context.recentMessages?.map((item) => item.content).join(' ') ?? ''
-  const topic = normalizeText(`${conversation} ${message}`)
+  const topic = conversationTopic(message, context)
+  if (isBackupReminderTopic(topic)) {
+    const nodes = backupPrototypeScreens()
+    return operationsProgram(
+      `Prototype product concept ${nodes.length} màn hình có thể chỉnh sửa trực tiếp`,
+      nodes,
+      nodes.slice(1).map((node, index) => ({ fromId: nodes[index]!.id, toId: node.id, label: 'Tiếp tục' })),
+      {
+        sceneType: 'prototype',
+        title: 'Backup Reminder · Product Concept',
+        description: 'Quiet confidence: giúp người dùng hiểu dữ liệu nào đang an toàn, điều gì sẽ xảy ra tiếp theo và luôn có quyền kiểm soát.',
+      },
+    )
+  }
   const screens = /(suat an|dat mon|meal|ordering|pantry|com trua)/.test(topic)
     ? [
         ['prototype-discover-meals', 'Khám phá món ăn'],
@@ -230,22 +467,25 @@ function prototypeScreens(message: string, context: CanvasPlanningContext): Canv
       toId: id!,
       label: 'Tiếp tục',
     })),
+    { sceneType: 'prototype', title: 'MVP Product Prototype', description: 'Các màn hình chính để review luồng và nội dung.' },
   )
 }
 
 export function planExplicitCanvasRequest(message: string, selection?: CanvasSelectionContext, context: CanvasPlanningContext = {}): CanvasProgram | undefined {
   const normalized = normalizeText(message)
-  const drawIntent = classifyCanvasInteraction(message, selection).kind === 'draw'
-  if (drawIntent) {
+  if (context.intent === 'draw') {
     const prototypeIntent = /(prototype|wireframe)/.test(normalized)
       || (!/(workflow|user flow|flow)/.test(normalized) && /(ve|phac thao|tao).{0,28}man hinh/.test(normalized))
-    if (prototypeIntent) return prototypeScreens(message, context)
+    if (prototypeIntent) return replaceAgentScene(prototypeScreens(message, context), context)
     const steps = requestedWorkflowSteps(message)
     if (steps.length < 2) {
-      const conversation = context.recentMessages?.map((item) => item.content).join(' ') ?? ''
-      return /(dat xe|goi xe|booking xe|ride)/.test(normalizeText(`${conversation} ${message}`))
+      const topic = conversationTopic(message, context)
+      const program = /(dat xe|goi xe|booking xe|ride)/.test(topic)
         ? rideBookingWorkflow()
-        : genericFullWorkflow(context)
+        : isBackupReminderTopic(topic)
+          ? backupReminderWorkflow()
+          : genericFullWorkflow(context)
+      return replaceAgentScene(program, context)
     }
     const ids = steps.map(stableId)
     const operations: CanvasProgram['operations'] = steps.map((label, index) => ({
@@ -257,15 +497,46 @@ export function planExplicitCanvasRequest(message: string, selection?: CanvasSel
     for (let index = 1; index < ids.length; index += 1) {
       operations.push({ op: 'connect', id: `edge-${ids[index - 1]}-${ids[index]}`, fromId: ids[index - 1]!, toId: ids[index]! })
     }
-    return canvasProgramSchema.parse({ schemaVersion: 1, mode: 'operations', summary: `Workflow ${steps.join(' -> ')}`, operations, script: null })
+    return replaceAgentScene(
+      canvasProgramSchema.parse({ schemaVersion: 1, mode: 'operations', summary: `Workflow ${steps.join(' -> ')}`, operations, script: null }),
+      context,
+    )
   }
 
+  if (context.intent !== 'edit') return undefined
   const selectedId = selection?.entityId
   if (selectedId && /(otp|retry|thu lai|loi|error|nhanh|branch)/.test(normalized)) {
     const additions = [
-      ...(normalized.includes('otp') ? [{ id: `${selectedId}-otp`, label: 'Nhập OTP', kind: 'screen' as const }] : []),
-      ...(/retry|thu lai/.test(normalized) ? [{ id: `${selectedId}-retry`, label: 'Thử lại', kind: 'process' as const }] : []),
-      ...(/loi|error/.test(normalized) ? [{ id: `${selectedId}-error`, label: `${selection.label} thất bại`, kind: 'note' as const }] : []),
+      ...(normalized.includes('otp') ? [{
+        id: `${selectedId}-otp`,
+        label: 'Nhập OTP',
+        kind: 'screen' as const,
+        description: 'Xác thực mã một lần và hiển thị thời gian còn lại.',
+        badge: 'SECURE',
+        lane: 'Người dùng',
+        icon: 'shield' as const,
+        tone: 'info' as const,
+      }] : []),
+      ...(/retry|thu lai/.test(normalized) ? [{
+        id: `${selectedId}-retry`,
+        label: 'Thử lại',
+        kind: 'process' as const,
+        description: 'Khôi phục từ checkpoint gần nhất mà không tạo phiên trùng.',
+        badge: 'RETRY',
+        lane: 'Tự động',
+        icon: 'clock' as const,
+        tone: 'success' as const,
+      }] : []),
+      ...(/loi|error/.test(normalized) ? [{
+        id: `${selectedId}-error`,
+        label: `${selection.label} thất bại`,
+        kind: 'note' as const,
+        description: 'Giải thích nguyên nhân và giữ một đường phục hồi rõ ràng.',
+        badge: 'EXCEPTION',
+        lane: 'Ngoại lệ',
+        icon: 'warning' as const,
+        tone: 'danger' as const,
+      }] : []),
     ]
     if (additions.length === 0) return undefined
     return canvasProgramSchema.parse({
@@ -291,18 +562,6 @@ export function legacyCommandsToCanvasProgram(commands: ProviderCommand[]): Canv
   return operations.length > 0
     ? canvasProgramSchema.parse({ schemaVersion: 1, mode: 'operations', summary: 'Legacy semantic canvas commands', operations, script: null })
     : undefined
-}
-
-export function canvasProgramCovers(program: CanvasProgram, required: CanvasProgram): boolean {
-  const labels = new Set(program.operations
-    .filter((operation) => operation.op === 'create_node')
-    .map((operation) => normalizeText(operation.label)))
-  const hasNodes = required.operations
-    .filter((operation) => operation.op === 'create_node')
-    .every((operation) => labels.has(normalizeText(operation.label)))
-  const requiredConnections = required.operations.filter((operation) => operation.op === 'connect').length
-  const proposedConnections = program.operations.filter((operation) => operation.op === 'connect').length
-  return hasNodes && proposedConnections >= requiredConnections
 }
 
 function stableEntityId(prefix: string, value: string, index: number): string {

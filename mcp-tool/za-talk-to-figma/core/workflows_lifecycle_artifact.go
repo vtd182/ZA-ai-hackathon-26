@@ -42,33 +42,81 @@ type lifecycleEdge struct {
 	Action       string `json:"action"`
 }
 
+type lifecycleDesignPrinciple struct {
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
+}
+
+type lifecycleDesignDirection struct {
+	ConceptName    string                     `json:"conceptName"`
+	ProductPromise string                     `json:"productPromise"`
+	Tone           string                     `json:"tone"`
+	Density        string                     `json:"density"`
+	Palette        string                     `json:"palette"`
+	Principles     []lifecycleDesignPrinciple `json:"principles"`
+}
+
+type lifecycleContentItem struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+type lifecycleContentSection struct {
+	Key   string                 `json:"key"`
+	Kind  string                 `json:"kind"`
+	Title string                 `json:"title"`
+	Body  string                 `json:"body"`
+	Tone  string                 `json:"tone"`
+	Items []lifecycleContentItem `json:"items"`
+}
+
+type lifecycleScreenPresentation struct {
+	Archetype       string                    `json:"archetype"`
+	Eyebrow         string                    `json:"eyebrow"`
+	Headline        string                    `json:"headline"`
+	SupportingText  string                    `json:"supportingText"`
+	Sections        []lifecycleContentSection `json:"sections"`
+	NavigationLabel string                    `json:"navigationLabel"`
+}
+
 type lifecycleScreenRecipe struct {
-	SchemaVersion  int             `json:"schemaVersion"`
-	ScreenID       string          `json:"screenId"`
-	Name           string          `json:"name"`
-	Purpose        string          `json:"purpose"`
-	RequirementIDs []string        `json:"requirementIds"`
-	Layout         string          `json:"layout"`
-	Sequence       int             `json:"sequence"`
-	Slots          []lifecycleSlot `json:"slots"`
-	PrototypeEdges []lifecycleEdge `json:"prototypeEdges"`
+	SchemaVersion  int                         `json:"schemaVersion"`
+	ScreenID       string                      `json:"screenId"`
+	Name           string                      `json:"name"`
+	Purpose        string                      `json:"purpose"`
+	RequirementIDs []string                    `json:"requirementIds"`
+	Layout         string                      `json:"layout"`
+	Sequence       int                         `json:"sequence"`
+	Presentation   lifecycleScreenPresentation `json:"presentation"`
+	Slots          []lifecycleSlot             `json:"slots"`
+	PrototypeEdges []lifecycleEdge             `json:"prototypeEdges"`
 }
 
 type lifecycleArtifactPlan struct {
-	SchemaVersion       int                     `json:"schemaVersion"`
-	Kind                string                  `json:"kind"`
-	Mode                string                  `json:"mode"`
-	Target              lifecycleTarget         `json:"target"`
-	ManifestFingerprint string                  `json:"manifestFingerprint"`
-	RequiredTokens      []string                `json:"requiredTokens"`
-	Screens             []lifecycleScreenRecipe `json:"screens"`
-	Metadata            map[string]interface{}  `json:"metadata"`
+	SchemaVersion       int                      `json:"schemaVersion"`
+	Kind                string                   `json:"kind"`
+	Mode                string                   `json:"mode"`
+	Target              lifecycleTarget          `json:"target"`
+	ManifestFingerprint string                   `json:"manifestFingerprint"`
+	RequiredTokens      []string                 `json:"requiredTokens"`
+	DesignDirection     lifecycleDesignDirection `json:"designDirection"`
+	CreativeBlueprint   json.RawMessage          `json:"creativeBlueprint,omitempty"`
+	Screens             []lifecycleScreenRecipe  `json:"screens"`
+	Metadata            map[string]interface{}   `json:"metadata"`
+}
+
+type lifecycleComponentBinding struct {
+	Kind   string `json:"kind"`
+	Key    string `json:"key,omitempty"`
+	NodeID string `json:"nodeId,omitempty"`
+	PageID string `json:"pageId,omitempty"`
 }
 
 type lifecycleManifestComponent struct {
-	Key          string `json:"key"`
-	SemanticRole string `json:"semanticRole"`
-	Deprecated   bool   `json:"deprecated"`
+	Key          string                     `json:"key"`
+	SemanticRole string                     `json:"semanticRole"`
+	Deprecated   bool                       `json:"deprecated"`
+	Binding      *lifecycleComponentBinding `json:"binding,omitempty"`
 }
 
 type lifecycleManifestToken struct {
@@ -97,12 +145,13 @@ type lifecyclePreflightIssue struct {
 }
 
 type lifecycleResolvedSlot struct {
-	ScreenID     string  `json:"screenId"`
-	SlotKey      string  `json:"slotKey"`
-	Required     bool    `json:"required"`
-	ComponentKey *string `json:"componentKey"`
-	SemanticRole *string `json:"semanticRole"`
-	Resolution   string  `json:"resolution"`
+	ScreenID         string                     `json:"screenId"`
+	SlotKey          string                     `json:"slotKey"`
+	Required         bool                       `json:"required"`
+	ComponentKey     *string                    `json:"componentKey"`
+	ComponentBinding *lifecycleComponentBinding `json:"componentBinding"`
+	SemanticRole     *string                    `json:"semanticRole"`
+	Resolution       string                     `json:"resolution"`
 }
 
 type lifecycleResolvedPlan struct {
@@ -120,33 +169,47 @@ type lifecyclePreflightResult struct {
 	Issues   []lifecyclePreflightIssue `json:"issues"`
 }
 
+type lifecycleCreativeBlueprintMetrics struct {
+	Screens []struct {
+		Elements []json.RawMessage `json:"elements"`
+	} `json:"screens"`
+}
+
 type lifecycleSnapshotSlot struct {
-	SlotKey           string  `json:"slotKey"`
-	ComponentKey      *string `json:"componentKey"`
-	SemanticRole      *string `json:"semanticRole"`
-	PrimitiveFallback bool    `json:"primitiveFallback"`
+	SlotKey           string                     `json:"slotKey"`
+	ComponentKey      *string                    `json:"componentKey"`
+	ComponentBinding  *lifecycleComponentBinding `json:"componentBinding"`
+	SemanticRole      *string                    `json:"semanticRole"`
+	PrimitiveFallback bool                       `json:"primitiveFallback"`
+	InstanceBacked    bool                       `json:"instanceBacked"`
 }
 
 type lifecycleSnapshotScreen struct {
-	NodeID       string                  `json:"nodeId"`
-	ScreenID     string                  `json:"screenId"`
-	Name         string                  `json:"name"`
-	ComponentKey *string                 `json:"componentKey"`
-	SemanticRole *string                 `json:"semanticRole"`
-	Metadata     map[string]interface{}  `json:"metadata"`
-	ChildSlots   []lifecycleSnapshotSlot `json:"childSlots"`
+	NodeID          string                  `json:"nodeId"`
+	ScreenID        string                  `json:"screenId"`
+	Name            string                  `json:"name"`
+	Archetype       string                  `json:"archetype"`
+	SectionKeys     []string                `json:"sectionKeys"`
+	ComponentKey    *string                 `json:"componentKey"`
+	SemanticRole    *string                 `json:"semanticRole"`
+	CreativeMetrics map[string]int          `json:"creativeMetrics,omitempty"`
+	Metadata        map[string]interface{}  `json:"metadata"`
+	ChildSlots      []lifecycleSnapshotSlot `json:"childSlots"`
 }
 
 type lifecycleArtifactSnapshot struct {
-	SchemaVersion  int                       `json:"schemaVersion"`
-	TargetHash     string                    `json:"targetHash"`
-	PlanHash       string                    `json:"planHash"`
-	IdempotencyKey string                    `json:"idempotencyKey"`
-	RootNodeIDs    []string                  `json:"rootNodeIds"`
-	Screens        []lifecycleSnapshotScreen `json:"screens"`
-	PrototypeEdges []lifecycleEdge           `json:"prototypeEdges"`
-	ReadAt         string                    `json:"readAt"`
-	Idempotent     bool                      `json:"idempotent,omitempty"`
+	SchemaVersion     int                       `json:"schemaVersion"`
+	TargetHash        string                    `json:"targetHash"`
+	PlanHash          string                    `json:"planHash"`
+	IdempotencyKey    string                    `json:"idempotencyKey"`
+	RootNodeIDs       []string                  `json:"rootNodeIds"`
+	ArtifactPageID    string                    `json:"artifactPageId"`
+	ArtifactPageName  string                    `json:"artifactPageName"`
+	DesignConceptName string                    `json:"designConceptName"`
+	Screens           []lifecycleSnapshotScreen `json:"screens"`
+	PrototypeEdges    []lifecycleEdge           `json:"prototypeEdges"`
+	ReadAt            string                    `json:"readAt"`
+	Idempotent        bool                      `json:"idempotent,omitempty"`
 }
 
 type lifecycleAuditResult struct {
@@ -219,11 +282,15 @@ func registerLifecycleArtifactTools(s *server.MCPServer, runtime *Runtime) {
 		mcp.WithDescription("Read a bounded lifecycle artifact snapshot from Figma plugin data by idempotency key. This is independent of the apply response."),
 		mcp.WithString("targetPageId", mcp.Required()),
 		mcp.WithString("idempotencyKey", mcp.Required()),
+		mcp.WithString("rootNodeId", mcp.Description("Optional artifact root ID returned by apply. Avoids scanning unrelated pages.")),
 		withOptionalSessionTarget(),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		params := map[string]interface{}{
 			"targetPageId":   req.GetArguments()["targetPageId"],
 			"idempotencyKey": req.GetArguments()["idempotencyKey"],
+		}
+		if rootNodeID, ok := req.GetArguments()["rootNodeId"].(string); ok && rootNodeID != "" {
+			params["rootNodeId"] = rootNodeID
 		}
 		sessionID, _ := req.GetArguments()["sessionId"].(string)
 		resp, err := executeCapability(ctx, runtime, "read_lifecycle_artifact", nil, paramsWithSession(params, sessionID))
@@ -290,6 +357,21 @@ func hashLifecycleResolvedPlan(plan lifecycleResolvedPlan) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
+func creativeElementCount(raw json.RawMessage) int {
+	if len(raw) == 0 {
+		return 0
+	}
+	var blueprint lifecycleCreativeBlueprintMetrics
+	if err := json.Unmarshal(raw, &blueprint); err != nil {
+		return 0
+	}
+	total := 0
+	for _, screen := range blueprint.Screens {
+		total += len(screen.Elements)
+	}
+	return total
+}
+
 func validateApprovedLifecyclePreflight(preflight lifecyclePreflightResult, planHash, approvedPlanHash string) error {
 	if !preflight.Allowed {
 		return fmt.Errorf("PREFLIGHT_BLOCKED: lifecycle plan contains policy errors")
@@ -335,6 +417,12 @@ func auditLifecycleArtifact(plan lifecycleResolvedPlan, planHash string, snapsho
 	if len(snapshot.RootNodeIDs) == 0 {
 		add("MISSING_ARTIFACT_ROOT", "Read-back did not find a lifecycle artifact root.", "")
 	}
+	if snapshot.ArtifactPageID == "" || snapshot.ArtifactPageName == "" {
+		add("MISSING_ARTIFACT_PAGE", "Read-back did not identify the dedicated artifact page.", "")
+	}
+	if snapshot.DesignConceptName != plan.Source.DesignDirection.ConceptName {
+		add("DESIGN_CONCEPT_MISMATCH", "Read-back design concept does not match the approved blueprint.", "")
+	}
 
 	screensByID := map[string]lifecycleSnapshotScreen{}
 	for _, screen := range snapshot.Screens {
@@ -352,6 +440,18 @@ func auditLifecycleArtifact(plan lifecycleResolvedPlan, planHash string, snapsho
 		}
 		if metadataString(actual.Metadata, "namespace") != "za.pm-lifecycle/v1" || metadataString(actual.Metadata, "screenId") != expected.ScreenID {
 			add("MISSING_LIFECYCLE_METADATA", "Screen lifecycle namespace or screenId metadata is missing.", expected.ScreenID)
+		}
+		if len(plan.Source.CreativeBlueprint) == 0 {
+			if actual.Archetype != expected.Presentation.Archetype {
+				add("ARCHETYPE_MISMATCH", "Screen archetype does not match the approved blueprint.", expected.ScreenID)
+			}
+			expectedSectionKeys := make([]string, 0, len(expected.Presentation.Sections))
+			for _, section := range expected.Presentation.Sections {
+				expectedSectionKeys = append(expectedSectionKeys, section.Key)
+			}
+			if !sameStrings(actual.SectionKeys, expectedSectionKeys) {
+				add("SECTION_COVERAGE_MISMATCH", "Screen sections do not match the approved blueprint.", expected.ScreenID)
+			}
 		}
 		if metadataString(actual.Metadata, "runId") != metadataString(plan.Source.Metadata, "runId") || metadataString(actual.Metadata, "actionId") != metadataString(plan.Source.Metadata, "actionId") {
 			add("LIFECYCLE_SCOPE_MISMATCH", "Screen run/action metadata does not match the plan.", expected.ScreenID)
@@ -373,8 +473,14 @@ func auditLifecycleArtifact(plan lifecycleResolvedPlan, planHash string, snapsho
 			if expectedSlot.ComponentKey != nil && (actualSlot.ComponentKey == nil || *actualSlot.ComponentKey != *expectedSlot.ComponentKey) {
 				add("COMPONENT_BINDING_MISMATCH", fmt.Sprintf("Slot %s component binding does not match.", expectedSlot.SlotKey), expected.ScreenID)
 			}
+			if !sameLifecycleComponentBinding(actualSlot.ComponentBinding, expectedSlot.ComponentBinding) {
+				add("COMPONENT_BINDING_MISMATCH", fmt.Sprintf("Slot %s component source does not match.", expectedSlot.SlotKey), expected.ScreenID)
+			}
 			if expectedSlot.SemanticRole != nil && (actualSlot.SemanticRole == nil || *actualSlot.SemanticRole != *expectedSlot.SemanticRole) {
 				add("ROLE_BINDING_MISMATCH", fmt.Sprintf("Slot %s semantic role does not match.", expectedSlot.SlotKey), expected.ScreenID)
+			}
+			if expectedSlot.Resolution == "component" && !actualSlot.InstanceBacked {
+				add("COMPONENT_NOT_INSTANCE_BACKED", fmt.Sprintf("Slot %s is not backed by a Figma instance.", expectedSlot.SlotKey), expected.ScreenID)
 			}
 			if plan.Source.Mode == "strict" && actualSlot.PrimitiveFallback {
 				add("PRIMITIVE_FALLBACK", fmt.Sprintf("Strict slot %s used a primitive fallback.", expectedSlot.SlotKey), expected.ScreenID)
@@ -404,6 +510,13 @@ func auditLifecycleArtifact(plan lifecycleResolvedPlan, planHash string, snapsho
 		return issues[i].EntityID < issues[j].EntityID
 	})
 	return lifecycleAuditResult{Verified: len(issues) == 0, Issues: issues, Snapshot: snapshot}
+}
+
+func sameLifecycleComponentBinding(left, right *lifecycleComponentBinding) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.Kind == right.Kind && left.Key == right.Key && left.NodeID == right.NodeID && left.PageID == right.PageID
 }
 
 func stringSliceFromAny(value interface{}) []string {
@@ -449,6 +562,9 @@ func planLifecycleDesignSystemScreens(plan lifecycleArtifactPlan, manifest lifec
 	if len(plan.Screens) == 0 {
 		return lifecyclePreflightResult{}, fmt.Errorf("artifact plan must include at least one screen")
 	}
+	if strings.TrimSpace(plan.DesignDirection.ConceptName) == "" || len(plan.DesignDirection.Principles) < 2 {
+		return lifecyclePreflightResult{}, fmt.Errorf("artifact plan must include a design direction with at least two principles")
+	}
 
 	issues := []lifecyclePreflightIssue{}
 	if plan.Target.TargetHash == "" || plan.Target.TargetHash != allowedTarget.TargetHash || plan.Target.SessionID != allowedTarget.SessionID || plan.Target.PageID != allowedTarget.PageID {
@@ -476,11 +592,13 @@ func planLifecycleDesignSystemScreens(plan lifecycleArtifactPlan, manifest lifec
 
 	resolvedSlots := []lifecycleResolvedSlot{}
 	edgeCount := 0
+	sectionCount := 0
 	for _, screen := range plan.Screens {
-		if strings.TrimSpace(screen.ScreenID) == "" || len(screen.Slots) == 0 {
-			return lifecyclePreflightResult{}, fmt.Errorf("every screen requires an ID and at least one semantic slot")
+		if strings.TrimSpace(screen.ScreenID) == "" || len(screen.Slots) == 0 || strings.TrimSpace(screen.Presentation.Archetype) == "" || len(screen.Presentation.Sections) == 0 {
+			return lifecyclePreflightResult{}, fmt.Errorf("every screen requires an ID, presentation sections and at least one semantic slot")
 		}
 		edgeCount += len(screen.PrototypeEdges)
+		sectionCount += len(screen.Presentation.Sections)
 		seenSlots := map[string]bool{}
 		for _, slot := range screen.Slots {
 			if strings.TrimSpace(slot.Key) == "" || len(slot.RequiredRoles) == 0 || seenSlots[slot.Key] {
@@ -499,6 +617,29 @@ func planLifecycleDesignSystemScreens(plan lifecycleArtifactPlan, manifest lifec
 			if matched != nil {
 				resolved.ComponentKey = &matched.Key
 				resolved.SemanticRole = &matched.SemanticRole
+				if matched.Binding != nil {
+					binding := *matched.Binding
+					resolved.ComponentBinding = &binding
+				} else {
+					resolved.ComponentBinding = &lifecycleComponentBinding{Kind: "component_key", Key: matched.Key}
+				}
+				if resolved.ComponentBinding.Kind == "same_file_instance" {
+					if resolved.ComponentBinding.NodeID == "" || resolved.ComponentBinding.PageID == "" || resolved.ComponentBinding.PageID != plan.Target.PageID {
+						issues = append(issues, lifecyclePreflightIssue{
+							Code:     "INVALID_COMPONENT_BINDING",
+							Severity: "error",
+							Message:  fmt.Sprintf("Same-file component binding for slot %s is outside the approved page.", slot.Key),
+							EntityID: screen.ScreenID,
+						})
+					}
+				} else if resolved.ComponentBinding.Kind != "component_key" || resolved.ComponentBinding.Key == "" {
+					issues = append(issues, lifecyclePreflightIssue{
+						Code:     "INVALID_COMPONENT_BINDING",
+						Severity: "error",
+						Message:  fmt.Sprintf("Component binding for slot %s is invalid.", slot.Key),
+						EntityID: screen.ScreenID,
+					})
+				}
 				resolved.Resolution = "component"
 			} else {
 				severity := "warning"
@@ -543,7 +684,7 @@ func planLifecycleDesignSystemScreens(plan lifecycleArtifactPlan, manifest lifec
 		Source:              plan,
 		ResolvedSlots:       resolvedSlots,
 		ResolvedTokens:      resolvedTokens,
-		EstimatedOperations: len(plan.Screens) + len(resolvedSlots) + edgeCount,
+		EstimatedOperations: 1 + len(plan.Screens) + len(resolvedSlots) + edgeCount + sectionCount + creativeElementCount(plan.CreativeBlueprint),
 	}
 	planHash, err := hashLifecycleResolvedPlan(resolvedPlan)
 	if err != nil {

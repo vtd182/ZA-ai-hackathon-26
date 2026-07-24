@@ -8,6 +8,13 @@ import (
 	"testing"
 )
 
+func TestFollowerUsesCallerDeadlineInsteadOfFixedHTTPTimeout(t *testing.T) {
+	f := NewFollower("http://127.0.0.1:1")
+	if f.client.Timeout != 0 {
+		t.Fatalf("follower HTTP timeout = %s, want caller-owned deadline", f.client.Timeout)
+	}
+}
+
 // ── Ping ─────────────────────────────────────────────────────────────────────
 
 func TestFollowerPing_Success(t *testing.T) {

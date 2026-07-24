@@ -286,6 +286,24 @@
 - **Acceptance:** a meal-ordering prototype renders 3-5 distinct editable screens in a compact journey without overlap; Overview and Focus selection keep content readable; manual canvas edits expose a dirty state and Sync sends bounded canvas/selection context without silently mutating ProductSpec; agent activity distinguishes reasoning, apply, checkpoint and read-back; lifecycle smoke proves custom decision -> prototype -> manual edit/sync -> receipt and captures a reviewed screenshot.
 - **Evidence:** the meal-ordering prototype now renders five distinct 320x520 editable screens as a compact two-row journey with scene title and locked-scope context; Overview and Focus selection provide explicit camera control. Manual tldraw edits set `Chưa sync`; Sync persists the exact snapshot and sends bounded canvas/selection context to chat while preserving ProductSpec v1. Agent activity exposes reasoning, apply, checkpoint and read-back stages, and agent-owned selections no longer open the intrusive style panel. `./run.sh test` passes 106 tests + 1 optional live skip, workspace typecheck and production build pass, and `./run.sh smoke-lifecycle` verifies five frames, 47 editable children, a pointer edit, selection feedback, sync receipt, unchanged ProductSpec and the existing verified artifact path. The final 2880x1740 screenshot was reviewed at a readable 47% overview.
 
+### `P0-CAN-009` Creative conversation and native scene programs
+
+- **Status:** DONE (2026-07-24)
+- **Depends on:** P0-CAN-008, P0-AGT-003, P0-HIS-005
+- **Deliver:** conversational provider responses plus typed canvas proposals, a rich scene contract for workflows/prototypes, provider-first execution with deterministic fallback only, and structured canvas diff sync.
+- **Acceptance:** ordinary discussion leaves a blank canvas untouched; an explicit reminder-backup flow request produces a readable, non-generic scene authored from provider semantic content; a prototype request produces distinct detailed screens without renderer-owned domain lookup; provider output is never replaced by label-count comparison; selecting or editing canvas content and pressing Sync sends a typed bounded diff that the next response can discuss; the existing ProductSpec promotion and artifact approval boundaries remain intact.
+- **Happy-path gate:** create thread -> discuss idea -> explicitly request flow -> inspect/edit/select -> Sync -> request prototype -> receive verified canvas receipts, then continue to ProductSpec/Figma approval.
+- **Implementation plan:** `project-tracking/CREATIVE_AGENT_IMPLEMENTATION_PLAN.md`.
+- **Evidence:** conversation-only turns now use a lightweight provider schema and leave a new thread canvas blank; explicit visual turns carry rich provider-authored workflow/prototype programs with scene metadata, domain content, lanes, states and actions. Natural-language semantics are provider-owned through a typed intent envelope; only `draw/edit` loads the rich Canvas Program schema, while slash canvas commands route directly. Agent Core executes provider proposals first, requires a selected or uniquely resolved target for edit and uses deterministic scenes only when the provider returns no usable program. The renderer dependency-orders operations, lays out variable-height native tldraw cards/screens, persists before receipt and focuses local edits without replacing the complete scene. Sync sends a typed created/updated/moved/deleted `CanvasDiff` plus bounded canvas context. Current workspace typecheck, 134 tests + 1 optional skip, production build, `./run.sh smoke-lifecycle`, `./run.sh smoke-flow` and real `./run.sh smoke-codex-canvas` pass. The latest live Codex gate produced 20 semantic nodes, a provider-source receipt, an 11-operation selected edit, ProductSpec promotion, developer-script apply and verified artifacts.
+
+### `P0-UX-001` Reviewable artifacts, thread activity and export
+
+- **Status:** TODO (paused for P0-FIG-008 on 2026-07-24)
+- **Depends on:** P0-HIS-003, P0-CAN-008, P0-FIG-007
+- **Deliver:** thread-scoped reasoning UI with a global one-turn lock, stable canvas-context layout, exportable review bundle, domain-specific workflow/prototype generation and a dedicated Figma artifact page.
+- **Acceptance:** switching from a reasoning thread to another thread never shows the first thread's pending indicator and cannot start a second turn; selection context never shifts the chat layout; one action exports full chat plus ProductSpec/canvas/workspace evidence; reminder-backup flow and prototype are domain-specific, non-duplicated and screenshot-reviewable; approved Figma output is created on a dedicated page while source ZDS bindings remain guarded.
+- **Evidence so far:** renderer tracks the running thread ID while main enforces a tested global turn lock; selection uses a fixed-height slot; one export action writes chat, ProductSpec Markdown/JSON, canvas, workspace and a single attachable review bundle. Reminder-backup planning has 17 specific flow nodes and five detailed prototype screens; redraw replaces the previous scene of the same type while preserving complementary workflow/prototype scenes. Strict Figma apply clones allowlisted source-page ZDS instances into a dedicated named Page and read-back audits that Page. Workspace typecheck/build, 118 non-socket tests, 259 plugin tests/typecheck/build and lifecycle Go tests pass. Remaining acceptance evidence is a live Electron/Figma screenshot review outside the restricted sandbox.
+
 ### `P0-UI-003` Artifact preview and approval
 
 - **Status:** DONE (2026-07-22)
@@ -386,6 +404,22 @@
 - **Acceptance:** demo có thể chuyển sang fallback rõ nhãn mà không đổi ProductSpec/workflow.
 - **Evidence:** `MockFigmaArtifactConnector` implements the same plan/preflight/execute/read-back/verify contract, stable idempotency and failure injection; parity tests prove no duplicate and verification mismatch behavior.
 
+### `P0-FIG-007` Same-file ZDS instance catalog
+
+- **Status:** DONE (2026-07-23)
+- **Depends on:** P0-FIG-001, P0-FIG-003, P0-FIG-005
+- **Deliver:** bounded discovery of copied ZDS instances in the allowlisted public framework page, manifest source bindings for same-file instances, strict clone/apply and independent instance-backed read-back.
+- **Acceptance:** the public Zalo Mini App Framework resolves the demo roles without synthetic component keys; strict preflight has zero primitive fallback; apply clones allowlisted ZDS instances and read-back verifies their source bindings; onboarding recipes use concrete input/OTP/status roles.
+- **Evidence:** live discovery returns 199 representative ZDS instances and resolves header/button/input/OTP/list/status/modal roles. Strict app smoke cloned light/default ZDS instances into Figma node `449:16909`, then independently verified every slot as instance-backed with matching source bindings. Workspace has 114 tests pass plus one optional skip; plugin has 259 pass; Go suite, typecheck, build and live smoke pass.
+
+### `P0-FIG-008` Product-grade Figma design synthesis
+
+- **Status:** DONE (2026-07-24)
+- **Depends on:** P0-FIG-007, P0-UX-001
+- **Deliver:** a Design Blueprint contract with product-specific art direction, screen archetypes, content/state coverage and a Figma compositor that combines those decisions with allowlisted ZDS instances on a dedicated output Page.
+- **Acceptance:** reminder-backup output communicates a coherent product concept instead of repeating generic wireframe slots; screens have distinct hierarchy and domain content; strict mode still uses verified same-file ZDS instances; read-back independently proves the rendered design brief, archetype and presentation sections; TypeScript, plugin and Go hash/audit contracts agree.
+- **Evidence:** Provider-owned Creative Figma Blueprints now carry free composition, product copy, primitives, exact ZDS roles and prototype edges; Agent Core owns traceability, target, approval and read-back rather than a fixed wireframe compositor. A connected Figma Desktop run captured 190 copied ZDS instances into 25 semantic same-file bindings plus 9 tokens with no fallback. Codex planned a 4-screen/51-layer concept in 181s; approved apply recovered an incomplete agent-owned page, wrote in 4.7s, read back in 0.5s and verified 16 real ZDS instances, 4 distinct screens and 4 navigation edges at root `489:16542`. The exported 2248x1024 bitmap was visually reviewed. Immutable prepared preflight, cross-runtime hash ownership, operation budgets, follower deadlines, content-fit copy and incomplete-page recovery have regression coverage.
+
 ## Epic E7 - Change synchronization
 
 ### `P0-CHG-001` Change intent and impact preview
@@ -416,7 +450,7 @@
 
 ### `P0-QA-001` Unit and contract test gates
 
-- **Status:** IN_PROGRESS (resumed 2026-07-23)
+- **Status:** TODO (paused for P0-UX-001 on 2026-07-23)
 - **Depends on:** all P0 domain/core/connectors
 - **Deliver:** coverage cho invariants, transitions, impact, approval, idempotency, connector parity.
 - **Acceptance:** critical test matrix gồm provider/history/canvas/connector trong `TEST_AND_DEMO_PLAN.md` pass.
@@ -473,6 +507,6 @@
 | ID | Blocker | Owner | Workaround | Status |
 | --- | --- | --- | --- | --- |
 | `BLK-001` | Schema/protocol Figma bridge | Team | Đã review source: stdio MCP + local WS, 98 tools, session routing và DS workflows | RESOLVED |
-| `BLK-002` | Chưa có sanitized Zalo Design System manifest | Team/Design | Dùng synthetic fixture, ghi rõ trong demo | OPEN |
+| `BLK-002` | Chưa có sanitized Zalo Design System manifest | Team/Design | Public framework duplicate is now captured as an allowlisted same-file ZDS instance catalog | RESOLVED |
 | `BLK-003` | Chưa xác nhận quyền dùng tldraw cho demo/pilot | Team | Review license trước packaging | OPEN |
 | `BLK-004` | Chưa chọn real API provider cho release slot | Team | Probe credential/runtime, chọn sau provider conformance kit | OPEN |

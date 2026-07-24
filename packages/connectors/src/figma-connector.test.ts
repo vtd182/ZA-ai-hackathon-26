@@ -63,12 +63,38 @@ describe('MockFigmaArtifactConnector parity', () => {
     const receipt = await connector.execute(action, preflight)
     connector.tamper(receipt.idempotencyKey, (snapshot) => ({
       ...snapshot,
+      designConceptName: 'Wrong concept',
       screens: snapshot.screens.map((screen, index) => index === 0
-        ? { ...screen, metadata: { ...screen.metadata, requirementIds: ['REQ-WRONG'] } }
+        ? {
+            ...screen,
+            archetype: 'form',
+            sectionKeys: [],
+            metadata: { ...screen.metadata, requirementIds: ['REQ-WRONG'] },
+          }
         : screen),
     }))
     const verification = await connector.verify(preflight.plan, await connector.readBack(receipt))
     expect(verification.verified).toBe(false)
-    expect(verification.issues.map((issue) => issue.code)).toContain('REQUIREMENT_METADATA_MISMATCH')
+    expect(verification.issues.map((issue) => issue.code)).toEqual(expect.arrayContaining([
+      'DESIGN_CONCEPT_MISMATCH',
+      'REQUIREMENT_METADATA_MISMATCH',
+      'ARCHETYPE_MISMATCH',
+      'SECTION_COVERAGE_MISMATCH',
+    ]))
+  })
+
+  it('accepts a connector-owned plan hash covered by the exact approved payload', async () => {
+    const connector = new MockFigmaArtifactConnector(syntheticZaloDesignSystem, target)
+    const plan = createFigmaArtifactPlan(mealOrderingProductSpec, target, syntheticZaloDesignSystem, {
+      runId: 'RUN-TEST', threadId: 'THREAD-TEST', actionId: 'action:figma:test', idempotencyKey: 'figma:RUN-TEST:v1:external-hash',
+    })
+    const preflight = await connector.preflight(plan)
+    const connectorOwnedHash = 'f'.repeat(64)
+    const externalPreflight = { ...preflight, planHash: connectorOwnedHash }
+    const action = approvedAction(connectorOwnedHash)
+
+    await expect(connector.execute(action, externalPreflight)).resolves.toMatchObject({
+      target: 'figma',
+    })
   })
 })

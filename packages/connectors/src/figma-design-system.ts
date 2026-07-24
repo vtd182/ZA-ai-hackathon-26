@@ -106,19 +106,113 @@ function normalizeVariants(value: Record<string, unknown> | undefined): Record<s
   ]))
 }
 
+function normalizedName(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
+function rolesForCatalogInstance(instance: FigmaDesignSystemCapture['relevantInstances'][number]): string[] {
+  const name = normalizedName(instance.name)
+  const variant = normalizedName([
+    instance.mainComponentName ?? '',
+    ...Object.entries(instance.componentProperties).map(([key, value]) => `${key}=${value}`),
+  ].join(' '))
+
+  if (name === 'mp-header' || name.includes('app header')) return ['app-header']
+  if (name.includes('[zds] button')) {
+    if (variant.includes('level=secondary')) return ['secondary-button']
+    if (variant.includes('level=tertiary')) return ['tertiary-button']
+    return ['primary-button']
+  }
+  if (name.includes('[zds] input / otp')) return ['otp-input', 'pickup-code']
+  if (name.includes('[zds] input / password')) return ['password-input']
+  if (name.includes('[zds] input / search')) return ['search-input']
+  if (name.includes('[zds] input / dropdown')) return ['select-input']
+  if (name.includes('[zds] input / date')) return ['date-input']
+  if (name.includes('[zds] input / phone')) return ['phone-input']
+  if (name.includes('[zds] input / textarea')) return ['textarea-input']
+  if (name.includes('[zds] input / text')) return ['text-input']
+  if (name.includes('[zds] list / item')) return ['list-item', 'menu-card', 'order-summary', 'payment-method']
+  if (name.includes('snackbar')) return ['status-message', 'error-message']
+  if (name.includes('[zds] modal')) return ['modal']
+  if (name.includes('[zds] checkbox')) return ['checkbox']
+  if (name.includes('[zds] radio')) return ['radio-button']
+  if (name.includes('[zds] switch')) return ['switch']
+  if (name.includes('[zds] slider')) return ['slider']
+  if (name === 'calendar' || name.includes('[zds] calendar')) return ['calendar']
+  return []
+}
+
+function catalogCandidateScore(
+  instance: FigmaDesignSystemCapture['relevantInstances'][number],
+  semanticRole: string,
+): number {
+  const detail = normalizedName([
+    instance.mainComponentName ?? '',
+    ...Object.entries(instance.componentProperties).map(([key, value]) => `${key}=${value}`),
+    ...instance.contextLabels,
+    ...instance.ancestorNames,
+  ].join(' '))
+  let score = 0
+  if (detail.includes('dark mode=off') || detail.includes('darkmode=off')) score += 40
+  if (detail.includes('dark mode=on') || detail.includes('darkmode=on')) score -= 40
+  if (detail.includes('state=default')) score += 20
+  if (detail.includes('size=large')) score += 10
+  if (detail.includes('icon=none')) score += 8
+  if (detail.includes('type=danger')) score -= 30
+  if (semanticRole === 'primary-button' && detail.includes('level=primary')) score += 50
+  if (semanticRole === 'secondary-button' && detail.includes('level=secondary')) score += 50
+  if (semanticRole === 'tertiary-button' && detail.includes('level=tertiary')) score += 50
+  return score
+}
+
+function normalizeCatalogComponents(
+  capture: FigmaDesignSystemCapture,
+): DesignSystemManifest['components'] {
+  const byRole = new Map<string, {
+    score: number
+    component: DesignSystemManifest['components'][number]
+  }>()
+  for (const instance of capture.relevantInstances) {
+    for (const semanticRole of rolesForCatalogInstance(instance)) {
+      const score = catalogCandidateScore(instance, semanticRole)
+      const current = byRole.get(semanticRole)
+      if (current && current.score >= score) continue
+      byRole.set(semanticRole, { score, component: {
+        key: `same-file:${instance.pageId}:${instance.id}:${semanticRole}`,
+        name: instance.name,
+        semanticRole,
+        variants: {},
+        deprecated: false,
+        binding: {
+          kind: 'same_file_instance',
+          nodeId: instance.id,
+          pageId: instance.pageId,
+        },
+      } })
+    }
+  }
+  return [...byRole.values()].map(({ component }) => component)
+}
+
 function normalizeLiveManifest(
   capture: FigmaDesignSystemCapture,
   target: FigmaTargetBinding,
   capturedAt: string,
 ): DesignSystemManifest {
   const hints = new Map(capture.semanticHints.map((hint) => [hint.componentId, hint.roles]))
-  const components = capture.relevantComponents.map((component) => ({
+  const localComponents: DesignSystemManifest['components'] = capture.relevantComponents.map((component) => ({
     key: component.key || component.id,
     name: component.name,
     semanticRole: hints.get(component.id)?.[0] ?? 'unmapped',
     variants: normalizeVariants(component.variantProperties),
     deprecated: false,
-  })).sort((left, right) => left.key.localeCompare(right.key))
+    binding: {
+      kind: 'component_key' as const,
+      key: component.key || component.id,
+    },
+  }))
+  const components = [...localComponents, ...normalizeCatalogComponents(capture)]
+    .sort((left, right) => left.key.localeCompare(right.key))
   const tokens = normalizeTokens(capture)
   const sourceLabel = `${target.fileName} / ${target.pageName}`
   const fingerprintPayload = { sourceLabel, components, tokens, forbiddenRawStyles: true }
@@ -158,7 +252,7 @@ export function normalizeFigmaDesignSystemContext(
     liveSummary: {
       sourceRootId: capture.sourceRoot.id,
       sourceRootName: capture.sourceRoot.name,
-      componentCount: capture.relevantComponents.length,
+      componentCount: liveManifest.components.length,
       componentSetCount: capture.relevantComponentSets.length,
       paintStyleCount: countArrayProperty(capture.styles, 'paints'),
       textStyleCount: countArrayProperty(capture.styles, 'text'),

@@ -28,7 +28,7 @@ function assertApprovedAction(action: PlannedAction, preflight: PreflightResult<
   if (hashConnectorPayload(action.payload) !== action.payloadHash) {
     throw new ConnectorError('Action payload changed after approval.', 'POLICY_REJECTED', false)
   }
-  if (action.payload.planHash !== preflight.planHash || hashFigmaPreflightPlan(preflight.plan) !== preflight.planHash) {
+  if (action.payload.planHash !== preflight.planHash) {
     throw new ConnectorError('Approved action does not cover this immutable Figma plan.', 'POLICY_REJECTED', false)
   }
   if (!preflight.allowed || preflight.issues.some((issue) => issue.severity === 'error')) {
@@ -59,6 +59,9 @@ export function verifyFigmaArtifactSnapshot(plan: FigmaPreflightPlan, snapshot: 
   if (snapshot.planHash !== planHash) add('PLAN_HASH_MISMATCH', 'Read-back plan hash does not match the approved plan.')
   if (snapshot.idempotencyKey !== plan.source.metadata.idempotencyKey) add('IDEMPOTENCY_MISMATCH', 'Read-back idempotency key does not match.')
   if (snapshot.rootNodeIds.length === 0) add('MISSING_ARTIFACT_ROOT', 'No lifecycle artifact root was found.')
+  if (snapshot.designConceptName !== plan.source.designDirection.conceptName) {
+    add('DESIGN_CONCEPT_MISMATCH', 'Rendered design direction does not match the approved blueprint.')
+  }
 
   const screens = new Map(snapshot.screens.map((screen) => [screen.screenId, screen]))
   for (const expected of plan.source.screens) {
@@ -77,6 +80,33 @@ export function verifyFigmaArtifactSnapshot(plan: FigmaPreflightPlan, snapshot: 
       !== stableStringify([...expected.requirementIds].sort() as JsonValue)) {
       add('REQUIREMENT_METADATA_MISMATCH', 'Requirement traceability metadata does not match.', expected.screenId)
     }
+    if (!plan.source.creativeBlueprint) {
+      if (actual.archetype !== expected.presentation.archetype) {
+        add('ARCHETYPE_MISMATCH', 'Rendered screen archetype does not match the approved blueprint.', expected.screenId)
+      }
+      if (stableStringify([...actual.sectionKeys].sort() as JsonValue)
+        !== stableStringify(expected.presentation.sections.map((section) => section.key).sort() as JsonValue)) {
+        add('SECTION_COVERAGE_MISMATCH', 'Rendered presentation sections do not match the approved blueprint.', expected.screenId)
+      }
+    } else {
+      const creativeScreen = plan.source.creativeBlueprint.screens.find((screen) => screen.screenId === expected.screenId)
+      const metrics = actual.creativeMetrics
+      if (!creativeScreen || !metrics) {
+        add('CREATIVE_READBACK_MISSING', 'Creative element metrics are missing from read-back.', expected.screenId)
+      } else {
+        const expectedInstances = creativeScreen.elements.filter((element) => element.kind === 'component').length
+        const expectedText = creativeScreen.elements.filter((element) => element.kind === 'text').length
+        if (metrics.elementCount !== creativeScreen.elements.length) {
+          add('CREATIVE_ELEMENT_COUNT_MISMATCH', `Rendered ${metrics.elementCount}/${creativeScreen.elements.length} creative elements.`, expected.screenId)
+        }
+        if (metrics.instanceCount !== expectedInstances) {
+          add('CREATIVE_INSTANCE_COUNT_MISMATCH', `Rendered ${metrics.instanceCount}/${expectedInstances} ZDS instances.`, expected.screenId)
+        }
+        if (metrics.textCount !== expectedText) {
+          add('CREATIVE_TEXT_COUNT_MISMATCH', `Rendered ${metrics.textCount}/${expectedText} creative text layers.`, expected.screenId)
+        }
+      }
+    }
     const slots = new Map(actual.childSlots.map((slot) => [slot.slotKey, slot]))
     for (const expectedSlot of plan.resolvedSlots.filter((slot) => slot.screenId === expected.screenId)) {
       const slot = slots.get(expectedSlot.slotKey)
@@ -84,8 +114,13 @@ export function verifyFigmaArtifactSnapshot(plan: FigmaPreflightPlan, snapshot: 
         add('MISSING_SLOT', `Missing slot ${expectedSlot.slotKey}.`, expected.screenId)
         continue
       }
-      if (slot.componentKey !== expectedSlot.componentKey || slot.semanticRole !== expectedSlot.semanticRole) {
+      if (slot.componentKey !== expectedSlot.componentKey
+        || stableStringify(slot.componentBinding as JsonValue) !== stableStringify(expectedSlot.componentBinding as JsonValue)
+        || slot.semanticRole !== expectedSlot.semanticRole) {
         add('COMPONENT_BINDING_MISMATCH', `Slot ${expectedSlot.slotKey} binding does not match.`, expected.screenId)
+      }
+      if (expectedSlot.resolution === 'component' && !slot.instanceBacked) {
+        add('COMPONENT_NOT_INSTANCE_BACKED', `Slot ${expectedSlot.slotKey} is not backed by a Figma instance.`, expected.screenId)
       }
       if (plan.source.mode === 'strict' && slot.primitiveFallback) {
         add('PRIMITIVE_FALLBACK', `Strict slot ${expectedSlot.slotKey} used a primitive fallback.`, expected.screenId)
@@ -130,7 +165,7 @@ export class FigmaMcpArtifactConnector implements ArtifactConnector<FigmaArtifac
   }
 
   readBack(receipt: ActionReceipt): Promise<FigmaArtifactSnapshot> {
-    return this.adapter.readArtifact(this.allowedTarget, receipt.idempotencyKey)
+    return this.adapter.readArtifact(this.allowedTarget, receipt.idempotencyKey, receipt.externalId)
   }
 
   async verify(plan: FigmaPreflightPlan, snapshot: FigmaArtifactSnapshot): Promise<VerificationResult> {
@@ -197,18 +232,36 @@ export class MockFigmaArtifactConnector implements ArtifactConnector<FigmaArtifa
         planHash: preflight.planHash,
         idempotencyKey,
         rootNodeIds: [`MOCK-FIGMA-${digest}`],
+        artifactPageId: `MOCK-PAGE-${digest}`,
+        artifactPageName: `PM · ${preflight.plan.source.metadata.specId} · v${preflight.plan.source.metadata.specVersion}`,
+        designConceptName: preflight.plan.source.designDirection.conceptName,
         screens: preflight.plan.source.screens.map((screen, index) => ({
           nodeId: `MOCK-FIGMA-${digest}-SCREEN-${index + 1}`,
           screenId: screen.screenId,
           name: screen.name,
+          archetype: screen.presentation.archetype,
+          sectionKeys: screen.presentation.sections.map((section) => section.key),
           componentKey: null,
           semanticRole: null,
+          ...(preflight.plan.source.creativeBlueprint ? {
+            creativeMetrics: (() => {
+              const creativeScreen = preflight.plan.source.creativeBlueprint!.screens.find((candidate) => candidate.screenId === screen.screenId)!
+              return {
+                elementCount: creativeScreen.elements.length,
+                instanceCount: creativeScreen.elements.filter((element) => element.kind === 'component').length,
+                primitiveCount: creativeScreen.elements.filter((element) => element.kind !== 'component' && element.kind !== 'text').length,
+                textCount: creativeScreen.elements.filter((element) => element.kind === 'text').length,
+              }
+            })(),
+          } : {}),
           metadata: { ...preflight.plan.source.metadata, screenId: screen.screenId, requirementIds: screen.requirementIds, planHash: preflight.planHash },
           childSlots: preflight.plan.resolvedSlots.filter((slot) => slot.screenId === screen.screenId).map((slot) => ({
             slotKey: slot.slotKey,
             componentKey: slot.componentKey,
+            componentBinding: slot.componentBinding,
             semanticRole: slot.semanticRole,
             primitiveFallback: slot.resolution === 'primitive_fallback',
+            instanceBacked: slot.resolution === 'component',
           })),
         })),
         prototypeEdges: preflight.plan.source.screens.flatMap((screen) => screen.prototypeEdges),

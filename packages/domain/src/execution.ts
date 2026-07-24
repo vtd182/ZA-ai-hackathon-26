@@ -55,3 +55,27 @@ export const executionSummarySchema = z.object({
   actions: z.array(actionExecutionStatusSchema),
 })
 export type ExecutionSummary = z.infer<typeof executionSummarySchema>
+
+export const artifactExecutionStageSchema = z.enum([
+  'planning',
+  'availability',
+  'preflight',
+  'write',
+  'read_back',
+  'verify',
+  'complete',
+])
+export type ArtifactExecutionStage = z.infer<typeof artifactExecutionStageSchema>
+
+export const artifactProgressEventSchema = z.object({
+  schemaVersion: z.literal(1),
+  threadId: z.string().min(1),
+  target: z.enum(['figma', 'jira', 'zdoc']),
+  stage: artifactExecutionStageSchema,
+  status: z.enum(['running', 'completed', 'failed']),
+  stageElapsedMs: z.number().int().nonnegative(),
+  totalElapsedMs: z.number().int().nonnegative(),
+  message: z.string().min(1),
+  at: z.string().datetime(),
+})
+export type ArtifactProgressEvent = z.infer<typeof artifactProgressEventSchema>

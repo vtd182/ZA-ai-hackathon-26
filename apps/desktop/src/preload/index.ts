@@ -1,5 +1,5 @@
 import electron from 'electron'
-import type { ConfigureProviderInput, DesktopApi, ExternalCanvasCommandBatch, ExternalCanvasProgramBatch, SendChatInput } from '@pm-agent/domain'
+import type { ArtifactProgressEvent, ConfigureProviderInput, DesktopApi, ExternalCanvasCommandBatch, ExternalCanvasProgramBatch, SendChatInput } from '@pm-agent/domain'
 
 const { contextBridge, ipcRenderer } = electron
 
@@ -11,6 +11,7 @@ const api: DesktopApi = {
     archive: (threadId) => ipcRenderer.invoke('threads:archive', threadId),
     setProvider: (threadId, profileId, confirmPaid) => ipcRenderer.invoke('threads:set-provider', threadId, profileId, confirmPaid),
     messages: (threadId, cursor, limit) => ipcRenderer.invoke('threads:messages', threadId, cursor, limit),
+    exportBundle: (threadId) => ipcRenderer.invoke('threads:export-bundle', threadId),
   },
   canvas: {
     save: (threadId, snapshot) => ipcRenderer.invoke('canvas:save', threadId, snapshot),
@@ -41,6 +42,11 @@ const api: DesktopApi = {
     approveArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:approve-artifacts', threadId),
     rejectArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:reject-artifacts', threadId),
     showDocument: (threadId) => ipcRenderer.invoke('lifecycle:show-document', threadId),
+    onArtifactProgress: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, progress: ArtifactProgressEvent): void => listener(progress)
+      ipcRenderer.on('artifact:progress', handler)
+      return () => ipcRenderer.removeListener('artifact:progress', handler)
+    },
   },
   figma: {
     status: () => ipcRenderer.invoke('figma:status'),

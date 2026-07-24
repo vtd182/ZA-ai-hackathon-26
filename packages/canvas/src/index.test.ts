@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
-import { classifyCanvasInteraction, planExplicitCanvasRequest, projectProductSpec, projectProductSpecGraph, synthesizeProductSpecFromCanvas } from './index'
+import { planExplicitCanvasRequest, projectProductSpec, projectProductSpecGraph, resolveCanvasSelection, synthesizeProductSpecFromCanvas } from './index'
 import { createDraftProductSpec } from '@pm-agent/domain'
 
 describe('ProductSpec canvas projection', () => {
@@ -28,30 +28,40 @@ describe('ProductSpec canvas projection', () => {
 })
 
 describe('tldraw-first canvas planning', () => {
-  it('keeps ordinary product conversation off the canvas', () => {
-    expect(classifyCanvasInteraction('Tôi đang muốn kickoff một ý tưởng miniapp đặt xe').kind).toBe('conversation')
-    expect(planExplicitCanvasRequest('Tôi đang muốn kickoff một ý tưởng miniapp đặt xe')).toBeUndefined()
-  })
-
-  it('requires a selected or identified target for a vague canvas edit', () => {
-    expect(classifyCanvasInteraction('tạo thêm đi chứ').kind).toBe('clarify_edit')
-    expect(classifyCanvasInteraction('tạo thêm đi chứ', { entityId: 'xac-thuc', label: 'Xác thực' })).toMatchObject({
-      kind: 'edit',
-      selection: { entityId: 'xac-thuc' },
+  it('requires an LLM-routed intent before deterministic fallback can mutate canvas', () => {
+    expect(planExplicitCanvasRequest('Vẽ workflow onboarding')).toBeUndefined()
+    expect(planExplicitCanvasRequest('Vẽ workflow onboarding', undefined, { intent: 'draw' })).toMatchObject({
+      mode: 'operations',
     })
   })
 
-  it('resolves an explicitly named canvas target without a current selection', () => {
-    expect(classifyCanvasInteraction('Thêm nhánh lỗi vào Xác thực', undefined, {
+  it('resolves an explicitly named canvas target after intent routing', () => {
+    expect(resolveCanvasSelection('Xác thực', {
       schemaVersion: 1,
       revision: 1,
       selectedShapeIds: [],
       shapes: [{ id: 'shape:xac-thuc', semanticId: 'xac-thuc', type: 'geo', label: 'Xác thực', x: 0, y: 0, width: 220, height: 110 }],
-    })).toMatchObject({ kind: 'edit', selection: { entityId: 'xac-thuc' } })
+    })).toMatchObject({ entityId: 'xac-thuc' })
+  })
+
+  it('does not guess an accent-folded target when more than one shape matches', () => {
+    expect(resolveCanvasSelection('doi', {
+      schemaVersion: 1,
+      revision: 1,
+      selectedShapeIds: [],
+      shapes: [
+        { id: 'shape:doi-xe', semanticId: 'doi-xe', type: 'geo', label: 'Đổi xe', x: 0, y: 0, width: 220, height: 110 },
+        { id: 'shape:doi-tac', semanticId: 'doi-tac', type: 'geo', label: 'Đối tác', x: 260, y: 0, width: 220, height: 110 },
+      ],
+    })).toBeUndefined()
   })
 
   it('turns the onboarding prompt into the requested workflow', () => {
-    const program = planExplicitCanvasRequest('Vẽ workflow onboarding người dùng gồm đăng ký, xác thực và màn hình hoàn tất')
+    const program = planExplicitCanvasRequest(
+      'Vẽ workflow onboarding người dùng gồm đăng ký, xác thực và màn hình hoàn tất',
+      undefined,
+      { intent: 'draw' },
+    )
     expect(program).toMatchObject({ mode: 'operations' })
     expect(program?.operations.filter((operation) => operation.op === 'create_node').map((operation) => operation.label)).toEqual([
       'đăng ký',
@@ -63,6 +73,7 @@ describe('tldraw-first canvas planning', () => {
 
   it('uses conversation context to draw a complete ride-booking flow', () => {
     const program = planExplicitCanvasRequest('cho tôi toàn bộ flow đi', undefined, {
+      intent: 'draw',
       recentMessages: [{
         id: 'message-1',
         threadId: 'thread-1',
@@ -78,6 +89,7 @@ describe('tldraw-first canvas planning', () => {
 
   it('creates editable low-fidelity screen frames for a prototype request', () => {
     const program = planExplicitCanvasRequest('Vẽ cho tôi prototype các màn hình', undefined, {
+      intent: 'draw',
       recentMessages: [{
         id: 'message-1',
         threadId: 'thread-1',
@@ -95,8 +107,82 @@ describe('tldraw-first canvas planning', () => {
     expect(nodes.map((operation) => operation.label)).not.toContain('Nhập thông tin')
   })
 
+  it('creates a domain-specific backup reminder flow without transcript-shaped duplicate nodes', () => {
+    const program = planExplicitCanvasRequest('Vẽ toàn bộ user flow cho ý tưởng remind backup', undefined, {
+      intent: 'draw',
+      recentMessages: [{
+        id: 'message-backup',
+        threadId: 'thread-backup',
+        role: 'user',
+        content: 'Tôi muốn nhắc người dùng backup dữ liệu đúng hạn',
+        createdAt: '2026-07-23T00:00:00.000Z',
+      }],
+    })
+    const nodes = program?.operations.filter((operation) => operation.op === 'create_node') ?? []
+    const labels = nodes.map((operation) => operation.label)
+    expect(nodes.length).toBeGreaterThanOrEqual(15)
+    expect(labels).toContain('Mở tổng quan backup')
+    expect(labels).toContain('Hoãn nhắc')
+    expect(labels).toContain('Backup thất bại')
+    expect(nodes.find((operation) => operation.id === 'backup-reminder')).toMatchObject({
+      description: expect.stringContaining('dung lượng'),
+      lane: 'Người dùng',
+      tone: 'accent',
+    })
+    expect(new Set(labels.map((label) => label.toLowerCase())).size).toBe(labels.length)
+    expect(labels.some((label) => label.includes('Tôi muốn'))).toBe(false)
+  })
+
+  it('creates detailed backup reminder screens, replaces an old prototype and preserves the workflow', () => {
+    const program = planExplicitCanvasRequest('Vẽ prototype cho remind backup', undefined, {
+      intent: 'draw',
+      recentMessages: [{
+        id: 'message-backup',
+        threadId: 'thread-backup',
+        role: 'user',
+        content: 'Ý tưởng remind backup dữ liệu',
+        createdAt: '2026-07-23T00:00:00.000Z',
+      }],
+      canvas: {
+        schemaVersion: 1,
+        revision: 4,
+        selectedShapeIds: [],
+        shapes: [
+          { id: 'shape:old-start', semanticId: 'bat-dau', nodeKind: 'note', type: 'geo', label: 'Bắt đầu', x: 0, y: 0, width: 220, height: 110 },
+          { id: 'shape:old-input', semanticId: 'nhap-thong-tin', nodeKind: 'screen', type: 'geo', label: 'Nhập thông tin', x: 300, y: 0, width: 220, height: 110 },
+          { id: 'shape:old-prototype', semanticId: 'prototype-home', nodeKind: 'screen', visualRole: 'prototype-screen', type: 'frame', label: 'Trang chủ', x: 0, y: 300, width: 320, height: 520 },
+          { id: 'shape:old-prototype-button', visualRole: 'prototype-action', type: 'geo', label: 'Tiếp tục', x: 16, y: 726, width: 288, height: 48 },
+          { id: 'shape:header', semanticId: 'prototype-scene-header', visualRole: 'prototype-scene-header', type: 'geo', label: 'Old prototype', x: 0, y: -120, width: 832, height: 82 },
+        ],
+        bindings: [
+          { id: 'edge-workflow', shapeId: 'shape:edge-workflow', fromId: 'bat-dau', toId: 'nhap-thong-tin', label: '' },
+          { id: 'edge-old-prototype', shapeId: 'shape:edge-old-prototype', fromId: 'prototype-home', toId: 'prototype-complete', label: '' },
+        ],
+      },
+    })
+    const screens = program?.operations.filter((operation) => operation.op === 'create_node') ?? []
+    const deleted = program?.operations.filter((operation) => operation.op === 'delete').map((operation) => operation.id) ?? []
+    expect(screens.map((operation) => operation.label)).toEqual([
+      'Tổng quan backup',
+      'Kết nối nguồn backup',
+      'Lịch & nhắc backup',
+      'Nhắc backup đến hạn',
+      'Kết quả backup',
+    ])
+    expect(screens.every((operation) => operation.screen && operation.description)).toBe(true)
+    expect(program).toMatchObject({ sceneType: 'prototype', title: 'Backup Reminder · Product Concept' })
+    expect(deleted).toEqual(expect.arrayContaining([
+      'prototype-home',
+      'shape:old-prototype-button',
+      'edge-old-prototype',
+      'prototype-scene-header',
+    ]))
+    expect(deleted).not.toEqual(expect.arrayContaining(['bat-dau', 'nhap-thong-tin', 'edge-workflow']))
+  })
+
   it('extends the selected verification node with OTP, retry and error paths', () => {
     const program = planExplicitCanvasRequest('Thêm OTP, retry và nhánh lỗi', { entityId: 'xac-thuc', label: 'xác thực' }, {
+      intent: 'edit',
       canvas: {
         schemaVersion: 1,
         revision: 2,

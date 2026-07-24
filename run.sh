@@ -98,12 +98,15 @@ case "$MODE" in
       SMOKE_REJECT="1"
     fi
     SMOKE_CANVAS="${PM_AGENT_SMOKE_CANVAS:-0}"
+    if [[ "$MODE" == "smoke-canvas" ]]; then
+      SMOKE_CANVAS="1"
+    fi
     SMOKE_AMBIGUITY="${PM_AGENT_SMOKE_AMBIGUITY:-0}"
     if [[ "$MODE" == "smoke-ambiguity" ]]; then
       SMOKE_AMBIGUITY="1"
     fi
     SMOKE_FLOW="${PM_AGENT_SMOKE_FLOW:-0}"
-    if [[ "$MODE" == "smoke-canvas" || "$MODE" == "smoke-flow" || "$MODE" == "smoke-canvas-agent" || "$MODE" == "smoke-codex-canvas" ]]; then
+    if [[ "$MODE" == "smoke-flow" || "$MODE" == "smoke-canvas-agent" || "$MODE" == "smoke-codex-canvas" ]]; then
       SMOKE_FLOW="1"
     fi
     SMOKE_CANVAS_PROVIDER="${PM_AGENT_SMOKE_CANVAS_PROVIDER:-}"

@@ -55,10 +55,19 @@ function initialIdea(messages: ChatMessage[], fallback: string): string {
 
 function journeyForIdea(idea: string): JourneyStep[] {
   const text = normalized(idea)
+  if (/(remind|reminder|nhac).{0,40}(backup|sao luu)|(?:backup|sao luu).{0,40}(remind|reminder|nhac)/.test(text)) {
+    return [
+      { key: 'BACKUP-OVERVIEW', title: 'Tổng quan backup', purpose: 'Cho người dùng biết dữ liệu nào đã an toàn, lần backup gần nhất và lịch tiếp theo', acceptanceCriteria: ['Hiển thị trạng thái backup gần nhất', 'Cho phép bắt đầu backup thủ công'], roles: ['app-header', 'status-message', 'list-item', 'primary-button'] },
+      { key: 'BACKUP-SOURCE', title: 'Kết nối nguồn backup', purpose: 'Chọn dữ liệu và đích lưu trữ được phép sử dụng', acceptanceCriteria: ['Hiển thị rõ nguồn và tài khoản đã kết nối', 'Lưu được phạm vi dữ liệu cần backup'], roles: ['app-header', 'list-item', 'checkbox', 'primary-button'] },
+      { key: 'BACKUP-SCHEDULE', title: 'Lịch và nhắc backup', purpose: 'Thiết lập thời gian, điều kiện chạy và cách nhắc khi đến hạn', acceptanceCriteria: ['Lưu được tần suất và thời gian hợp lệ', 'Cho phép bật tắt nhắc và cấu hình thời gian hoãn'], roles: ['app-header', 'date-input', 'switch', 'list-item', 'primary-button'] },
+      { key: 'BACKUP-REMINDER', title: 'Nhắc backup đến hạn', purpose: 'Giải thích dữ liệu đang chờ và cho phép backup, hoãn hoặc bỏ qua', acceptanceCriteria: ['Hiển thị dung lượng và thời gian dự kiến', 'Có đủ hành động backup ngay, nhắc lại và bỏ qua'], roles: ['app-header', 'status-message', 'primary-button', 'secondary-button', 'tertiary-button'] },
+      { key: 'BACKUP-RESULT', title: 'Kết quả backup', purpose: 'Xác nhận kết quả, lỗi cần xử lý và lịch backup tiếp theo', acceptanceCriteria: ['Hiển thị số tệp và dung lượng đã backup', 'Cho phép xem nhật ký hoặc thử lại khi thất bại'], roles: ['app-header', 'status-message', 'list-item', 'primary-button'] },
+    ]
+  }
   if (/(suat an|bua trua|mon an|pantry|dat mon)/.test(text)) {
     return [
-      { key: 'DISCOVER', title: 'Khám phá món ăn', purpose: 'Tìm món phù hợp và xem khả năng phục vụ', acceptanceCriteria: ['Hiển thị món còn nhận đặt', 'Cho phép lọc hoặc tìm món phù hợp'], roles: ['app-header', 'menu-card', 'primary-button'] },
-      { key: 'SELECT', title: 'Chọn món và thời gian', purpose: 'Chọn món, số lượng và khung giờ nhận', acceptanceCriteria: ['Chọn được số lượng hợp lệ', 'Chỉ cho chọn khung giờ còn phục vụ'], roles: ['app-header', 'menu-card', 'primary-button'] },
+      { key: 'DISCOVER', title: 'Khám phá món ăn', purpose: 'Tìm món phù hợp và xem khả năng phục vụ', acceptanceCriteria: ['Hiển thị món còn nhận đặt', 'Cho phép lọc hoặc tìm món phù hợp'], roles: ['app-header', 'search-input', 'list-item', 'primary-button'] },
+      { key: 'SELECT', title: 'Chọn món và thời gian', purpose: 'Chọn món, số lượng và khung giờ nhận', acceptanceCriteria: ['Chọn được số lượng hợp lệ', 'Chỉ cho chọn khung giờ còn phục vụ'], roles: ['app-header', 'list-item', 'date-input', 'primary-button'] },
       { key: 'REVIEW', title: 'Xác nhận đơn', purpose: 'Kiểm tra đơn và người nhận đại diện', acceptanceCriteria: ['Hiển thị đầy đủ món, số lượng và nơi nhận', 'Người dùng xác nhận được đơn hợp lệ'], roles: ['app-header', 'order-summary', 'primary-button'] },
       { key: 'CONFIRM', title: 'Hoàn tất đặt món', purpose: 'Xác nhận đơn đã được ghi nhận', acceptanceCriteria: ['Hiển thị mã đơn duy nhất', 'Thông báo rõ thời gian và địa điểm nhận'], roles: ['app-header', 'status-message', 'primary-button'] },
       { key: 'STATUS', title: 'Theo dõi trạng thái', purpose: 'Theo dõi tiến độ chuẩn bị và nhận món', acceptanceCriteria: ['Hiển thị trạng thái mới nhất', 'Cho phép chia sẻ mã nhận cho nhóm'], roles: ['app-header', 'status-message', 'secondary-button'] },
@@ -66,8 +75,8 @@ function journeyForIdea(idea: string): JourneyStep[] {
   }
   if (/(dat xe|goi xe|chuyen di|tai xe|di chuyen)/.test(text)) {
     return [
-      { key: 'ROUTE', title: 'Nhập hành trình', purpose: 'Chọn điểm đón và điểm đến', acceptanceCriteria: ['Điểm đón và điểm đến đều hợp lệ', 'Hiển thị tóm tắt hành trình'], roles: ['app-header', 'menu-card', 'primary-button'] },
-      { key: 'OPTION', title: 'Chọn phương án di chuyển', purpose: 'So sánh lựa chọn và thời gian dự kiến', acceptanceCriteria: ['Hiển thị ít nhất một lựa chọn khả dụng', 'Nêu rõ thời gian chờ dự kiến'], roles: ['app-header', 'menu-card', 'primary-button'] },
+      { key: 'ROUTE', title: 'Nhập hành trình', purpose: 'Chọn điểm đón và điểm đến', acceptanceCriteria: ['Điểm đón và điểm đến đều hợp lệ', 'Hiển thị tóm tắt hành trình'], roles: ['app-header', 'text-input', 'primary-button'] },
+      { key: 'OPTION', title: 'Chọn phương án di chuyển', purpose: 'So sánh lựa chọn và thời gian dự kiến', acceptanceCriteria: ['Hiển thị ít nhất một lựa chọn khả dụng', 'Nêu rõ thời gian chờ dự kiến'], roles: ['app-header', 'list-item', 'primary-button'] },
       { key: 'REVIEW', title: 'Xác nhận chuyến', purpose: 'Kiểm tra hành trình trước khi gửi yêu cầu', acceptanceCriteria: ['Hiển thị đúng điểm đón, điểm đến và lựa chọn', 'Cho phép xác nhận yêu cầu'], roles: ['app-header', 'order-summary', 'primary-button'] },
       { key: 'MATCH', title: 'Ghép tài xế', purpose: 'Thông báo tiến trình tìm tài xế', acceptanceCriteria: ['Hiển thị trạng thái ghép tài xế', 'Cho phép hủy khi chưa ghép thành công'], roles: ['app-header', 'status-message', 'secondary-button'] },
       { key: 'TRACK', title: 'Theo dõi chuyến', purpose: 'Theo dõi tài xế và trạng thái chuyến', acceptanceCriteria: ['Hiển thị thông tin tài xế đã ghép', 'Cập nhật trạng thái chuyến rõ ràng'], roles: ['app-header', 'status-message', 'primary-button'] },
@@ -75,14 +84,14 @@ function journeyForIdea(idea: string): JourneyStep[] {
   }
   if (/(onboarding|dang ky|xac thuc|tao tai khoan)/.test(text)) {
     return [
-      { key: 'REGISTER', title: 'Đăng ký', purpose: 'Thu thập thông tin tối thiểu để tạo tài khoản', acceptanceCriteria: ['Kiểm tra dữ liệu bắt buộc', 'Cho phép tiếp tục với thông tin hợp lệ'], roles: ['app-header', 'menu-card', 'primary-button'] },
-      { key: 'VERIFY', title: 'Xác thực', purpose: 'Xác nhận quyền sở hữu thông tin đăng ký', acceptanceCriteria: ['Gửi và kiểm tra mã xác thực', 'Hiển thị lỗi và cho phép thử lại'], roles: ['app-header', 'order-summary', 'primary-button'] },
+      { key: 'REGISTER', title: 'Đăng ký', purpose: 'Thu thập thông tin tối thiểu để tạo tài khoản', acceptanceCriteria: ['Kiểm tra dữ liệu bắt buộc', 'Cho phép tiếp tục với thông tin hợp lệ'], roles: ['app-header', 'text-input', 'phone-input', 'primary-button'] },
+      { key: 'VERIFY', title: 'Xác thực', purpose: 'Xác nhận quyền sở hữu thông tin đăng ký', acceptanceCriteria: ['Gửi và kiểm tra mã xác thực', 'Hiển thị lỗi và cho phép thử lại'], roles: ['app-header', 'otp-input', 'secondary-button', 'primary-button'] },
       { key: 'COMPLETE', title: 'Hoàn tất', purpose: 'Thông báo tài khoản đã sẵn sàng', acceptanceCriteria: ['Hiển thị kết quả thành công', 'Có hành động đi tiếp rõ ràng'], roles: ['app-header', 'status-message', 'primary-button'] },
     ]
   }
   return [
-    { key: 'START', title: 'Bắt đầu', purpose: 'Tiếp nhận nhu cầu chính của người dùng', acceptanceCriteria: ['Thu thập đủ dữ liệu bắt buộc', 'Giải thích rõ bước tiếp theo'], roles: ['app-header', 'menu-card', 'primary-button'] },
-    { key: 'CONFIGURE', title: 'Thiết lập yêu cầu', purpose: 'Cho phép người dùng cấu hình lựa chọn chính', acceptanceCriteria: ['Lưu được lựa chọn hợp lệ', 'Hiển thị constraint quan trọng'], roles: ['app-header', 'menu-card', 'primary-button'] },
+    { key: 'START', title: 'Bắt đầu', purpose: 'Tiếp nhận nhu cầu chính của người dùng', acceptanceCriteria: ['Thu thập đủ dữ liệu bắt buộc', 'Giải thích rõ bước tiếp theo'], roles: ['app-header', 'text-input', 'primary-button'] },
+    { key: 'CONFIGURE', title: 'Thiết lập yêu cầu', purpose: 'Cho phép người dùng cấu hình lựa chọn chính', acceptanceCriteria: ['Lưu được lựa chọn hợp lệ', 'Hiển thị constraint quan trọng'], roles: ['app-header', 'list-item', 'primary-button'] },
     { key: 'REVIEW', title: 'Kiểm tra và xác nhận', purpose: 'Review toàn bộ dữ liệu trước khi gửi', acceptanceCriteria: ['Hiển thị tóm tắt đầy đủ', 'Cho phép quay lại chỉnh sửa'], roles: ['app-header', 'order-summary', 'primary-button'] },
     { key: 'COMPLETE', title: 'Hoàn tất', purpose: 'Xác nhận yêu cầu đã được xử lý', acceptanceCriteria: ['Hiển thị kết quả rõ ràng', 'Có hành động tiếp theo'], roles: ['app-header', 'status-message', 'primary-button'] },
   ]

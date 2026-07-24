@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { figmaTargetBindingSchema } from './figma-integration'
+import { designSystemComponentBindingSchema } from './design-system'
+import { figmaCreativeBlueprintSchema } from './figma-creative'
 
 export const artifactPlanModeSchema = z.enum(['strict', 'free'])
 export type ArtifactPlanMode = z.infer<typeof artifactPlanModeSchema>
@@ -35,6 +37,42 @@ export const prototypeEdgeIntentSchema = z.object({
 })
 export type PrototypeEdgeIntent = z.infer<typeof prototypeEdgeIntentSchema>
 
+export const figmaDesignDirectionSchema = z.object({
+  conceptName: z.string().min(1).max(80),
+  productPromise: z.string().min(1).max(180),
+  tone: z.enum(['calm', 'confident', 'energetic', 'warm', 'focused']),
+  density: z.enum(['airy', 'comfortable', 'compact']),
+  palette: z.enum(['zalo-blue', 'trust-green', 'signal-violet', 'warm-coral']),
+  principles: z.array(z.object({
+    title: z.string().min(1).max(80),
+    detail: z.string().min(1).max(180),
+  })).min(2).max(4),
+})
+export type FigmaDesignDirection = z.infer<typeof figmaDesignDirectionSchema>
+
+export const designContentSectionSchema = z.object({
+  key: z.string().min(1),
+  kind: z.enum(['status', 'metric_grid', 'choice_list', 'timeline', 'info', 'progress', 'confirmation']),
+  title: z.string().min(1).max(100),
+  body: z.string().max(240).default(''),
+  tone: z.enum(['brand', 'success', 'warning', 'neutral', 'accent']).default('neutral'),
+  items: z.array(z.object({
+    label: z.string().min(1).max(100),
+    value: z.string().min(1).max(140),
+  })).max(5).default([]),
+})
+export type DesignContentSection = z.infer<typeof designContentSectionSchema>
+
+export const designScreenPresentationSchema = z.object({
+  archetype: z.enum(['dashboard', 'selection', 'configuration', 'interrupt', 'result', 'form', 'browse', 'review']),
+  eyebrow: z.string().min(1).max(80),
+  headline: z.string().min(1).max(100),
+  supportingText: z.string().min(1).max(240),
+  sections: z.array(designContentSectionSchema).min(1).max(5),
+  navigationLabel: z.string().min(1).max(80),
+})
+export type DesignScreenPresentation = z.infer<typeof designScreenPresentationSchema>
+
 export const designScreenRecipeSchema = z.object({
   schemaVersion: z.literal(1),
   screenId: z.string().min(1),
@@ -43,6 +81,7 @@ export const designScreenRecipeSchema = z.object({
   requirementIds: z.array(z.string().min(1)).min(1),
   layout: z.enum(['vertical', 'horizontal', 'flow']),
   sequence: z.number().int().nonnegative(),
+  presentation: designScreenPresentationSchema,
   slots: z.array(designSlotSchema).min(1),
   prototypeEdges: z.array(prototypeEdgeIntentSchema),
 })
@@ -56,6 +95,8 @@ export const lifecycleArtifactMetadataSchema = z.object({
   specId: z.string().min(1),
   specVersion: z.number().int().positive(),
   idempotencyKey: z.string().min(1),
+  artifactPageName: z.string().min(1).max(80).optional(),
+  pageStrategy: z.enum(['create_new', 'create_or_recover_incomplete']).optional(),
 })
 export type LifecycleArtifactMetadata = z.infer<typeof lifecycleArtifactMetadataSchema>
 
@@ -67,6 +108,8 @@ export const figmaArtifactPlanSchema = z.object({
   manifestFingerprint: z.string().min(1),
   requiredTokens: z.array(z.string().min(1)),
   metadata: lifecycleArtifactMetadataSchema,
+  designDirection: figmaDesignDirectionSchema,
+  creativeBlueprint: figmaCreativeBlueprintSchema.optional(),
   screens: z.array(designScreenRecipeSchema).min(1),
 })
 export type FigmaArtifactPlan = z.infer<typeof figmaArtifactPlanSchema>
@@ -76,6 +119,7 @@ export const resolvedDesignSlotSchema = z.object({
   slotKey: z.string().min(1),
   required: z.boolean(),
   componentKey: z.string().min(1).nullable(),
+  componentBinding: designSystemComponentBindingSchema.nullable().default(null),
   semanticRole: z.string().min(1).nullable(),
   resolution: z.enum(['component', 'primitive_fallback', 'missing']),
 })
@@ -110,8 +154,16 @@ export const artifactNodeSnapshotSchema = z.object({
   nodeId: z.string().min(1),
   screenId: z.string().min(1),
   name: z.string().min(1),
+  archetype: designScreenPresentationSchema.shape.archetype,
+  sectionKeys: z.array(z.string().min(1)),
   componentKey: z.string().min(1).nullable(),
   semanticRole: z.string().min(1).nullable(),
+  creativeMetrics: z.object({
+    elementCount: z.number().int().nonnegative(),
+    instanceCount: z.number().int().nonnegative(),
+    primitiveCount: z.number().int().nonnegative(),
+    textCount: z.number().int().nonnegative(),
+  }).optional(),
   metadata: lifecycleArtifactMetadataSchema.extend({
     screenId: z.string().min(1),
     requirementIds: z.array(z.string().min(1)).min(1),
@@ -120,8 +172,10 @@ export const artifactNodeSnapshotSchema = z.object({
   childSlots: z.array(z.object({
     slotKey: z.string().min(1),
     componentKey: z.string().min(1).nullable(),
+    componentBinding: designSystemComponentBindingSchema.nullable().default(null),
     semanticRole: z.string().min(1).nullable(),
     primitiveFallback: z.boolean(),
+    instanceBacked: z.boolean().default(false),
   })),
 })
 export type ArtifactNodeSnapshot = z.infer<typeof artifactNodeSnapshotSchema>
@@ -132,13 +186,20 @@ export const figmaArtifactSnapshotSchema = z.object({
   planHash: z.string().min(1),
   idempotencyKey: z.string().min(1),
   rootNodeIds: z.array(z.string().min(1)),
+  artifactPageId: z.string().min(1),
+  artifactPageName: z.string().min(1),
+  designConceptName: z.string(),
   screens: z.array(artifactNodeSnapshotSchema),
   prototypeEdges: z.array(prototypeEdgeIntentSchema),
   readAt: z.string().datetime(),
 })
 export type FigmaArtifactSnapshot = z.infer<typeof figmaArtifactSnapshotSchema>
 
-export const figmaApplyResultSchema = figmaArtifactSnapshotSchema.extend({
+export const figmaApplyResultSchema = z.object({
+  schemaVersion: z.literal(1),
+  rootNodeIds: z.array(z.string().min(1)).min(1),
+  artifactPageId: z.string().min(1),
+  artifactPageName: z.string().min(1),
   idempotent: z.boolean(),
 })
 export type FigmaApplyResult = z.infer<typeof figmaApplyResultSchema>

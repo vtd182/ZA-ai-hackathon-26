@@ -3,11 +3,11 @@ import { designSystemManifestSchema } from '@pm-agent/domain'
 export const syntheticZaloDesignSystem = designSystemManifestSchema.parse({
   schemaVersion: 1,
   id: 'ZA-DS-FIXTURE',
-  version: '1.0.0-fixture',
+  version: '1.1.0-fixture',
   source: 'fixture',
   sourceLabel: 'Synthetic Zalo-like Design System for hackathon demo',
   capturedAt: '2026-07-22T00:00:00.000Z',
-  fingerprint: 'fixture-za-ds-1',
+  fingerprint: 'fixture-za-ds-2',
   components: [
     { key: 'fixture/app-header', name: 'App Header', semanticRole: 'app-header', variants: { theme: ['light'] }, deprecated: false },
     { key: 'fixture/menu-card', name: 'Menu Card', semanticRole: 'menu-card', variants: { state: ['default', 'selected', 'disabled'] }, deprecated: false },
@@ -15,6 +15,15 @@ export const syntheticZaloDesignSystem = designSystemManifestSchema.parse({
     { key: 'fixture/payment-method', name: 'Payment Method', semanticRole: 'payment-method', variants: { state: ['default', 'error'] }, deprecated: false },
     { key: 'fixture/primary-button', name: 'Primary Button', semanticRole: 'primary-button', variants: { state: ['default', 'pressed', 'disabled'] }, deprecated: false },
     { key: 'fixture/secondary-button', name: 'Secondary Button', semanticRole: 'secondary-button', variants: { state: ['default', 'pressed'] }, deprecated: false },
+    { key: 'fixture/tertiary-button', name: 'Tertiary Button', semanticRole: 'tertiary-button', variants: { state: ['default', 'pressed'] }, deprecated: false },
+    { key: 'fixture/list-item', name: 'List Item', semanticRole: 'list-item', variants: { state: ['default', 'selected', 'disabled'] }, deprecated: false },
+    { key: 'fixture/checkbox', name: 'Checkbox', semanticRole: 'checkbox', variants: { state: ['unchecked', 'checked', 'disabled'] }, deprecated: false },
+    { key: 'fixture/date-input', name: 'Date Input', semanticRole: 'date-input', variants: { state: ['default', 'focus', 'error'] }, deprecated: false },
+    { key: 'fixture/text-input', name: 'Text Input', semanticRole: 'text-input', variants: { state: ['default', 'focus', 'error'] }, deprecated: false },
+    { key: 'fixture/phone-input', name: 'Phone Input', semanticRole: 'phone-input', variants: { state: ['default', 'focus', 'error'] }, deprecated: false },
+    { key: 'fixture/otp-input', name: 'OTP Input', semanticRole: 'otp-input', variants: { state: ['default', 'focus', 'error'] }, deprecated: false },
+    { key: 'fixture/location-input', name: 'Location Input', semanticRole: 'location-input', variants: { state: ['default', 'selected', 'error'] }, deprecated: false },
+    { key: 'fixture/switch', name: 'Switch', semanticRole: 'switch', variants: { state: ['off', 'on', 'disabled'] }, deprecated: false },
     { key: 'fixture/pickup-code', name: 'Pickup Code', semanticRole: 'pickup-code', variants: { size: ['large'] }, deprecated: false },
     { key: 'fixture/status-message', name: 'Status Message', semanticRole: 'status-message', variants: { tone: ['success', 'info'] }, deprecated: false },
     { key: 'fixture/error-message', name: 'Error Message', semanticRole: 'error-message', variants: { tone: ['critical'] }, deprecated: false },
@@ -32,4 +41,3 @@ export const syntheticZaloDesignSystem = designSystemManifestSchema.parse({
   },
   forbiddenRawStyles: true,
 })
-

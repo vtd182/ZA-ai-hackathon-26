@@ -8,6 +8,7 @@ const decision: Extract<PhaseReasoningResult, { phase: 'decide' }> = {
   phase: 'decide',
   message: 'Chọn phương án',
   commands: [],
+  intent: { kind: 'conversation', target: null, artifactAction: null },
   phaseData: {
     options: [
       { id: 'OPT-LEAN', title: 'MVP đặt xe tinh gọn', tradeoff: 'Ra mắt nhanh với luồng chính.' },
@@ -60,7 +61,45 @@ describe('decision to ProductSpec synthesis', () => {
     })
 
     expect(spec.screens.map((screen) => screen.id)).toEqual(['SCREEN-REGISTER', 'SCREEN-VERIFY', 'SCREEN-COMPLETE'])
+    expect(spec.screens.map((screen) => screen.designSystemRoles)).toEqual([
+      ['app-header', 'text-input', 'phone-input', 'primary-button'],
+      ['app-header', 'otp-input', 'secondary-button', 'primary-button'],
+      ['app-header', 'status-message', 'primary-button'],
+    ])
     expect(spec.decisions[0]!.choice).toBe('Onboarding không cần KYC ở MVP')
+    expect(validateProductSpecInvariants(spec)).toEqual([])
+  })
+
+  it('synthesizes a reviewable backup reminder journey instead of generic screens', () => {
+    const spec = synthesizeProductSpecFromDecision({
+      current: createDraftProductSpec('thread-backup', at),
+      threadTitle: 'Remind backup',
+      messages: [{
+        id: 'm-backup',
+        threadId: 'thread-backup',
+        role: 'user',
+        content: 'Tạo Mini App nhắc người dùng backup ảnh và tài liệu đúng hạn',
+        createdAt: at,
+      }],
+      decision,
+      selectedOptionId: 'OPT-LEAN',
+      selectedAt: at,
+    })
+
+    expect(spec.screens.map((screen) => screen.id)).toEqual([
+      'SCREEN-BACKUP-OVERVIEW',
+      'SCREEN-BACKUP-SOURCE',
+      'SCREEN-BACKUP-SCHEDULE',
+      'SCREEN-BACKUP-REMINDER',
+      'SCREEN-BACKUP-RESULT',
+    ])
+    expect(spec.screens.find((screen) => screen.id === 'SCREEN-BACKUP-REMINDER')?.designSystemRoles).toEqual([
+      'app-header',
+      'status-message',
+      'primary-button',
+      'secondary-button',
+      'tertiary-button',
+    ])
     expect(validateProductSpecInvariants(spec)).toEqual([])
   })
 })

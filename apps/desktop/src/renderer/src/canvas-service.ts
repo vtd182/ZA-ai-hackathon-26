@@ -1,5 +1,6 @@
 import {
   canvasProgramSchema,
+  type CanvasDiffContext,
   type CanvasDocumentContext,
   type CanvasExecutionReceipt,
   type CanvasOperation,
@@ -46,6 +47,11 @@ export function inspectCanvas(editor: Editor, revision: number, limit = 200, rec
       ...(typeof shape.meta.semanticId === 'string' ? { semanticId: shape.meta.semanticId } : {}),
       ...(['note', 'process', 'decision', 'screen'].includes(String(shape.meta.nodeKind)) ? { nodeKind: shape.meta.nodeKind as 'note' | 'process' | 'decision' | 'screen' } : {}),
       ...(typeof shape.meta.visualRole === 'string' ? { visualRole: shape.meta.visualRole } : {}),
+      ...(typeof shape.parentId === 'string' ? { parentId: shape.parentId } : {}),
+      ...(typeof shape.meta.description === 'string' ? { description: shape.meta.description } : {}),
+      ...(typeof shape.meta.lane === 'string' ? { lane: shape.meta.lane } : {}),
+      ...(['neutral', 'brand', 'success', 'warning', 'danger', 'info', 'accent'].includes(String(shape.meta.tone)) ? { tone: shape.meta.tone as 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info' | 'accent' } : {}),
+      ...(Array.isArray(shape.meta.content) ? { content: shape.meta.content.filter((item): item is string => typeof item === 'string').slice(0, 12) } : {}),
       x: bounds?.x ?? shape.x,
       y: bounds?.y ?? shape.y,
       width: bounds?.w ?? 0,
@@ -74,6 +80,94 @@ export function inspectCanvas(editor: Editor, revision: number, limit = 200, rec
   if (selectedBounds) base.selectedBounds = selectedBounds
   base.lints = lintCanvasDocument(base)
   return base
+}
+
+function sameBounds(
+  first: { x: number; y: number; width: number; height: number },
+  second: { x: number; y: number; width: number; height: number },
+): boolean {
+  return Math.abs(first.x - second.x) < 1
+    && Math.abs(first.y - second.y) < 1
+    && Math.abs(first.width - second.width) < 1
+    && Math.abs(first.height - second.height) < 1
+}
+
+function sameShapeContent(
+  first: CanvasDocumentContext['shapes'][number],
+  second: CanvasDocumentContext['shapes'][number],
+): boolean {
+  return first.label === second.label
+    && first.description === second.description
+    && first.lane === second.lane
+    && first.tone === second.tone
+    && JSON.stringify(first.content ?? []) === JSON.stringify(second.content ?? [])
+}
+
+export function diffCanvasContexts(
+  before: CanvasDocumentContext,
+  after: CanvasDocumentContext,
+  limit = 50,
+): CanvasDiffContext {
+  const previous = new Map(before.shapes.map((shape) => [shape.id, shape]))
+  const current = new Map(after.shapes.map((shape) => [shape.id, shape]))
+  const changes: CanvasDiffContext['changes'] = []
+  for (const shape of after.shapes) {
+    const old = previous.get(shape.id)
+    if (!old) {
+      changes.push({
+        id: shape.semanticId ?? shape.id,
+        label: shape.label || shape.semanticId || shape.type,
+        change: 'created',
+        after: { x: shape.x, y: shape.y, width: shape.width, height: shape.height },
+      })
+    } else if (!sameShapeContent(old, shape)) {
+      changes.push({
+        id: shape.semanticId ?? shape.id,
+        label: shape.label || shape.semanticId || shape.type,
+        change: 'updated',
+        before: { x: old.x, y: old.y, width: old.width, height: old.height },
+        after: { x: shape.x, y: shape.y, width: shape.width, height: shape.height },
+      })
+    } else if (!sameBounds(old, shape)) {
+      changes.push({
+        id: shape.semanticId ?? shape.id,
+        label: shape.label || shape.semanticId || shape.type,
+        change: 'moved',
+        before: { x: old.x, y: old.y, width: old.width, height: old.height },
+        after: { x: shape.x, y: shape.y, width: shape.width, height: shape.height },
+      })
+    }
+  }
+  for (const shape of before.shapes) {
+    if (current.has(shape.id)) continue
+    changes.push({
+      id: shape.semanticId ?? shape.id,
+      label: shape.label || shape.semanticId || shape.type,
+      change: 'deleted',
+      before: { x: shape.x, y: shape.y, width: shape.width, height: shape.height },
+    })
+  }
+  const bounded = changes.slice(0, limit)
+  const counts = {
+    created: changes.filter((item) => item.change === 'created').length,
+    updated: changes.filter((item) => item.change === 'updated').length,
+    moved: changes.filter((item) => item.change === 'moved').length,
+    deleted: changes.filter((item) => item.change === 'deleted').length,
+  }
+  const summaryParts = [
+    counts.created ? `${counts.created} tạo mới` : '',
+    counts.updated ? `${counts.updated} đổi nội dung` : '',
+    counts.moved ? `${counts.moved} di chuyển` : '',
+    counts.deleted ? `${counts.deleted} xóa` : '',
+  ].filter(Boolean)
+  return {
+    schemaVersion: 1,
+    fromRevision: before.revision,
+    toRevision: after.revision,
+    changes: bounded,
+    selectedShapeIds: after.selectedShapeIds.slice(0, 50),
+    summary: summaryParts.join(', ') || 'Không có thay đổi hình học hoặc nội dung; chỉ cập nhật vùng chọn',
+  }
 }
 
 function findSemanticShape(editor: Editor, id: string): TLShape | undefined {
@@ -106,10 +200,101 @@ interface PrototypeBlock {
   y: number
   width: number
   height: number
-  color: 'black' | 'blue' | 'grey' | 'green' | 'orange' | 'violet' | 'yellow'
-  fill: 'solid' | 'semi'
+  color: 'black' | 'blue' | 'grey' | 'green' | 'orange' | 'red' | 'violet' | 'yellow'
+  fill: 'none' | 'solid' | 'semi'
   size?: 's' | 'm'
   align?: 'start' | 'middle' | 'end'
+  shape?: 'geo' | 'text'
+}
+
+const tonePresentation = {
+  neutral: { color: 'grey', fill: 'semi' },
+  brand: { color: 'blue', fill: 'solid' },
+  success: { color: 'green', fill: 'solid' },
+  warning: { color: 'yellow', fill: 'solid' },
+  danger: { color: 'red', fill: 'solid' },
+  info: { color: 'blue', fill: 'semi' },
+  accent: { color: 'violet', fill: 'semi' },
+} as const
+
+function authoredPrototypeBlocks(
+  operation: Extract<CanvasOperation, { op: 'create_node' }>,
+  stepIndex: number,
+  stepCount: number,
+): PrototypeBlock[] | undefined {
+  const screen = operation.screen
+  if (!screen) return undefined
+  const blocks: PrototypeBlock[] = [
+    { id: 'chrome', label: 'ZA MINI APP', x: 0, y: 0, width: 360, height: 52, color: 'blue', fill: 'solid', size: 'm', align: 'start' },
+    { id: 'step', label: `${String(stepIndex + 1).padStart(2, '0')} / ${String(stepCount).padStart(2, '0')}`, x: 272, y: 12, width: 72, height: 28, color: 'green', fill: 'solid' },
+  ]
+  if (screen.eyebrow) blocks.push({ id: 'eyebrow', label: screen.eyebrow, x: 18, y: 68, width: 324, height: 26, color: 'violet', fill: 'none', align: 'start', shape: 'text' })
+  const titleY = screen.eyebrow ? 102 : 72
+  blocks.push({ id: 'title', label: screen.title, x: 18, y: titleY, width: 324, height: 68, color: 'black', fill: 'none', size: 'm', align: 'start', shape: 'text' })
+  if (screen.subtitle) blocks.push({ id: 'subtitle', label: screen.subtitle, x: 18, y: titleY + 76, width: 324, height: 46, color: 'grey', fill: 'none', align: 'start', shape: 'text' })
+
+  let cursorY = screen.subtitle ? titleY + 134 : titleY + 80
+  let pendingHalf: PrototypeBlock | undefined
+  for (const item of screen.blocks) {
+    const presentation = tonePresentation[item.tone]
+    const height = item.kind === 'hero' ? 92 : item.helper ? 72 : 60
+    const label = [item.label.toUpperCase(), item.value, item.helper].filter(Boolean).join('\n')
+    if (item.span === 'half') {
+      const block: PrototypeBlock = {
+        id: `block-${item.id}`,
+        label,
+        x: pendingHalf ? 188 : 18,
+        y: cursorY,
+        width: 154,
+        height,
+        color: presentation.color,
+        fill: presentation.fill,
+        align: 'start',
+      }
+      blocks.push(block)
+      if (pendingHalf) {
+        cursorY += Math.max(pendingHalf.height, height) + 12
+        pendingHalf = undefined
+      } else {
+        pendingHalf = block
+      }
+    } else {
+      if (pendingHalf) {
+        cursorY += pendingHalf.height + 12
+        pendingHalf = undefined
+      }
+      blocks.push({
+        id: `block-${item.id}`,
+        label,
+        x: 18,
+        y: cursorY,
+        width: 324,
+        height,
+        color: presentation.color,
+        fill: presentation.fill,
+        align: 'start',
+      })
+      cursorY += height + 12
+    }
+  }
+  if (pendingHalf) cursorY += pendingHalf.height + 12
+  const actionY = Math.max(cursorY + 4, 584)
+  blocks.push({ id: 'primary-action', label: screen.primaryAction, x: 18, y: actionY, width: 324, height: 48, color: 'blue', fill: 'solid', size: 'm' })
+  if (screen.secondaryAction) blocks.push({ id: 'secondary-action', label: screen.secondaryAction, x: 18, y: actionY + 56, width: 150, height: 36, color: 'grey', fill: 'semi' })
+  if (screen.navItems.length > 0) {
+    blocks.push({
+      id: 'nav',
+      label: screen.navItems.map((item) => item === screen.activeNav ? `• ${item}` : item).join('      '),
+      x: 18,
+      y: 684,
+      width: 324,
+      height: 24,
+      color: 'green',
+      fill: 'none',
+      shape: 'text',
+    })
+  }
+  return blocks.filter((block) => block.y + block.height <= 716)
 }
 
 function prototypeBlocks(
@@ -117,12 +302,82 @@ function prototypeBlocks(
   stepIndex: number,
   stepCount: number,
 ): PrototypeBlock[] {
+  const authored = authoredPrototypeBlocks(operation, stepIndex, stepCount)
+  if (authored) return authored
   const label = normalizedLabel(operation.label)
+  const backupReminder = operation.id.startsWith('prototype-backup-')
+  const rideBooking = operation.id.startsWith('prototype-') && /(pickup|ride|driver)/.test(operation.id)
+  const onboarding = operation.id.startsWith('prototype-') && /(welcome|register|verify)/.test(operation.id)
+  const brand = backupReminder ? 'BACKUP  REMINDER' : rideBooking ? 'ZA  RIDE' : onboarding ? 'ZA  ACCOUNT' : 'ZA  PANTRY'
+  const nav = backupReminder
+    ? 'Tổng quan          Lịch          Nhật ký'
+    : rideBooking
+      ? 'Đặt chuyến       Hoạt động       Cá nhân'
+      : onboarding
+        ? 'Tài khoản          Trợ giúp          Bảo mật'
+        : 'Trang chủ      Đơn hàng      Cá nhân'
   const shell: PrototypeBlock[] = [
-    { id: 'brand', label: 'ZA  PANTRY', x: 0, y: 0, width: 320, height: 54, color: 'blue', fill: 'solid', size: 'm', align: 'start' },
+    { id: 'brand', label: brand, x: 0, y: 0, width: 320, height: 54, color: 'blue', fill: 'solid', size: 'm', align: 'start' },
     { id: 'step', label: `${stepIndex + 1} / ${stepCount}`, x: 234, y: 12, width: 70, height: 30, color: 'green', fill: 'solid' },
-    { id: 'nav', label: 'Trang chủ      Đơn hàng      Cá nhân', x: 16, y: 486, width: 288, height: 26, color: 'green', fill: 'semi' },
+    { id: 'nav', label: nav, x: 16, y: 486, width: 288, height: 26, color: 'green', fill: 'semi' },
   ]
+  if (operation.id === 'prototype-backup-dashboard') {
+    return [
+      ...shell,
+      { id: 'title', label: 'Bản sao lưu của bạn', x: 16, y: 70, width: 288, height: 44, color: 'black', fill: 'semi', size: 'm', align: 'start' },
+      { id: 'health', label: 'AN TOÀN\nBackup gần nhất · Hôm qua 22:30', x: 16, y: 126, width: 288, height: 82, color: 'green', fill: 'solid', align: 'start' },
+      { id: 'source', label: 'Nguồn\nẢnh & video · 12,4 GB', x: 16, y: 220, width: 136, height: 78, color: 'blue', fill: 'semi', align: 'start' },
+      { id: 'next', label: 'Lịch tiếp theo\nHôm nay · 22:30', x: 168, y: 220, width: 136, height: 78, color: 'violet', fill: 'semi', align: 'start' },
+      { id: 'storage', label: 'Cloud Drive     64% đã dùng', x: 16, y: 312, width: 288, height: 46, color: 'grey', fill: 'semi', align: 'start' },
+      { id: 'warning', label: '3 tệp mới chưa được backup', x: 16, y: 370, width: 288, height: 38, color: 'yellow', fill: 'semi', align: 'start' },
+      { id: 'action', label: 'Backup ngay', x: 16, y: 426, width: 288, height: 48, color: 'blue', fill: 'solid', size: 'm' },
+    ]
+  }
+  if (operation.id === 'prototype-backup-source') {
+    return [
+      ...shell,
+      { id: 'title', label: 'Chọn nguồn backup', x: 16, y: 70, width: 288, height: 44, color: 'black', fill: 'semi', size: 'm', align: 'start' },
+      { id: 'device', label: 'Thiết bị này\nẢnh, video và tài liệu', x: 16, y: 126, width: 288, height: 66, color: 'blue', fill: 'solid', align: 'start' },
+      { id: 'cloud', label: 'Cloud Drive\nĐã kết nối · minh@work.vn', x: 16, y: 204, width: 288, height: 66, color: 'green', fill: 'semi', align: 'start' },
+      { id: 'folders', label: 'THƯ MỤC ĐÃ CHỌN\nCamera     Screenshots     Documents', x: 16, y: 282, width: 288, height: 78, color: 'violet', fill: 'semi', align: 'start' },
+      { id: 'condition', label: 'Chỉ backup khi có Wi-Fi', x: 16, y: 372, width: 288, height: 38, color: 'grey', fill: 'semi', align: 'start' },
+      { id: 'action', label: 'Lưu nguồn backup', x: 16, y: 426, width: 288, height: 48, color: 'blue', fill: 'solid', size: 'm' },
+    ]
+  }
+  if (operation.id === 'prototype-backup-schedule') {
+    return [
+      ...shell,
+      { id: 'title', label: 'Lịch & nhắc backup', x: 16, y: 70, width: 288, height: 44, color: 'black', fill: 'semi', size: 'm', align: 'start' },
+      { id: 'frequency', label: 'TẦN SUẤT\nMỗi ngày', x: 16, y: 126, width: 136, height: 72, color: 'blue', fill: 'semi', align: 'start' },
+      { id: 'time', label: 'THỜI GIAN\n22:30', x: 168, y: 126, width: 136, height: 72, color: 'violet', fill: 'semi', align: 'start' },
+      { id: 'reminder', label: 'Nhắc trước 15 phút                 BẬT', x: 16, y: 212, width: 288, height: 52, color: 'green', fill: 'solid', align: 'start' },
+      { id: 'snooze', label: 'Nếu bỏ lỡ, nhắc lại sau 30 phút', x: 16, y: 278, width: 288, height: 48, color: 'yellow', fill: 'semi', align: 'start' },
+      { id: 'conditions', label: 'Điều kiện\nWi-Fi · Pin trên 30% · Đang sạc', x: 16, y: 340, width: 288, height: 70, color: 'grey', fill: 'semi', align: 'start' },
+      { id: 'action', label: 'Lưu kế hoạch', x: 16, y: 426, width: 288, height: 48, color: 'blue', fill: 'solid', size: 'm' },
+    ]
+  }
+  if (operation.id === 'prototype-backup-reminder') {
+    return [
+      ...shell,
+      { id: 'eyebrow', label: 'ĐẾN LỊCH BACKUP · 22:30', x: 16, y: 72, width: 288, height: 34, color: 'violet', fill: 'semi' },
+      { id: 'status', label: '3,2 GB đang chờ backup\nKhoảng 8 phút · Wi-Fi ổn định', x: 16, y: 120, width: 288, height: 86, color: 'blue', fill: 'solid', size: 'm' },
+      { id: 'scope', label: 'Ảnh & video       486 tệp\nDocuments          24 tệp', x: 16, y: 220, width: 288, height: 76, color: 'grey', fill: 'semi', align: 'start' },
+      { id: 'primary', label: 'Backup ngay', x: 16, y: 314, width: 288, height: 48, color: 'blue', fill: 'solid', size: 'm' },
+      { id: 'snooze', label: 'Nhắc lại sau 30 phút', x: 16, y: 372, width: 184, height: 38, color: 'yellow', fill: 'semi' },
+      { id: 'skip', label: 'Bỏ qua', x: 208, y: 372, width: 96, height: 38, color: 'grey', fill: 'semi' },
+      { id: 'action', label: 'Xem chi tiết dữ liệu', x: 16, y: 426, width: 288, height: 48, color: 'green', fill: 'semi', size: 'm' },
+    ]
+  }
+  if (operation.id === 'prototype-backup-result') {
+    return [
+      ...shell,
+      { id: 'success', label: 'BACKUP HOÀN TẤT\n510 tệp đã an toàn', x: 16, y: 76, width: 288, height: 104, color: 'green', fill: 'solid', size: 'm' },
+      { id: 'summary', label: '3,2 GB · 7 phút 42 giây\nCloud Drive · Mã phiên BK-0723', x: 16, y: 194, width: 288, height: 68, color: 'blue', fill: 'semi', align: 'start' },
+      { id: 'next', label: 'Lần backup tiếp theo\nNgày mai · 22:30', x: 16, y: 276, width: 288, height: 62, color: 'violet', fill: 'semi', align: 'start' },
+      { id: 'note', label: 'Không có lỗi cần xử lý', x: 16, y: 352, width: 288, height: 46, color: 'grey', fill: 'semi', align: 'start' },
+      { id: 'action', label: 'Xem nhật ký backup', x: 16, y: 426, width: 288, height: 48, color: 'blue', fill: 'solid', size: 'm' },
+    ]
+  }
   if (/(kham pha|discover)/.test(label)) {
     return [
       ...shell,
@@ -197,30 +452,36 @@ function prototypeChildId(operationId: string, blockId: string): TLShapeId {
 function upsertPrototypeSceneFurniture(
   editor: Editor,
   nodes: Array<Extract<CanvasOperation, { op: 'create_node' }>>,
+  program: CanvasProgram,
 ): void {
   const positioned = nodes.filter((node) => node.x !== undefined && node.y !== undefined)
   if (positioned.length < 3 || !positioned.every((node) => node.id.startsWith('prototype-'))) return
   const minX = Math.min(...positioned.map((node) => node.x!))
   const minY = Math.min(...positioned.map((node) => node.y!))
   const labels = normalizedLabel(positioned.map((node) => node.label).join(' '))
+  const backupReminder = /(backup|sao luu|nhac backup)/.test(labels)
   const mealOrdering = /(mon|gio hang|don|nhan hang)/.test(labels)
   const rideBooking = /(diem don|chuyen|tai xe)/.test(labels)
-  const title = mealOrdering
+  const title = program.title ?? (backupReminder
+    ? 'MVP PROTOTYPE  ·  NHẮC BACKUP CHỦ ĐỘNG'
+    : mealOrdering
     ? 'MVP PROTOTYPE  ·  ĐẶT SUẤT ĂN NHÓM'
     : rideBooking
       ? 'MVP PROTOTYPE  ·  ĐẶT CHUYẾN MINI APP'
-      : 'MVP PROTOTYPE  ·  CORE USER JOURNEY'
-  const focus = mealOrdering
+      : 'MVP PROTOTYPE  ·  CORE USER JOURNEY')
+  const focus = program.description ?? (backupReminder
+    ? 'SCOPE ĐÃ KHÓA\nThiết lập · Nhắc hạn · Backup · Kết quả'
+    : mealOrdering
     ? 'SCOPE ĐÃ KHÓA\nĐặt nhóm · 1 người nhận · Bỏ payment'
     : rideBooking
       ? 'SCOPE ĐÃ KHÓA\nĐặt điểm · Chọn chuyến · Theo dõi'
-      : 'LOW-FIDELITY\nChọn một màn hình để feedback'
+      : 'PRODUCT CONCEPT\nChọn một màn hình để feedback')
   const furniture = [
     {
       id: createShapeId('canvas-prototype-scene-header'),
       x: minX,
       y: minY - 136,
-      w: 832,
+      w: 900,
       h: 82,
       label: title,
       color: 'black',
@@ -230,9 +491,9 @@ function upsertPrototypeSceneFurniture(
     },
     {
       id: createShapeId('canvas-prototype-scene-focus'),
-      x: minX + 856,
+      x: minX + 924,
       y: minY - 136,
-      w: 424,
+      w: 516,
       h: 82,
       label: focus,
       color: 'yellow',
@@ -289,13 +550,25 @@ function upsertPrototypeFrame(
     nodeKind: operation.kind,
     canvasOwner: 'agent',
     visualRole: 'prototype-screen',
+    ...(operation.description ? { description: operation.description } : {}),
+    ...(operation.lane ? { lane: operation.lane } : {}),
+    ...(operation.tone ? { tone: operation.tone } : {}),
+    ...(operation.screen ? {
+      content: [
+        operation.screen.title,
+        operation.screen.subtitle ?? '',
+        ...operation.screen.blocks.flatMap((block) => [block.label, block.value ?? '', block.helper ?? '']),
+        operation.screen.primaryAction,
+        operation.screen.secondaryAction ?? '',
+      ].filter(Boolean),
+    } : {}),
   }
   if (editor.getShape(id)?.type === 'frame') {
     editor.updateShape({
       id,
       type: 'frame',
       ...(operation.x !== undefined && operation.y !== undefined ? { x, y } : {}),
-      props: { w: 320, h: 520, name: operation.label, color: 'grey' },
+      props: { w: 360, h: 720, name: operation.label, color: 'grey' },
       meta,
     } as never)
   } else {
@@ -304,7 +577,7 @@ function upsertPrototypeFrame(
       type: 'frame',
       x,
       y,
-      props: { w: 320, h: 520, name: operation.label, color: 'grey' },
+      props: { w: 360, h: 720, name: operation.label, color: 'grey' },
       meta,
     } as never)
   }
@@ -316,7 +589,35 @@ function upsertPrototypeFrame(
   for (const block of blocks) {
     const childId = prototypeChildId(operation.id, block.id)
     const child = editor.getShape(childId)
-    if (child && child.type !== 'geo') editor.deleteShape(child.id)
+    const shapeType = block.shape ?? 'geo'
+    if (child && child.type !== shapeType) editor.deleteShape(child.id)
+    if (shapeType === 'text') {
+      const textShape = {
+        id: childId,
+        type: 'text',
+        parentId: id,
+        x: block.x,
+        y: block.y,
+        props: {
+          color: block.color,
+          size: block.size ?? 's',
+          font: 'sans',
+          textAlign: block.align ?? 'start',
+          autoSize: false,
+          w: block.width,
+          richText: toRichText(block.label),
+        },
+        meta: {
+          canvasOwner: 'agent',
+          visualRole: `prototype-${block.id}`,
+          prototypeParentId: operation.id,
+          label: block.label,
+        },
+      }
+      if (editor.getShape(childId)?.type === 'text') editor.updateShape(textShape as never)
+      else editor.createShape(textShape as never)
+      continue
+    }
     const shape = {
       id: childId,
       type: 'geo',
@@ -349,6 +650,230 @@ function upsertPrototypeFrame(
   return id
 }
 
+function richNodeChildId(operationId: string, role: string): TLShapeId {
+  return createShapeId(`canvas-${operationId}-card-${role}`)
+}
+
+function upsertRichNodeFrame(
+  editor: Editor,
+  operation: Extract<CanvasOperation, { op: 'create_node' }>,
+  x: number,
+  y: number,
+): TLShapeId {
+  const id = semanticShapeId(operation.id)
+  const current = editor.getShape(id)
+  if (current && current.type !== 'frame') editor.deleteShape(current.id)
+  const dimensions = canvasNodeDimensions(operation.kind, operation.label, operation.id, true, operation.description)
+  const presentation = operation.tone ? tonePresentation[operation.tone] : nodePresentation(operation)
+  const meta = {
+    semanticId: operation.id,
+    label: operation.label,
+    nodeKind: operation.kind,
+    canvasOwner: 'agent',
+    visualRole: operation.kind === 'note' || operation.tone === 'danger' ? 'exception' : operation.kind,
+    ...(operation.description ? { description: operation.description } : {}),
+    ...(operation.lane ? { lane: operation.lane } : {}),
+    ...(operation.tone ? { tone: operation.tone } : {}),
+    content: [operation.label, operation.description ?? '', operation.badge ?? '', operation.lane ?? ''].filter(Boolean),
+  }
+  const frame = {
+    id,
+    type: 'frame',
+    x,
+    y,
+    props: { w: dimensions.width, h: dimensions.height, name: operation.badge ?? operation.kind.toUpperCase(), color: presentation.color },
+    meta,
+  }
+  if (editor.getShape(id)?.type === 'frame') editor.updateShape(frame as never)
+  else editor.createShape(frame as never)
+
+  const children = [
+    {
+      role: 'background',
+      label: '',
+      x: 0,
+      y: 0,
+      width: dimensions.width,
+      height: dimensions.height,
+      color: presentation.color,
+      fill: operation.kind === 'decision' ? 'semi' : presentation.fill,
+      size: 's',
+      align: 'start',
+    },
+    {
+      role: 'badge',
+      label: [operation.icon?.toUpperCase(), operation.badge].filter(Boolean).join('  ·  ') || operation.kind.toUpperCase(),
+      x: 16,
+      y: 14,
+      width: dimensions.width - 32,
+      height: 28,
+      color: presentation.color,
+      fill: 'none',
+      size: 's',
+      align: 'start',
+    },
+    {
+      role: 'title',
+      label: operation.label,
+      x: 16,
+      y: 48,
+      width: dimensions.width - 32,
+      height: operation.description ? 56 : 96,
+      color: 'black',
+      fill: 'none',
+      size: 'm',
+      align: 'start',
+    },
+    ...(operation.description ? [{
+      role: 'description',
+      label: operation.description,
+      x: 16,
+      y: 108,
+      width: dimensions.width - 32,
+      height: dimensions.height - 146,
+      color: 'grey',
+      fill: 'none',
+      size: 's',
+      align: 'start',
+    }] : []),
+    {
+      role: 'lane',
+      label: operation.lane ? `LANE  ·  ${operation.lane}` : '',
+      x: 16,
+      y: dimensions.height - 28,
+      width: dimensions.width - 32,
+      height: 20,
+      color: presentation.color,
+      fill: 'none',
+      size: 's',
+      align: 'start',
+    },
+  ] as const
+
+  for (const child of children) {
+    const childId = richNodeChildId(operation.id, child.role)
+    if (child.role !== 'background') {
+      const textShape = {
+        id: childId,
+        type: 'text',
+        parentId: id,
+        x: child.x,
+        y: child.y,
+        props: {
+          color: child.color,
+          size: child.size,
+          font: 'sans',
+          textAlign: child.align,
+          autoSize: false,
+          w: child.width,
+          richText: toRichText(child.label),
+        },
+        meta: {
+          canvasOwner: 'agent',
+          visualRole: `workflow-${child.role}`,
+          workflowParentId: operation.id,
+          label: child.label,
+        },
+      }
+      const currentChild = editor.getShape(childId)
+      if (currentChild && currentChild.type !== 'text') editor.deleteShape(currentChild.id)
+      if (editor.getShape(childId)?.type === 'text') editor.updateShape(textShape as never)
+      else editor.createShape(textShape as never)
+      continue
+    }
+    const shape = {
+      id: childId,
+      type: 'geo',
+      parentId: id,
+      x: child.x,
+      y: child.y,
+      props: {
+        geo: 'rectangle',
+        w: child.width,
+        h: child.height,
+        color: child.color,
+        fill: child.fill,
+        dash: 'solid',
+        font: 'sans',
+        size: child.size,
+        align: child.align,
+        verticalAlign: 'middle',
+        richText: toRichText(child.label),
+      },
+      meta: {
+        canvasOwner: 'agent',
+        visualRole: `workflow-${child.role}`,
+        workflowParentId: operation.id,
+        label: child.label,
+      },
+    }
+    if (editor.getShape(childId)?.type === 'geo') editor.updateShape(shape as never)
+    else editor.createShape(shape as never)
+  }
+  return id
+}
+
+function upsertWorkflowSceneFurniture(
+  editor: Editor,
+  nodes: Array<Extract<CanvasOperation, { op: 'create_node' }>>,
+  program: CanvasProgram,
+): void {
+  const positioned = nodes.filter((node) => node.x !== undefined && node.y !== undefined)
+  if (positioned.length < 2 || program.sceneType !== 'workflow') return
+  const minX = Math.min(...positioned.map((node) => node.x!))
+  const minY = Math.min(...positioned.map((node) => node.y!))
+  const items = [
+    {
+      id: createShapeId('canvas-workflow-scene-title'),
+      x: minX,
+      y: minY - 150,
+      w: 760,
+      h: 70,
+      label: program.title ?? 'Product Journey',
+      color: 'black',
+      fill: 'none',
+      size: 'l',
+      role: 'workflow-scene-title',
+    },
+    {
+      id: createShapeId('canvas-workflow-scene-description'),
+      x: minX + 784,
+      y: minY - 150,
+      w: 620,
+      h: 70,
+      label: program.description ?? program.summary,
+      color: 'blue',
+      fill: 'semi',
+      size: 's',
+      role: 'workflow-scene-description',
+    },
+  ] as const
+  for (const item of items) {
+    const shape = {
+      id: item.id,
+      type: 'geo',
+      x: item.x,
+      y: item.y,
+      props: {
+        geo: 'rectangle',
+        w: item.w,
+        h: item.h,
+        color: item.color,
+        fill: item.fill,
+        dash: 'solid',
+        font: 'sans',
+        size: item.size,
+        align: 'start',
+        verticalAlign: 'middle',
+        richText: toRichText(item.label),
+      },
+      meta: { canvasOwner: 'agent', visualRole: item.role, label: item.label },
+    }
+    if (editor.getShape(item.id)?.type === 'geo') editor.updateShape(shape as never)
+    else editor.createShape(shape as never)
+  }
+}
+
 function createNode(editor: Editor, operation: Extract<CanvasOperation, { op: 'create_node' }>, index: number, nodeCount: number): TLShapeId {
   const id = semanticShapeId(operation.id)
   const existing = editor.getShape(id)
@@ -357,9 +882,12 @@ function createNode(editor: Editor, operation: Extract<CanvasOperation, { op: 'c
   const x = operation.x ?? viewport.center.x - ((columns - 1) * 340) / 2 + (index % columns) * 340
   const y = operation.y ?? viewport.center.y - 100 + Math.floor(index / columns) * 190
   const presentation = nodePresentation(operation)
-  const dimensions = canvasNodeDimensions(operation.kind, operation.label, operation.id)
+  const dimensions = canvasNodeDimensions(operation.kind, operation.label, operation.id, Boolean(operation.description || operation.badge || operation.lane), operation.description)
   if (operation.kind === 'screen' && operation.id.startsWith('prototype-')) {
     return upsertPrototypeFrame(editor, operation, x, y, index, nodeCount)
+  }
+  if (operation.description || operation.badge || operation.lane) {
+    return upsertRichNodeFrame(editor, operation, x, y)
   }
   const meta = {
     ...existing?.meta,
@@ -368,6 +896,9 @@ function createNode(editor: Editor, operation: Extract<CanvasOperation, { op: 'c
     nodeKind: operation.kind,
     canvasOwner: 'agent',
     visualRole: operation.kind === 'note' && presentation.color === 'red' ? 'exception' : operation.kind,
+    ...(operation.description ? { description: operation.description } : {}),
+    ...(operation.lane ? { lane: operation.lane } : {}),
+    ...(operation.tone ? { tone: operation.tone } : {}),
   }
   if (existing?.type === 'note') {
     editor.updateShape({
@@ -474,31 +1005,36 @@ function connect(editor: Editor, operation: Extract<CanvasOperation, { op: 'conn
   return id
 }
 
-function applyOperations(editor: Editor, operations: CanvasOperation[]): TLShapeId[] {
+function applyOperations(editor: Editor, operations: CanvasOperation[], program: CanvasProgram, renderSceneFurniture: boolean): TLShapeId[] {
   const created: TLShapeId[] = []
   const nodes = operations.filter((operation): operation is Extract<CanvasOperation, { op: 'create_node' }> => operation.op === 'create_node')
   editor.run(() => {
-    upsertPrototypeSceneFurniture(editor, nodes)
-    let nodeIndex = 0
     for (const operation of operations) {
-      if (operation.op === 'create_node') {
-        created.push(createNode(editor, operation, nodeIndex, nodes.length))
-        nodeIndex += 1
-      } else if (operation.op === 'connect') {
-        const id = connect(editor, operation)
-        if (id) created.push(id)
-      } else if (operation.op === 'update') {
-        const shape = findSemanticShape(editor, operation.id)
-        if (!shape) continue
-        const props: Record<string, unknown> = {}
-        if (operation.label && (shape.type === 'geo' || shape.type === 'note')) props.richText = toRichText(operation.label)
-        if (operation.label && shape.type === 'frame') props.name = operation.label
-        if (operation.color && colors.has(operation.color)) props.color = operation.color
-        editor.updateShape({ id: shape.id, type: shape.type, ...(Object.keys(props).length > 0 ? { props } : {}), meta: { ...shape.meta, ...(operation.label ? { label: operation.label } : {}) } } as never)
-      } else {
-        const shape = findSemanticShape(editor, operation.id)
-        if (shape) editor.deleteShape(shape.id)
-      }
+      if (operation.op !== 'delete') continue
+      const shape = findSemanticShape(editor, operation.id)
+      if (shape) editor.deleteShape(shape.id)
+    }
+    if (renderSceneFurniture) {
+      upsertPrototypeSceneFurniture(editor, nodes, program)
+      upsertWorkflowSceneFurniture(editor, nodes, program)
+    }
+    for (const [nodeIndex, operation] of nodes.entries()) {
+      created.push(createNode(editor, operation, nodeIndex, nodes.length))
+    }
+    for (const operation of operations) {
+      if (operation.op !== 'update') continue
+      const shape = findSemanticShape(editor, operation.id)
+      if (!shape) continue
+      const props: Record<string, unknown> = {}
+      if (operation.label && (shape.type === 'geo' || shape.type === 'note')) props.richText = toRichText(operation.label)
+      if (operation.label && shape.type === 'frame') props.name = operation.label
+      if (operation.color && colors.has(operation.color)) props.color = operation.color
+      editor.updateShape({ id: shape.id, type: shape.type, ...(Object.keys(props).length > 0 ? { props } : {}), meta: { ...shape.meta, ...(operation.label ? { label: operation.label } : {}) } } as never)
+    }
+    for (const operation of operations) {
+      if (operation.op !== 'connect') continue
+      const id = connect(editor, operation)
+      if (id) created.push(id)
     }
   })
   return created
@@ -516,15 +1052,18 @@ export async function executeCanvasProgram(
   const before = inspectCanvas(editor, 0)
   const prepared = rawOperations.length > 0
     ? layoutCanvasProgram({
-        schemaVersion: 1,
+        ...program,
         mode: 'operations',
-        summary: program.summary,
         operations: rawOperations,
         script: null,
       }, before, { respectExplicitPositions: source === 'developer' })
     : program
   const operations = prepared.mode === 'operations' ? prepared.operations : rawOperations
-  const created = program.mode === 'none' ? [] : applyOperations(editor, operations)
+  const createdNodeCount = operations.filter((operation) => operation.op === 'create_node').length
+  const renderSceneFurniture = program.sceneType === 'prototype'
+    || !before.shapes.some((shape) => shape.nodeKind)
+    || createdNodeCount > 6
+  const created = program.mode === 'none' ? [] : applyOperations(editor, operations, prepared, renderSceneFurniture)
   const createdNodeShapeIds = operations
     .filter(
       (operation): operation is Extract<CanvasOperation, { op: 'create_node' }> =>
@@ -546,7 +1085,7 @@ export async function executeCanvasProgram(
         && selectionBounds.y >= viewport.y
         && selectionBounds.maxX <= viewport.maxX
         && selectionBounds.maxY <= viewport.maxY
-      if (!isVisible) editor.zoomToFit({ immediate: true })
+      if (!isVisible) editor.zoomToSelection({ immediate: true })
     }
   }
   const affectedSemanticIds = operations.flatMap((operation) => {

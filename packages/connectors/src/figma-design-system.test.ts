@@ -30,6 +30,7 @@ function capture(components: FigmaDesignSystemCapture['relevantComponents']): Fi
     sourceRoot: { id: '0:1', name: 'Page 1', type: 'PAGE' },
     relevantComponents: components,
     relevantComponentSets: [],
+    relevantInstances: [],
     styles: {
       paints: [{ name: 'Brand/Primary', paints: [{ type: 'SOLID', color: { r: 0, g: 0.4, b: 1, a: 1 } }] }],
       text: [{ name: 'Body', fontSize: 14, fontFamily: 'Inter', fontStyle: 'Medium' }],
@@ -63,6 +64,85 @@ describe('normalizeFigmaDesignSystemContext', () => {
     expect(context.manifest).toEqual(fallback)
     expect(context.liveSummary).toMatchObject({ componentCount: 0, paintStyleCount: 1, textStyleCount: 1, textNodeCount: 1 })
     expect(context.fallbackReason).toContain('synthetic fixture guard')
+  })
+
+  it('normalizes copied same-file ZDS instances into strict semantic bindings', () => {
+    const input = capture([])
+    input.relevantInstances = [
+      {
+        id: '411:20533',
+        name: '[ZDS] Button / Solid',
+        type: 'INSTANCE',
+        pageId: '0:1',
+        mainComponentName: 'Size=Large, Level=Primary, State=Default, Dark Mode=Off',
+        componentProperties: { Level: 'Primary', State: 'Default', 'Dark Mode': 'Off' },
+        contextLabels: ['Primary'],
+        ancestorNames: ['LM / Button'],
+      },
+      {
+        id: '411:20450',
+        name: '[ZDS] Input / Text',
+        type: 'INSTANCE',
+        pageId: '0:1',
+        componentProperties: {},
+        contextLabels: ['TextField'],
+        ancestorNames: ['LM / Forms_Input'],
+      },
+      {
+        id: '411:20598',
+        name: 'MP-Header',
+        type: 'INSTANCE',
+        pageId: '0:1',
+        componentProperties: {},
+        contextLabels: [],
+        ancestorNames: ['LM / Button'],
+      },
+    ]
+
+    const context = normalizeFigmaDesignSystemContext(input, target, fallback, '2026-07-22T13:00:00.000Z')
+
+    expect(context.mode).toBe('live')
+    expect(context.manifest.components.find((component) => component.semanticRole === 'primary-button')).toMatchObject({
+      binding: { kind: 'same_file_instance', nodeId: '411:20533', pageId: '0:1' },
+    })
+    expect(context.manifest.components.map((component) => component.semanticRole)).toEqual(expect.arrayContaining([
+      'app-header',
+      'primary-button',
+      'text-input',
+    ]))
+  })
+
+  it('prefers light default variants and classifies button levels from component properties', () => {
+    const input = capture([])
+    input.relevantInstances = [
+      {
+        id: '411:dark-secondary',
+        name: '[ZDS] Button / Solid',
+        type: 'INSTANCE',
+        pageId: '0:1',
+        mainComponentName: 'Size=Large, Level=Secondary, State=Default, Dark Mode=On',
+        componentProperties: { Level: 'Secondary', State: 'Default', 'Dark Mode': 'On' },
+        contextLabels: ['Primary'],
+        ancestorNames: ['DM / Button'],
+      },
+      {
+        id: '411:light-primary',
+        name: '[ZDS] Button / Solid',
+        type: 'INSTANCE',
+        pageId: '0:1',
+        mainComponentName: 'Size=Large, Level=Primary, State=Default, Dark Mode=Off',
+        componentProperties: { Level: 'Primary', State: 'Default', 'Dark Mode': 'Off' },
+        contextLabels: [],
+        ancestorNames: ['LM / Button'],
+      },
+    ]
+
+    const context = normalizeFigmaDesignSystemContext(input, target, fallback, '2026-07-22T13:00:00.000Z')
+
+    expect(context.manifest.components.find((component) => component.semanticRole === 'primary-button')?.binding)
+      .toEqual({ kind: 'same_file_instance', nodeId: '411:light-primary', pageId: '0:1' })
+    expect(context.manifest.components.find((component) => component.semanticRole === 'secondary-button')?.binding)
+      .toEqual({ kind: 'same_file_instance', nodeId: '411:dark-secondary', pageId: '0:1' })
   })
 
   it('removes fixture component keys before a free-mode live Figma write', () => {

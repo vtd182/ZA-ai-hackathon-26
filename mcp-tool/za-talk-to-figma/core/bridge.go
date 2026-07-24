@@ -19,6 +19,9 @@ import (
 
 var bridgeLogger = logging.Module("bridge")
 
+const lifecycleArtifactTimeout = 30 * time.Minute
+const progressInactivityTimeout = 5 * time.Minute
+
 type requestPolicy struct {
 	timeout time.Duration
 }
@@ -29,11 +32,15 @@ func requestPolicyFor(tool string) requestPolicy {
 		return requestPolicy{timeout: 60 * time.Second}
 	case "get_design_context", "get_node", "get_node_context", "get_nodes_info",
 		"get_styles", "get_variable_defs", "get_local_components",
-		"search_nodes", "scan_nodes_by_types", "scan_text_nodes", "get_fonts":
+		"search_nodes", "scan_nodes_by_types", "scan_text_nodes", "discover_design_system_instances", "get_fonts":
 		return requestPolicy{timeout: 45 * time.Second}
 	// SVG parsing can be CPU-intensive in Figma's JS VM; give it more headroom.
 	case "import_svg", "import_component_by_key":
 		return requestPolicy{timeout: 60 * time.Second}
+	case "apply_lifecycle_artifact_plan":
+		return requestPolicy{timeout: lifecycleArtifactTimeout}
+	case "read_lifecycle_artifact":
+		return requestPolicy{timeout: 3 * time.Minute}
 	default:
 		return requestPolicy{timeout: 30 * time.Second}
 	}
@@ -190,7 +197,7 @@ func (b *Bridge) readLoop(conn *websocket.Conn) {
 			if ok {
 				// Stop before Reset to avoid the AfterFunc firing during Reset.
 				entry.timer.Stop()
-				entry.timer.Reset(60 * time.Second)
+				entry.timer.Reset(progressInactivityTimeout)
 				bridgeLogger.Debug("progress update", "requestId", resp.RequestID, "progress", resp.Progress, "message", resp.Message)
 			} else {
 				bridgeLogger.Debug("progress update for unknown request (already resolved or timed out)", "requestId", resp.RequestID, "progress", resp.Progress, "message", resp.Message)
