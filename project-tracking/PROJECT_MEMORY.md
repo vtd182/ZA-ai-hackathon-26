@@ -68,8 +68,8 @@ Signature moment:
 - **Completed task:** `P0-AGT-006` thread-specific decision-to-ProductSpec synthesis with atomic empty-draft replacement.
 - **Completed task:** `P0-FIG-007` allowlisted same-file ZDS instance catalog, strict clone/apply and instance-backed read-back.
 - **Completed task:** `P0-FIG-008` provider-owned product-grade Figma synthesis with live ZDS capture, guarded creative execution and visual review.
-- **Current task:** `P0-UX-001` remains paused; `P0-FIG-008` and its post-close regression audit are complete.
-- **Current slice:** provider-owned Figma composition, strict live ZDS capture, immutable prepared execution and connected read-back are verified; release work now moves to clean demo rehearsal and packaging gates.
+- **Current task:** `P0-FIG-009` stable ZDS source binding is complete; `P0-UX-001` remains the next paused release slice.
+- **Current slice:** source-page identity now survives viewing generated output Pages; explicit rebind, semantic readiness and pre-planning role coverage prevent false live manifests.
 - **Last known repository state:** Runnable Electron app with one blank-first infinite canvas per thread, typed Canvas Programs, Mock/Codex provider paths, thread-specific ProductSpec synthesis, editable prototypes, deterministic impact preview, Markdown PRD export and approved strict live Figma ZDS write/read-back verification.
 - **Known blockers:** cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -592,6 +592,17 @@ Signature moment:
 - **Fix:** provider policy and plan validation limit only app-header, button and status/error control copy; supporting prose stays unconstrained in primitive composition. The deterministic fallback compacts its own control copy at word boundaries while preserving Vietnamese text.
 - **Regression test:** artifact-plan content-fit rejects a 65-character provider message; reasoning fallback tests enforce 32-character headers and 64-character status messages; `./run.sh smoke-flow` verifies the promoted 17-screen journey.
 - **Caveat:** final visual review remains required because structural verification cannot judge taste.
+
+### BUG-043 - Generated Figma Page could replace the ZDS source
+
+- **Status:** FIXED
+- **Found:** 2026-07-24, post-`P0-FIG-008` real prepare.
+- **Symptom:** `lifecycle:prepare-artifacts` returned one `MISSING_COMPONENT_ROLE` issue for nearly every generated slot.
+- **Trigger:** view or re-allow a generated `PM · ...` Page after a successful artifact run, then prepare another kickoff package.
+- **Root cause:** source allowlisting and the currently visible Page were treated as the same state. Local nodes without semantic hints still made the captured manifest appear live, so failure was delayed until slot preflight.
+- **Fix:** immutable target verification and plugin execution now resolve the allowlisted source Page by ID without requiring it to stay visible. Explicit pinning still requires the visible Page; managed output Pages are rejected, rebind remains available, unmapped components do not count as live and required roles are checked before provider planning.
+- **Regression test:** Figma adapter verifies a source while an output Page is current; plugin applies and reads back from the non-current source; source-policy and unmapped-manifest tests cover rejection. Live app prepare returned a valid 4-screen/45-layer immutable preflight after plugin reload. Full evidence: 148 workspace tests, 263 plugin tests, Go suite, build and smoke.
+- **Caveat:** a new Figma plugin session still requires explicit source allowlisting because the immutable target includes the session ID.
 
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 

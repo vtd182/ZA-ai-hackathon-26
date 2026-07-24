@@ -66,6 +66,16 @@ describe('normalizeFigmaDesignSystemContext', () => {
     expect(context.fallbackReason).toContain('synthetic fixture guard')
   })
 
+  it('does not treat local components without semantic hints as a usable live source', () => {
+    const input = capture([{ id: '1:2', name: 'Generated card', key: 'generated-card' }])
+    input.semanticHints = []
+
+    const context = normalizeFigmaDesignSystemContext(input, target, fallback, '2026-07-22T13:00:00.000Z')
+
+    expect(context.mode).toBe('fixture_fallback')
+    expect(context.liveSummary.componentCount).toBe(0)
+  })
+
   it('normalizes copied same-file ZDS instances into strict semantic bindings', () => {
     const input = capture([])
     input.relevantInstances = [

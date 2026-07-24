@@ -253,6 +253,20 @@ describe("lifecycle artifact plugin handlers", () => {
     expect(documentRoot.children).toHaveLength(1);
   });
 
+  it("uses the allowlisted ZDS source while the user views an output page", async () => {
+    const viewedPage = (globalThis as any).figma.createPage();
+    viewedPage.name = "PM · Previous output · v1";
+    (globalThis as any).figma.currentPage = viewedPage;
+
+    const applied = await handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {
+      preflightPlan: preflight(), planHash: "a".repeat(64), targetPageId: "0:1",
+    }) as any);
+
+    expect(applied?.data.idempotent).toBe(false);
+    expect(page.children).toHaveLength(0);
+    expect(documentRoot.children).toHaveLength(3);
+  });
+
   it("clones an allowlisted same-file ZDS instance and proves instance-backed read-back", async () => {
     const source: any = metadataNode({
       id: "411:20533",

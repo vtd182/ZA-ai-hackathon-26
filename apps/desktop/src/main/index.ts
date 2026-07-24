@@ -5,7 +5,6 @@ import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
 import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, changeIntentFromCanvasCommand, createHandoffPackage, createImpactPreview, customDecisionOptionId, executeConnectorAction, normalizeClarificationAnswers, rejectActions, resolveRemovalChangeIntent, selectDecisionOption, synthesizeProductSpecFromDecision, type ConnectorExecutionResult } from '@pm-agent/agent-core'
 import { legacyCommandsToCanvasProgram, planExplicitCanvasRequest, resolveCanvasSelection, synthesizeProductSpecFromCanvas } from '@pm-agent/canvas'
 import {
-  createFixtureFallbackDesignSystemContext,
   createFigmaArtifactPlan,
   createMockJiraPlan,
   createMockZdocPlan,
@@ -65,6 +64,7 @@ import { CanvasBridge } from './canvas-bridge'
 import { assertProviderTurnAvailable } from './active-turns'
 import { parseSlashCommand, slashHelpMessage } from './slash-commands'
 import { mapFreeformDiscoveryAnswers } from './workflow-intent'
+import { isManagedFigmaArtifactPage, missingFigmaRoles } from './figma-source-policy'
 
 const { app, BrowserWindow, ipcMain, shell } = electron
 
@@ -289,6 +289,17 @@ function figmaExecutionContext(): FigmaExecutionContext {
   }
 }
 
+function assertFigmaRoleCoverage(spec: ProductSpec, context: FigmaExecutionContext): void {
+  if (context.connectorMode !== 'live') return
+  const missingRoles = missingFigmaRoles(spec, context.manifest)
+  if (missingRoles.length === 0) return
+  throw new Error(
+    `Figma Design System source "${context.manifest.sourceLabel}" thiếu semantic roles: ${missingRoles.join(', ')}. `
+    + 'Page đang allow có thể là artifact output thay vì thư viện ZDS. '
+    + 'Mở Page chứa ZDS trong [PUBLIC] Zalo Mini App Framework 2.0 - dup, sau đó mở Figma setup và chọn "Dùng Page đang mở làm nguồn ZDS".',
+  )
+}
+
 function artifactActionsFor(state: RunState, spec: ProductSpec): PlannedAction[] {
   const entityIds = [
     ...spec.requirements.map((entity) => entity.id),
@@ -491,6 +502,7 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
   const zdocAction = state.pendingActions.find((action) => action.target === 'zdoc')
   if (!figmaAction || !jiraAction || !zdocAction) throw new Error('Change plan must contain Figma, Jira and Zdoc actions')
   const figmaContext = figmaExecutionContext()
+  assertFigmaRoleCoverage(spec, figmaContext)
   emitArtifactProgress(state.threadId, {
     target: 'figma',
     stage: 'planning',
@@ -758,11 +770,23 @@ function exposeProfile(profile: Omit<ProviderProfile, 'hasCredential'>): Provide
 async function figmaStatus(): Promise<FigmaSetupStatus> {
   const runtime = await figmaRuntime.status()
   const storedTarget = figmaIntegration.getActiveTarget()
-  const target = storedTarget && runtime.sessions.some((session) => (
-    session.sessionId === storedTarget.sessionId
-    && session.fileName === storedTarget.fileName
-    && session.pageName === storedTarget.pageName
-  )) ? storedTarget : null
+  const matchingSession = storedTarget
+    ? runtime.sessions.find((session) => (
+      session.sessionId === storedTarget.sessionId
+      && session.fileName === storedTarget.fileName
+    ))
+    : null
+  let target: FigmaTargetBinding | null = null
+  if (storedTarget && matchingSession) {
+    try {
+      const pages = await figmaMcp.pages(storedTarget.sessionId)
+      if (pages.pages.some((page) => page.id === storedTarget.pageId && page.name === storedTarget.pageName)) {
+        target = storedTarget
+      }
+    } catch {
+      target = null
+    }
+  }
   const context = target ? figmaIntegration.getContext(target.targetHash) : null
   return {
     ...runtime,
@@ -776,27 +800,34 @@ async function allowFigmaTarget(sessionId: string, forceCapture: boolean): Promi
   const session = health.sessions.find((item) => item.sessionId === sessionId)
   if (!session) throw new Error('Figma session không còn tồn tại. Hãy mở lại plugin.')
   const pages = await figmaMcp.pages(sessionId)
+  const currentPage = pages.pages.find((page) => page.id === pages.currentPageId)
+  if (!currentPage) throw new Error('Không đọc được Page hiện tại từ Figma session.')
+  if (isManagedFigmaArtifactPage(currentPage.name)) {
+    throw new Error(
+      `"${currentPage.name}" là Page output do PM Lifecycle tạo, không phải nguồn ZDS. `
+      + 'Hãy mở Page chứa component trong [PUBLIC] Zalo Mini App Framework 2.0 - dup rồi thử lại.',
+    )
+  }
   const activeTarget = figmaIntegration.getActiveTarget()
   const allowedAt = activeTarget?.sessionId === sessionId && activeTarget.pageId === pages.currentPageId
     ? activeTarget.allowedAt
     : timestamp()
   const target = await figmaMcp.pinTarget(sessionId, pages.currentPageId, allowedAt)
-  figmaIntegration.saveActiveTarget(target)
 
   const cached = forceCapture ? null : figmaIntegration.getContext(target.targetHash)
   if (!cached) {
-    try {
-      const capture = await figmaMcp.captureDesignSystem(target)
-      figmaIntegration.saveContext(normalizeFigmaDesignSystemContext(capture, target, syntheticZaloDesignSystem, timestamp()))
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : 'Unknown live capture error'
-      figmaIntegration.saveContext(createFixtureFallbackDesignSystemContext(
-        target,
-        syntheticZaloDesignSystem,
-        `Không thể hoàn tất live component-map capture trong ngân sách demo (${detail}); dùng synthetic fixture guard có nhãn.`,
-        timestamp(),
-      ))
+    const capture = await figmaMcp.captureDesignSystem(target)
+    const context = normalizeFigmaDesignSystemContext(capture, target, syntheticZaloDesignSystem, timestamp())
+    if (context.mode !== 'live') {
+      throw new Error(
+        `Page "${target.pageName}" không cung cấp semantic ZDS bindings. `
+        + 'Hãy mở đúng Page chứa các component ZDS rồi chọn lại nguồn.',
+      )
     }
+    figmaIntegration.saveActiveTarget(target)
+    figmaIntegration.saveContext(context)
+  } else {
+    figmaIntegration.saveActiveTarget(target)
   }
   return figmaStatus()
 }
@@ -1083,7 +1114,7 @@ function registerIpc(): void {
     await figmaRuntime.start()
     return figmaStatus()
   })
-  ipcMain.handle('figma:allow-target', (_event, sessionId: string) => allowFigmaTarget(sessionId, false))
+  ipcMain.handle('figma:allow-target', (_event, sessionId: string) => allowFigmaTarget(sessionId, true))
   ipcMain.handle('figma:refresh-design-system', () => {
     const target = figmaIntegration.getActiveTarget()
     if (!target) throw new Error('Chưa có Figma target trong allowlist.')

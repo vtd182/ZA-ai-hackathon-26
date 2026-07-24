@@ -200,17 +200,21 @@ function normalizeLiveManifest(
   capturedAt: string,
 ): DesignSystemManifest {
   const hints = new Map(capture.semanticHints.map((hint) => [hint.componentId, hint.roles]))
-  const localComponents: DesignSystemManifest['components'] = capture.relevantComponents.map((component) => ({
-    key: component.key || component.id,
-    name: component.name,
-    semanticRole: hints.get(component.id)?.[0] ?? 'unmapped',
-    variants: normalizeVariants(component.variantProperties),
-    deprecated: false,
-    binding: {
-      kind: 'component_key' as const,
+  const localComponents: DesignSystemManifest['components'] = capture.relevantComponents.flatMap((component) => {
+    const semanticRole = hints.get(component.id)?.[0]
+    if (!semanticRole || semanticRole === 'unmapped') return []
+    return [{
       key: component.key || component.id,
-    },
-  }))
+      name: component.name,
+      semanticRole,
+      variants: normalizeVariants(component.variantProperties),
+      deprecated: false,
+      binding: {
+        kind: 'component_key' as const,
+        key: component.key || component.id,
+      },
+    }]
+  })
   const components = [...localComponents, ...normalizeCatalogComponents(capture)]
     .sort((left, right) => left.key.localeCompare(right.key))
   const tokens = normalizeTokens(capture)

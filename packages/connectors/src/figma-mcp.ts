@@ -150,7 +150,12 @@ export class FigmaMcpAdapter {
     return this.call('get_pages', { sessionId }, figmaPagesSchema, 8_000)
   }
 
-  async pinTarget(sessionId: string, pageId: string, allowedAt = new Date().toISOString()): Promise<FigmaTargetBinding> {
+  private async resolveTarget(
+    sessionId: string,
+    pageId: string,
+    allowedAt: string,
+    requireCurrentPage: boolean,
+  ): Promise<FigmaTargetBinding> {
     const health = await this.health()
     if (!health.pluginConnected) throw new FigmaMcpError('Figma plugin chưa kết nối.', 'PLUGIN_NOT_CONNECTED', true)
     const session = health.sessions.find((item) => item.sessionId === sessionId)
@@ -159,7 +164,7 @@ export class FigmaMcpAdapter {
     const pages = await this.pages(sessionId)
     const page = pages.pages.find((item) => item.id === pageId)
     if (!page) throw new FigmaMcpError('Figma page không thuộc session đã chọn.', 'VALIDATION_ERROR', false)
-    if (session.pageName !== page.name || pages.currentPageId !== page.id) {
+    if (requireCurrentPage && (session.pageName !== page.name || pages.currentPageId !== page.id)) {
       throw new FigmaMcpError('Hãy mở đúng page cần allowlist trong Figma rồi thử lại.', 'VALIDATION_ERROR', false)
     }
 
@@ -172,10 +177,14 @@ export class FigmaMcpAdapter {
     })
   }
 
+  async pinTarget(sessionId: string, pageId: string, allowedAt = new Date().toISOString()): Promise<FigmaTargetBinding> {
+    return this.resolveTarget(sessionId, pageId, allowedAt, true)
+  }
+
   async verifyTarget(target: FigmaTargetBinding): Promise<FigmaTargetBinding> {
     const verifiedAt = this.verifiedTargets.get(target.targetHash)
     if (verifiedAt && Date.now() - verifiedAt < 10_000) return target
-    const verified = await this.pinTarget(target.sessionId, target.pageId, target.allowedAt)
+    const verified = await this.resolveTarget(target.sessionId, target.pageId, target.allowedAt, false)
     if (verified.targetHash !== target.targetHash || verified.fileName !== target.fileName || verified.pageName !== target.pageName) {
       throw new FigmaMcpError('Figma target không còn khớp allowlist đã duyệt.', 'VALIDATION_ERROR', false)
     }

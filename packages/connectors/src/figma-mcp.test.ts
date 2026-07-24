@@ -106,6 +106,28 @@ describe('FigmaMcpAdapter', () => {
     expect(transport.calls.at(-1)?.args).toEqual({ sessionId, sourcePageId: '0:1' })
   })
 
+  it('keeps an allowlisted source valid while the user views an artifact page', async () => {
+    const target = await new FigmaMcpAdapter(
+      { binaryPath: '/unused' },
+      new FakeTransport({ get_runtime_health: health, get_pages: pages }),
+    ).pinTarget(sessionId, '0:1', '2026-07-22T12:00:00.000Z')
+    const viewingArtifact = {
+      currentPageId: '9:1',
+      pages: [...pages.pages, { id: '9:1', name: 'PM · Output · v1' }],
+    }
+    const transport = new FakeTransport({
+      get_runtime_health: {
+        ...health,
+        sessions: [{ ...health.sessions[0], pageName: 'PM · Output · v1' }],
+      },
+      get_pages: viewingArtifact,
+      plan_design_system_screens: { schemaVersion: 1, allowed: true, planHash: 'a'.repeat(64), issues: [], plan: {} },
+    })
+    const adapter = new FigmaMcpAdapter({ binaryPath: '/unused' }, transport)
+
+    await expect(adapter.verifyTarget(target)).resolves.toEqual(target)
+  })
+
   it('validates the exact target before calling typed read-only MCP preflight', async () => {
     const bootstrap = new FakeTransport({ get_runtime_health: health, get_pages: pages })
     const bootstrapAdapter = new FigmaMcpAdapter({ binaryPath: '/unused' }, bootstrap)

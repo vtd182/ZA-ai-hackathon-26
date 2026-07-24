@@ -420,6 +420,14 @@
 - **Acceptance:** reminder-backup output communicates a coherent product concept instead of repeating generic wireframe slots; screens have distinct hierarchy and domain content; strict mode still uses verified same-file ZDS instances; read-back independently proves the rendered design brief, archetype and presentation sections; TypeScript, plugin and Go hash/audit contracts agree.
 - **Evidence:** Provider-owned Creative Figma Blueprints now carry free composition, product copy, primitives, exact ZDS roles and prototype edges; Agent Core owns traceability, target, approval and read-back rather than a fixed wireframe compositor. A connected Figma Desktop run captured 190 copied ZDS instances into 25 semantic same-file bindings plus 9 tokens with no fallback. Codex planned a 4-screen/51-layer concept in 181s; approved apply recovered an incomplete agent-owned page, wrote in 4.7s, read back in 0.5s and verified 16 real ZDS instances, 4 distinct screens and 4 navigation edges at root `489:16542`. The exported 2248x1024 bitmap was visually reviewed. Immutable prepared preflight, cross-runtime hash ownership, operation budgets, follower deadlines, content-fit copy and incomplete-page recovery have regression coverage.
 
+### `P0-FIG-009` Stable ZDS source binding
+
+- **Status:** DONE (2026-07-24)
+- **Depends on:** P0-FIG-008
+- **Deliver:** keep the allowlisted ZDS source distinct from generated artifact Pages, expose explicit rebinding and reject unusable semantic manifests before provider planning.
+- **Acceptance:** generated `PM · ...` Pages cannot be selected as the ZDS source; setup can rebind even when a target already exists; unmapped local components do not produce a false live-ready state; missing ProductSpec roles fail once with an actionable source-page message instead of per-slot preflight noise.
+- **Evidence:** explicit pinning still requires the visible Page, while subsequent target verification and plugin apply/read-back resolve the immutable source Page by ID even when the user is viewing an output Page. Setup always exposes rebind and refuses managed artifact Page names. Unmapped local components are excluded from live readiness, and ProductSpec role coverage is checked before provider planning. After plugin reload, the connected login thread prepared a live immutable 4-screen/45-layer blueprint in 175 seconds with the source still bound to `[PUBLIC] ... / Page 1`. Workspace has 148 tests plus one optional skip; plugin has 263 tests; Go suite, typecheck, production build and package smoke pass.
+
 ## Epic E7 - Change synchronization
 
 ### `P0-CHG-001` Change intent and impact preview

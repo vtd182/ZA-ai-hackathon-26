@@ -54,14 +54,6 @@ const findArtifactRoot = async (
   return null;
 };
 
-const requireCurrentPage = (targetPageId: unknown): PageNode => {
-  if (typeof targetPageId !== "string" || !targetPageId) throw new Error("targetPageId is required");
-  if (figma.currentPage.id !== targetPageId) {
-    throw new Error(`TARGET_NOT_ALLOWED: current page ${figma.currentPage.id} does not match ${targetPageId}`);
-  }
-  return figma.currentPage;
-};
-
 const localComponentByKey = async (key: string): Promise<ComponentNode> => {
   for (const page of figma.root.children) {
     await page.loadAsync();
@@ -99,6 +91,16 @@ const getLoadedNodeById = (nodeId: string): BaseNode | null => {
 const getNodeByIdLocalFirst = async (nodeId: string): Promise<BaseNode | null> => (
   getLoadedNodeById(nodeId) ?? figma.getNodeByIdAsync(nodeId)
 );
+
+const requireSourcePage = async (targetPageId: unknown): Promise<PageNode> => {
+  if (typeof targetPageId !== "string" || !targetPageId) throw new Error("targetPageId is required");
+  const page = await getNodeByIdLocalFirst(targetPageId);
+  if (!page || page.type !== "PAGE") {
+    throw new Error(`TARGET_NOT_ALLOWED: source page ${targetPageId} is unavailable`);
+  }
+  if (page.id !== figma.currentPage.id) await page.loadAsync();
+  return page;
+};
 
 const createBoundInstance = async (
   slot: JsonRecord,
@@ -838,7 +840,7 @@ const applyArtifact = async (params: JsonRecord, requestId: string): Promise<Jso
   if (!resolvedPlan || !source || !metadata || screens.length === 0 || !planHash) {
     throw new Error("preflightPlan, planHash, metadata and screens are required");
   }
-  const sourcePage = requireCurrentPage(params.targetPageId);
+  const sourcePage = await requireSourcePage(params.targetPageId);
   const idempotencyKey = String(metadata.idempotencyKey ?? "");
   if (!idempotencyKey) throw new Error("lifecycle idempotencyKey is required");
 
@@ -1172,7 +1174,7 @@ export const handleLifecycleArtifactRequest = async (
     case "apply_lifecycle_artifact_plan":
       return { type: request.type, requestId: request.requestId, data: await applyArtifact(params, request.requestId) };
     case "read_lifecycle_artifact": {
-      requireCurrentPage(params.targetPageId);
+      await requireSourcePage(params.targetPageId);
       const idempotencyKey = typeof params.idempotencyKey === "string" ? params.idempotencyKey : "";
       if (!idempotencyKey) throw new Error("idempotencyKey is required");
       const rootNodeId = typeof params.rootNodeId === "string" ? params.rootNodeId : undefined;

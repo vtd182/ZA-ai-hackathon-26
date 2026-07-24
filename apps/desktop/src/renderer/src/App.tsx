@@ -590,7 +590,7 @@ export function App(): React.JSX.Element {
               <Settings size={18} />
             </button>
             <button
-              className={figmaStatus?.target && figmaStatus.designSystem ? 'integration-button connected' : 'integration-button'}
+              className={figmaStatus?.target && figmaStatus.designSystem?.mode === 'live' ? 'integration-button connected' : 'integration-button'}
               title="Figma integration"
               onClick={() => setFigmaSetupOpen(true)}
             >
@@ -792,7 +792,11 @@ function FigmaSetupDialog({
   }
   const runtimeReady = status?.runtime === 'ready'
   const activeSession = status?.sessions.find((session) => session.sessionId === status.activeSession) ?? status?.sessions[0]
-  const integrationReady = Boolean(status?.target && status.designSystem)
+  const integrationReady = Boolean(
+    status?.target
+    && status.designSystem?.mode === 'live'
+    && status.designSystem.componentCount > 0,
+  )
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -824,14 +828,14 @@ function FigmaSetupDialog({
           <div className={status?.target ? 'setup-step complete' : status?.pluginConnected ? 'setup-step current' : 'setup-step'}>
             <span className="step-index">4</span>
             <div>
-              <strong>{status?.target ? 'Sandbox đã allowlist' : 'Xác nhận target sandbox'}</strong>
+              <strong>{status?.target ? 'Nguồn ZDS đã allowlist' : 'Xác nhận nguồn ZDS'}</strong>
               <small>{status?.target
                 ? `${status.target.fileName} · ${status.target.pageName}`
-                : 'Chỉ cho phép đọc file và page đang mở; target khác sẽ bị từ chối.'}</small>
+                : 'Mở Page chứa component ZDS trước khi xác nhận.'}</small>
             </div>
-            {!status?.target && status?.pluginConnected && activeSession && (
+            {status?.pluginConnected && activeSession && (
               <button className="allow-target-button" disabled={busy} onClick={() => void run(() => onAllowTarget(activeSession.sessionId))}>
-                <ShieldCheck size={14} /> Dùng page này
+                <ShieldCheck size={14} /> {status?.target ? 'Đổi sang Page đang mở' : 'Dùng Page đang mở'}
               </button>
             )}
           </div>
