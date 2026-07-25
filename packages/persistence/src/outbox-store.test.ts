@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
 import { approveActions, createImpactPreview } from '@pm-agent/agent-core'
 import { transitionRunState, type ChangeIntent } from '@pm-agent/domain'
@@ -87,6 +88,60 @@ describe('OutboxStore receipt-first recovery', () => {
         expect.objectContaining({ target: 'figma', status: 'verified' }),
         expect.objectContaining({ target: 'jira', status: 'failed' }),
       ]),
+    })
+    outbox.close()
+  })
+
+  it('summarizes the latest immutable action per target while retaining prior attempts', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pm-agent-outbox-rebind-'))
+    cleanup.push(directory)
+    const filename = join(directory, 'app.db')
+    const { runId } = seededOutbox(filename)
+    const outbox = new OutboxStore(filename)
+    const oldFigma = outbox.listRun(runId).find((item) => item.action.target === 'figma')!
+    outbox.claim(oldFigma.action.id, '2026-07-22T03:01:00.000Z')
+    outbox.markFailure(oldFigma.action.id, 'Figma Session Không Còn Tồn Tại', '2026-07-22T03:02:00.000Z')
+    const reboundAction = {
+      ...oldFigma.action,
+      id: `${oldFigma.action.id}:rebind:new-target`,
+      payload: { ...oldFigma.action.payload, targetRevision: 'new-target' },
+      payloadHash: 'b'.repeat(64),
+    }
+    const createdAt = '2026-07-22T03:05:00.000Z'
+    const db = new Database(filename)
+    db.prepare(`
+      INSERT INTO planned_actions (id, run_id, target, payload_hash, status, action_json, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      reboundAction.id,
+      runId,
+      reboundAction.target,
+      reboundAction.payloadHash,
+      reboundAction.status,
+      JSON.stringify(reboundAction),
+      createdAt,
+    )
+    db.prepare(`
+      INSERT INTO action_outbox (
+        id, action_id, run_id, target, action_json, status, attempts, last_error, available_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'queued', 0, NULL, ?, ?, ?)
+    `).run(
+      `outbox:${reboundAction.id}`,
+      reboundAction.id,
+      runId,
+      reboundAction.target,
+      JSON.stringify(reboundAction),
+      createdAt,
+      createdAt,
+      createdAt,
+    )
+    db.close()
+
+    expect(outbox.listRun(runId)).toHaveLength(4)
+    expect(outbox.summary(runId).actions).toHaveLength(3)
+    expect(outbox.summary(runId).actions.find((action) => action.target === 'figma')).toMatchObject({
+      actionId: reboundAction.id,
+      status: 'queued',
     })
     outbox.close()
   })

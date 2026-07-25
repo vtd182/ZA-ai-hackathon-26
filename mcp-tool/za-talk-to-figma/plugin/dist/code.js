@@ -2022,6 +2022,38 @@ var __async = (__this, __arguments, generator) => {
     const spec = String((_a = metadata.specId) != null ? _a : "Product").trim() || "Product";
     return `PM · ${spec.slice(0, 48)} · v${String((_b = metadata.specVersion) != null ? _b : "1")}`;
   };
+  const artifactPageStem = (name) => name.replace(/\s*·\s*v[^·]+\s*$/i, "").trim().toLocaleLowerCase();
+  const isPageLimitError = (error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    return /starter plan/i.test(message) && /(?:3 pages|unlimited pages|page limit)/i.test(message);
+  };
+  const managedArtifactPageAtCapacity = (metadata, sourcePageId) => __async(null, null, function* () {
+    if (metadata.pageStrategy !== "create_or_recover_incomplete" && metadata.pageStrategy !== "create_or_reuse_managed") return null;
+    const expectedStem = artifactPageStem(artifactPageName(metadata));
+    if (!expectedStem.startsWith("pm · ")) return null;
+    const candidates = [];
+    for (const page of figma.root.children) {
+      if (page.id === sourcePageId || artifactPageStem(page.name) !== expectedStem) continue;
+      if (page.id !== figma.currentPage.id) {
+        try {
+          yield page.loadAsync();
+        } catch (e) {
+          continue;
+        }
+      }
+      const managedRoots = page.children.filter((node) => {
+        const stored = readMetadata(node);
+        return (stored == null ? void 0 : stored.namespace) === "za.pm-lifecycle/v1" && stored.kind === "artifact_root";
+      });
+      if (managedRoots.length === 0 || managedRoots.length !== page.children.length) continue;
+      candidates.push(page);
+    }
+    return candidates.length === 1 ? candidates[0] : null;
+  });
+  const nextArtifactRootX = (page) => page.children.reduce((right, node) => {
+    if (!("x" in node) || !("width" in node)) return right;
+    return Math.max(right, Number(node.x) + Number(node.width) + 160);
+  }, 0);
   const containsLifecycleScreen = (node) => {
     var _a;
     if (((_a = readMetadata(node)) == null ? void 0 : _a.kind) === "screen") return true;
@@ -2041,7 +2073,7 @@ var __async = (__this, __arguments, generator) => {
     return expected.length === rendered.length && expected.every((screenId, index) => rendered[index] === screenId);
   };
   const recoverableArtifactPage = (metadata) => __async(null, null, function* () {
-    if (metadata.pageStrategy !== "create_or_recover_incomplete") return null;
+    if (metadata.pageStrategy !== "create_or_recover_incomplete" && metadata.pageStrategy !== "create_or_reuse_managed") return null;
     const expectedName = artifactPageName(metadata);
     for (const page of figma.root.children) {
       if (page.name !== expectedName) continue;
@@ -2102,13 +2134,30 @@ var __async = (__this, __arguments, generator) => {
     }
     postProgress(requestId, 8, "Preparing a dedicated Figma page");
     const recoverable = staleExistingPage ? null : yield recoverableArtifactPage(metadata);
-    const outputPage = (_b = staleExistingPage != null ? staleExistingPage : recoverable == null ? void 0 : recoverable.page) != null ? _b : figma.createPage();
-    const reusedOutputPage = Boolean(staleExistingPage || recoverable);
+    let outputPage = (_b = staleExistingPage != null ? staleExistingPage : recoverable == null ? void 0 : recoverable.page) != null ? _b : null;
+    let reusedAtPageCapacity = false;
+    if (!outputPage) {
+      try {
+        outputPage = figma.createPage();
+      } catch (error) {
+        if (!isPageLimitError(error)) throw error;
+        outputPage = yield managedArtifactPageAtCapacity(metadata, sourcePage.id);
+        if (!outputPage) {
+          throw new Error(
+            `FIGMA_PAGE_LIMIT: ${error instanceof Error ? error.message : String(error)}. No same-product agent-managed Page can be reused safely.`
+          );
+        }
+        reusedAtPageCapacity = true;
+        postProgress(requestId, 9, `Figma Page limit reached; preserving prior versions on ${outputPage.name}`);
+      }
+    }
+    const reusedOutputPage = Boolean(staleExistingPage || recoverable || reusedAtPageCapacity);
     if (recoverable) recoverable.root.remove();
-    outputPage.name = artifactPageName(metadata);
+    const previousOutputPageName = outputPage.name;
+    const expectedOutputPageName = artifactPageName(metadata);
     const root = figma.createSection();
     root.name = `PM Lifecycle · ${String((_c = metadata.specId) != null ? _c : "Artifact")} · v${String((_d = metadata.specVersion) != null ? _d : "")}`;
-    root.x = 0;
+    root.x = reusedAtPageCapacity ? nextArtifactRootX(outputPage) : 0;
     root.y = 0;
     outputPage.appendChild(root);
     writeMetadata(root, __spreadProps(__spreadValues({}, metadata), {
@@ -2118,10 +2167,11 @@ var __async = (__this, __arguments, generator) => {
       designConceptName: (_f = source.designDirection) == null ? void 0 : _f.conceptName,
       sourcePageId: sourcePage.id,
       artifactPageId: outputPage.id,
-      artifactPageName: outputPage.name,
+      artifactPageName: expectedOutputPageName,
       applyStatus: "in_progress",
       expectedScreenIds: screens.map((screen) => String(screen.screenId)),
-      expectedScreenCount: screens.length
+      expectedScreenCount: screens.length,
+      reusedManagedPageAtCapacity: reusedAtPageCapacity
     }));
     try {
       const direction = (_g = source.designDirection) != null ? _g : {};
@@ -2149,6 +2199,7 @@ var __async = (__this, __arguments, generator) => {
           applyStatus: "complete",
           renderedScreenCount: renderedLifecycleScreenIds(root).length
         }));
+        outputPage.name = expectedOutputPageName;
         figma.commitUndo();
         postProgress(requestId, 100, "Creative Figma artifact created");
         return {
@@ -2289,6 +2340,7 @@ var __async = (__this, __arguments, generator) => {
         applyStatus: "complete",
         renderedScreenCount: renderedLifecycleScreenIds(root).length
       }));
+      outputPage.name = expectedOutputPageName;
       figma.commitUndo();
       postProgress(requestId, 100, "Lifecycle artifact created");
       return {
@@ -2301,6 +2353,7 @@ var __async = (__this, __arguments, generator) => {
     } catch (error) {
       root.remove();
       if (!reusedOutputPage) outputPage.remove();
+      else if (reusedAtPageCapacity) outputPage.name = previousOutputPageName;
       throw error;
     }
   });

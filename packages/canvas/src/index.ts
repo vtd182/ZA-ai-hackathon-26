@@ -144,6 +144,10 @@ function isBackupReminderTopic(topic: string): boolean {
   return /(remind|reminder|nhac).{0,40}(backup|sao luu)|(?:backup|sao luu).{0,40}(remind|reminder|nhac)/.test(topic)
 }
 
+function isCareReminderTopic(topic: string): boolean {
+  return /(nhac|remind).{0,48}(uong thuoc|thuoc|medication|medicine)|(?:uong thuoc|thuoc|medication|medicine).{0,48}(nhac|remind)/.test(topic)
+}
+
 function replaceAgentScene(program: CanvasProgram, context: CanvasPlanningContext): CanvasProgram {
   if (!context.canvas || program.mode !== 'operations') return program
   const creatingPrototype = program.operations.some(
@@ -297,6 +301,184 @@ function backupReminderWorkflow(): CanvasProgram {
   )
 }
 
+function careReminderWorkflow(): CanvasProgram {
+  const nodes: CanvasNodeInput[] = [
+    {
+      id: 'care-set-rhythm', label: 'Đặt nhịp nhắc riêng', kind: 'screen',
+      description: 'Người dùng chọn giờ, cách xưng hô và mức riêng tư trước khi bật nhắc.', badge: 'CONSENT', lane: 'Người dùng', icon: 'settings', tone: 'brand',
+    },
+    {
+      id: 'care-dose-due', label: 'Đến giờ uống thuốc', kind: 'process',
+      description: 'Hệ thống kích hoạt đúng lịch nhưng chưa chia sẻ trạng thái cho người thân.', badge: 'TRIGGER', lane: 'Hệ thống', icon: 'clock', tone: 'neutral',
+    },
+    {
+      id: 'care-private-nudge', label: 'Nhắc riêng tư', kind: 'screen',
+      description: 'Một lời nhắc nhẹ với ba lựa chọn: đã uống, nhắc lại sau hoặc cần hỗ trợ.', badge: 'PRIVATE', lane: 'Người dùng', icon: 'bell', tone: 'accent',
+    },
+    {
+      id: 'care-response', label: 'Người dùng chọn gì?', kind: 'decision',
+      description: 'Quyền quyết định luôn ở người nhận lời nhắc.', badge: 'CHOICE', lane: 'Người dùng', icon: 'user', tone: 'warning',
+    },
+    {
+      id: 'care-mark-done', label: 'Đánh dấu đã uống', kind: 'process',
+      description: 'Ghi nhận cục bộ; chi tiết không tự động gửi cho gia đình.', badge: 'DONE', lane: 'Người dùng', icon: 'check', tone: 'success',
+    },
+    {
+      id: 'care-snooze', label: 'Chọn nhắc lại sau', kind: 'screen',
+      description: 'Chọn 10, 20 hoặc 30 phút và biết chính xác lần nhắc tiếp theo.', badge: 'SNOOZE', lane: 'Người dùng', icon: 'clock', tone: 'info',
+    },
+    {
+      id: 'care-soft-checkin', label: 'Check-in không phán xét', kind: 'screen',
+      description: 'Lời nhắc thứ hai hỏi người dùng muốn tự xử lý hay chủ động nhờ ai đó.', badge: 'CHECK-IN', lane: 'Người dùng', icon: 'sparkles', tone: 'accent',
+    },
+    {
+      id: 'care-support-choice', label: 'Tự xử lý hay cần hỗ trợ?', kind: 'decision',
+      description: 'Không suy diễn sự im lặng thành thất bại hoặc tự động báo người thân.', badge: 'BOUNDARY', lane: 'Người dùng', icon: 'shield', tone: 'warning',
+    },
+    {
+      id: 'care-stay-private', label: 'Tiếp tục giữ riêng tư', kind: 'process',
+      description: 'Dừng escalation, giữ lịch nhắc và cho phép người dùng quay lại khi sẵn sàng.', badge: 'MY SPACE', lane: 'Người dùng', icon: 'shield', tone: 'neutral',
+    },
+    {
+      id: 'care-ask-help', label: 'Chủ động nhờ hỗ trợ', kind: 'screen',
+      description: 'Chọn một người tin cậy và viết lời nhờ theo ngôn ngữ của chính mình.', badge: 'ASK', lane: 'Người dùng', icon: 'user', tone: 'brand',
+    },
+    {
+      id: 'care-share-scope', label: 'Chọn điều được chia sẻ', kind: 'decision',
+      description: 'Review người nhận, nội dung và thời hạn trước khi gửi tín hiệu.', badge: 'REVIEW', lane: 'Người dùng', icon: 'shield', tone: 'warning',
+    },
+    {
+      id: 'care-family-nudge', label: 'Người thân nhận lời nhờ', kind: 'screen',
+      description: 'Chỉ hiện hành động hỗ trợ được yêu cầu, không hiển thị lịch sử tuân thủ.', badge: 'SUPPORT', lane: 'Người thân', icon: 'phone', tone: 'info',
+    },
+    {
+      id: 'care-close-loop', label: 'Xác nhận đã ổn', kind: 'screen',
+      description: 'Khép vòng hỗ trợ và nhắc lại rằng quyền chia sẻ vẫn thuộc về người dùng.', badge: 'CLOSED', lane: 'Người dùng', icon: 'check', tone: 'success',
+    },
+  ]
+  const pairs: Array<[string, string, string?]> = [
+    ['care-set-rhythm', 'care-dose-due'],
+    ['care-dose-due', 'care-private-nudge'],
+    ['care-private-nudge', 'care-response'],
+    ['care-response', 'care-mark-done', 'Đã uống'],
+    ['care-response', 'care-snooze', 'Nhắc lại'],
+    ['care-response', 'care-ask-help', 'Cần hỗ trợ'],
+    ['care-snooze', 'care-soft-checkin', 'Đến giờ mới'],
+    ['care-soft-checkin', 'care-support-choice'],
+    ['care-support-choice', 'care-stay-private', 'Tôi tự xử lý'],
+    ['care-support-choice', 'care-ask-help', 'Nhờ hỗ trợ'],
+    ['care-ask-help', 'care-share-scope'],
+    ['care-share-scope', 'care-family-nudge', 'Đồng ý chia sẻ'],
+    ['care-family-nudge', 'care-close-loop'],
+    ['care-mark-done', 'care-close-loop', 'Giữ riêng tư'],
+  ]
+  return operationsProgram(
+    'Flow nhắc thuốc tôn trọng quyền riêng tư, làm rõ khoảnh khắc tự xử lý và chủ động nhờ hỗ trợ',
+    nodes,
+    pairs.map(([fromId, toId, label]) => ({ fromId, toId, ...(label ? { label } : {}) })),
+    {
+      sceneType: 'workflow',
+      title: 'Care Circle · Support without surveillance',
+      description: 'Một journey consent-first: lời nhắc luôn riêng tư, escalation chỉ xảy ra khi người dùng chủ động và biết chính xác điều gì được chia sẻ.',
+    },
+  )
+}
+
+function careReminderPrototypeScreens(): CanvasNodeInput[] {
+  return [
+    {
+      id: 'prototype-care-today', label: 'Nhịp hôm nay', kind: 'screen',
+      description: 'Home bình tĩnh, tập trung vào nhịp cá nhân thay vì điểm số tuân thủ.', badge: '01 · TODAY', tone: 'brand',
+      screen: {
+        eyebrow: 'CARE CIRCLE · RIÊNG TƯ',
+        title: 'Buổi tối của bạn',
+        subtitle: 'Một lời nhắc lúc 20:30. Chỉ bạn thấy trạng thái chi tiết.',
+        blocks: [
+          { id: 'next-dose', kind: 'hero', label: 'Lần tiếp theo', value: '20:30', helper: 'Vitamin D · sau bữa tối', tone: 'brand', span: 'full' },
+          { id: 'privacy', kind: 'status', label: 'Chế độ chia sẻ', value: 'Riêng tư', helper: 'Gia đình chưa nhận thông báo nào', tone: 'success', span: 'full' },
+          { id: 'trusted', kind: 'info', label: 'Người tin cậy', value: 'Chị Lan', helper: 'Chỉ liên hệ khi bạn chủ động nhờ', tone: 'info', span: 'full' },
+        ],
+        primaryAction: 'Xem nhịp nhắc',
+        secondaryAction: 'Điều chỉnh riêng tư',
+        navItems: ['Hôm nay', 'Nhịp nhắc', 'Của tôi'],
+        activeNav: 'Hôm nay',
+      },
+    },
+    {
+      id: 'prototype-care-reminder', label: 'Lời nhắc riêng tư', kind: 'screen',
+      description: 'Product moment chính với ngôn ngữ không phán xét và ba đường lui rõ ràng.', badge: '02 · REMINDER', tone: 'accent',
+      screen: {
+        eyebrow: '20:30 · CHỈ MÌNH BẠN',
+        title: 'Đến giờ dành một phút cho bạn',
+        subtitle: 'Vitamin D · 1 viên sau bữa tối.',
+        blocks: [
+          { id: 'dose', kind: 'hero', label: 'Lịch hôm nay', value: 'Vitamin D · 1 viên', helper: 'Đã đặt bởi bạn', tone: 'accent', span: 'full' },
+          { id: 'privacy-note', kind: 'status', label: 'Không tự động báo ai', value: 'Đang riêng tư', helper: 'Bạn quyết định khi nào cần hỗ trợ', tone: 'success', span: 'full' },
+          { id: 'snooze', kind: 'choice', label: 'Chưa tiện lúc này?', value: 'Nhắc lại sau 20 phút', helper: 'Không ảnh hưởng lịch ngày mai', tone: 'info', span: 'full' },
+        ],
+        primaryAction: 'Mình đã uống',
+        secondaryAction: 'Tùy chọn khác',
+        navItems: [],
+        activeNav: null,
+      },
+    },
+    {
+      id: 'prototype-care-checkin', label: 'Check-in lần hai', kind: 'screen',
+      description: 'Không coi im lặng là thất bại; hỏi rõ người dùng muốn tự xử lý hay cần một người bên cạnh.', badge: '03 · CHECK-IN', tone: 'warning',
+      screen: {
+        eyebrow: 'CHECK-IN · KHÔNG ÁP LỰC',
+        title: 'Bạn muốn tiếp tục thế nào?',
+        subtitle: 'Không có câu trả lời đúng. Trạng thái vẫn chỉ hiển thị với bạn.',
+        blocks: [
+          { id: 'self', kind: 'choice', label: 'Tôi tự xử lý', value: 'Giữ mọi thứ riêng tư', helper: 'Dừng nhắc trong tối nay', tone: 'neutral', span: 'full' },
+          { id: 'later', kind: 'choice', label: 'Nhắc tôi sau', value: '30 phút nữa', helper: 'Có thể đổi thời gian', tone: 'info', span: 'full' },
+          { id: 'help', kind: 'choice', label: 'Tôi cần một người hỗ trợ', value: 'Chọn người tin cậy', helper: 'Bạn review nội dung trước khi gửi', tone: 'brand', span: 'full' },
+        ],
+        primaryAction: 'Tiếp tục với lựa chọn',
+        secondaryAction: 'Đóng lời nhắc',
+        navItems: [],
+        activeNav: null,
+      },
+    },
+    {
+      id: 'prototype-care-share', label: 'Review lời nhờ hỗ trợ', kind: 'screen',
+      description: 'Consent checkpoint cho người dùng xem chính xác ai nhận gì và trong bao lâu.', badge: '04 · CONSENT', tone: 'brand',
+      screen: {
+        eyebrow: 'BẠN ĐANG KIỂM SOÁT',
+        title: 'Nhờ chị Lan nhắc nhẹ',
+        subtitle: 'Chỉ nội dung dưới đây được gửi. Không kèm lịch sử uống thuốc.',
+        blocks: [
+          { id: 'recipient', kind: 'field', label: 'Người nhận', value: 'Chị Lan', helper: 'Người tin cậy', tone: 'brand', span: 'full' },
+          { id: 'message', kind: 'info', label: 'Nội dung', value: '“Tối nay nhắc mình một tiếng nhé”', helper: 'Có thể sửa trước khi gửi', tone: 'info', span: 'full' },
+          { id: 'scope', kind: 'status', label: 'Thông tin được chia sẻ', value: 'Một lời nhờ · hiệu lực tối nay', helper: 'Không chia sẻ tên thuốc hay lịch sử', tone: 'success', span: 'full' },
+        ],
+        primaryAction: 'Gửi lời nhờ',
+        secondaryAction: 'Quay lại giữ riêng tư',
+        navItems: [],
+        activeNav: null,
+      },
+    },
+    {
+      id: 'prototype-care-complete', label: 'Đã có người bên cạnh', kind: 'screen',
+      description: 'Khép vòng bằng cảm giác an tâm, không biến hỗ trợ thành theo dõi.', badge: '05 · SUPPORTED', tone: 'success',
+      screen: {
+        eyebrow: 'ĐÃ GỬI · 20:52',
+        title: 'Chị Lan đã nhận lời nhờ',
+        subtitle: 'Bạn có thể dừng chia sẻ bất cứ lúc nào.',
+        blocks: [
+          { id: 'delivery', kind: 'hero', label: 'Trạng thái', value: 'Đã xem', helper: 'Chị Lan: “Ừ, để chị gọi nhé”', tone: 'success', span: 'full' },
+          { id: 'shared', kind: 'status', label: 'Đã chia sẻ', value: 'Chỉ lời nhờ tối nay', helper: 'Không có dữ liệu chi tiết', tone: 'info', span: 'full' },
+          { id: 'expiry', kind: 'metric', label: 'Tự kết thúc', value: '23:59', helper: 'Không cần thao tác thêm', tone: 'neutral', span: 'full' },
+        ],
+        primaryAction: 'Mình đã ổn',
+        secondaryAction: 'Dừng chia sẻ ngay',
+        navItems: ['Hôm nay', 'Nhịp nhắc', 'Của tôi'],
+        activeNav: 'Hôm nay',
+      },
+    },
+  ]
+}
+
 function backupPrototypeScreens(): CanvasNodeInput[] {
   return [
     {
@@ -418,6 +600,19 @@ function backupPrototypeScreens(): CanvasNodeInput[] {
 
 function prototypeScreens(message: string, context: CanvasPlanningContext): CanvasProgram {
   const topic = conversationTopic(message, context)
+  if (isCareReminderTopic(topic)) {
+    const nodes = careReminderPrototypeScreens()
+    return operationsProgram(
+      `Prototype consent-first ${nodes.length} màn hình có thể chỉnh sửa trực tiếp`,
+      nodes,
+      nodes.slice(1).map((node, index) => ({ fromId: nodes[index]!.id, toId: node.id, label: 'Tiếp tục' })),
+      {
+        sceneType: 'prototype',
+        title: 'Care Circle · Product Concept',
+        description: 'Quiet care: một trải nghiệm nhắc thuốc tôn trọng riêng tư, trao quyền tự xử lý và chỉ kết nối người thân khi được chủ động yêu cầu.',
+      },
+    )
+  }
   if (isBackupReminderTopic(topic)) {
     const nodes = backupPrototypeScreens()
     return operationsProgram(
@@ -482,6 +677,8 @@ export function planExplicitCanvasRequest(message: string, selection?: CanvasSel
       const topic = conversationTopic(message, context)
       const program = /(dat xe|goi xe|booking xe|ride)/.test(topic)
         ? rideBookingWorkflow()
+        : isCareReminderTopic(topic)
+          ? careReminderWorkflow()
         : isBackupReminderTopic(topic)
           ? backupReminderWorkflow()
           : genericFullWorkflow(context)
@@ -505,6 +702,19 @@ export function planExplicitCanvasRequest(message: string, selection?: CanvasSel
 
   if (context.intent !== 'edit') return undefined
   const selectedId = selection?.entityId
+  if (selectedId && /(copy|quyen chu dong|chia se)/.test(normalized)) {
+    return canvasProgramSchema.parse({
+      schemaVersion: 1,
+      mode: 'operations',
+      summary: `Refine copy vùng chọn ${selection.label}`,
+      operations: [{
+        op: 'update',
+        id: selectedId,
+        label: 'CHỈ CHIA SẺ KHI BẠN CHỌN\nĐang riêng tư\nBạn quyết định ai được thấy',
+      }],
+      script: null,
+    })
+  }
   if (selectedId && /(otp|retry|thu lai|loi|error|nhanh|branch)/.test(normalized)) {
     const additions = [
       ...(normalized.includes('otp') ? [{

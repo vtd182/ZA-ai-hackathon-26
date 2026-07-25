@@ -68,9 +68,9 @@ Signature moment:
 - **Completed task:** `P0-AGT-006` thread-specific decision-to-ProductSpec synthesis with atomic empty-draft replacement.
 - **Completed task:** `P0-FIG-007` allowlisted same-file ZDS instance catalog, strict clone/apply and instance-backed read-back.
 - **Completed task:** `P0-FIG-008` provider-owned product-grade Figma synthesis with live ZDS capture, guarded creative execution and visual review.
-- **Current task:** `P0-CRE-001` Creative Studio conversation and agentic Figma craft.
-- **Current slice:** verify the conversation-first collaboration contract and approved iterative Figma craft worker end to end; code, direct MCP craft and independent live audit are complete, while one app-owned live worker run remains pending provider quota.
-- **Last known repository state:** Runnable Electron app with one blank-first infinite canvas per thread, typed Canvas Programs, Mock/Codex provider paths, thread-specific ProductSpec synthesis, editable prototypes, deterministic impact preview, Markdown PRD export and approved strict live Figma ZDS write/read-back verification.
+- **Completed task:** `P0-CRE-001` Creative Studio conversation and agentic Figma craft.
+- **Current slice:** conversation-first Studio, content-specific Mock rehearsal, bidirectional care-reminder canvas replay and a complete app-owned live Figma screenshot/refine/audit/read-back run are verified.
+- **Last known repository state:** Runnable Electron app with Studio/lifecycle display separation, one blank-first infinite canvas per thread, typed Canvas Programs, Mock/Codex provider paths, thread-specific ProductSpec synthesis, editable consent-first prototypes, exact-selection Sync/refine, deterministic impact preview, Markdown PRD export and approved strict live Figma ZDS write/read-back verification.
 - **Known blockers:** cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
 
@@ -112,6 +112,8 @@ Signature moment:
 - The public framework duplicate is an allowlisted same-file ZDS catalog: most DS definitions are exposed as copied `INSTANCE` nodes rather than local `COMPONENT` nodes.
 - Strict plans bind semantic roles to exact source instance/page IDs, clone those instances, and verify actual `INSTANCE` type plus immutable source binding on read-back.
 - The selected Figma Page is a guarded component source, not an artifact destination. Recipe-versioned artifacts live on a dedicated `PM · <Product> · vN` Page; read-back records and audits `artifactPageId` and `artifactPageName`.
+- On Figma Starter's three-Page limit, create is attempted first. Only a same-product Page containing exclusively PM Lifecycle artifact roots may be reused; prior versions remain as sibling sections and user-authored nodes block reuse.
+- A plugin reconnect changes the immutable session/target hash. Retry must re-preflight and ask approval for a new Figma action while preserving already verified Jira/Zdoc actions and the old audit trail.
 - Fixture/free-mode fallback remains available only when neither local components nor usable same-file instances are captured; it must stay visibly labeled and must not be pitched as strict ZDS compliance.
 
 ### Providers
@@ -626,6 +628,50 @@ Signature moment:
 - **Regression test:** `product-craft-audit.test.ts`, worker evidence tests and optional live craft audit pass. Final live root `496:18760` reports five screens, 18 ZDS instances, five prototype links and zero issues across 415 nodes; the final screenshot was visually reviewed.
 - **Caveat:** deterministic audit complements rather than replaces screenshot critique; taste, hierarchy and narrative still require the skill-driven visual review loop.
 
+### BUG-046 - Conversation-first threads still looked like lifecycle steps
+
+- **Status:** FIXED
+- **Found:** 2026-07-26, `P0-CRE-001` live Electron replay.
+- **Symptom:** a new free-form conversation kept a blank canvas but the header/history said `Discover`, while Mock replied with a generic “đào sâu hoặc vẽ flow” template.
+- **Trigger:** create a new thread with Mock Offline and discuss an idea without kickoff or an explicit visual request.
+- **Root cause:** renderer exposed the persisted workflow-view column directly and Mock route output discarded the idea tension despite receiving recent messages.
+- **Fix:** main now derives a renderer-only `collaborationMode` from canonical RunState; IDEA_INTAKE renders as Studio without changing lifecycle. Mock route preserves the latest substantive idea, surfaces a concrete hypothesis/uncertainty and offers optional content-specific suggestions.
+- **Regression test:** reasoning tests prove the medicine/privacy tension stays conversational with no commands and that follow-up critique reuses the original idea. Live replay showed `Studio · tự do khám phá`, zero canvas shapes and three optional next actions.
+- **Caveat:** Mock remains a deterministic rehearsal provider; live providers own broader creative reasoning through the same route schema.
+
+### BUG-047 - Deterministic canvas fallback dropped chat context and leaked agent selection
+
+- **Status:** FIXED
+- **Found:** 2026-07-26, `P0-CRE-001` chat-to-canvas replay.
+- **Symptom:** “phác moment chính” drew a generic input/validate/confirm flow, and newly created prototype screens remained selected as if the user had selected them.
+- **Trigger:** explicitly request a flow/prototype after discussing a care-reminder privacy tension with Mock Offline.
+- **Root cause:** the deterministic fallback had no matching domain scene and selected generated nodes for camera focus without always clearing/restoring the prior user selection.
+- **Fix:** added a 13-node consent-first care flow and five authored prototype screens, preserving workflow/prototype placement on one canvas. Canvas execution now restores the user's prior selection or clears agent-created focus. Selection-only Sync produces a targeted critique; accepting the suggested positive-copy refinement updates exactly the selected shape.
+- **Regression test:** canvas tests cover the care workflow, distinct prototype, exact one-shape copy update and no scene rebuild; live Electron replay verified five semantic screens/four links, one selected block, one applied update and 63-shape read-back with unchanged ProductSpec.
+- **Caveat:** domain fixtures make Mock demos credible; arbitrary domains should use a creative LLM provider or an added deterministic fixture rather than the generic fallback.
+
+### BUG-048 - Figma Starter Page cap blocked the approved design before craft
+
+- **Status:** FIXED
+- **Found:** 2026-07-26, `P0-CRE-001` app-owned live Figma run.
+- **Symptom:** `apply_lifecycle_artifact_plan` failed immediately with `The Starter Plan Only Comes With 3 Pages`; the Codex craft worker never started.
+- **Trigger:** execute an approved artifact while the ZDS source, an existing PM output and an experiment already consume all three free Pages.
+- **Root cause:** plugin recovery recognized only an exact-name incomplete Page and otherwise called `figma.createPage()`. A complete same-product managed Page with another recipe version was invisible to the allocator.
+- **Fix:** attempt creation first, then on the typed Starter-cap error reuse exactly one same-product Page only when every direct child is a PM Lifecycle artifact root. Prior roots remain untouched as sibling sections; the new root is placed to the right, Page rename commits only after successful render and failure restores the old Page.
+- **Regression test:** lifecycle plugin tests prove safe reuse, no overlap/preservation and refusal when any user-authored node exists. The live run reused `PM · Mini App đặt suất ăn trước · v2` as `v1`, preserved the prior root and verified new root `512:19179`.
+- **Caveat:** an ambiguous match or mixed-content Page still fails with `FIGMA_PAGE_LIMIT`; the plugin never deletes a user Page to make room.
+
+### BUG-049 - Figma reconnect left retry pinned to an expired immutable session
+
+- **Status:** FIXED
+- **Found:** 2026-07-26, `P0-CRE-001` live retry after rebuilding/reopening the plugin.
+- **Symptom:** Retry reported `Figma Session Không Còn Tồn Tại` even after the current Page had been allowlisted again; successful Jira/PRD targets remained visible but Figma could not proceed.
+- **Trigger:** prepare and approve a live target, reconnect the plugin so its random session ID changes, then retry the failed Figma action.
+- **Root cause:** the old approval correctly pinned the prior target hash, but retry had no transition for replacing only that immutable action. Reusing its payload would violate the approval boundary.
+- **Fix:** a target mismatch transitions Delivery partial failure back to a Figma-only `WAITING_FOR_APPROVAL`, creates a revisioned action and target-scoped idempotency key, and keeps historical outbox rows. Execution summaries select the latest immutable action per target, so the new Figma result combines with prior verified Jira/Zdoc receipts.
+- **Regression test:** workflow test covers `REPREPARE_ARTIFACT`; outbox test retains four historical rows while summarizing three latest targets. Live UI displayed `Rebind Figma`, approved only Figma, then reached all-target `Verified` with Figma 396 seconds and Jira/PRD attempt 1.
+- **Caveat:** reconnect is a new external-write approval by design; the app must never silently transplant an approval to another session.
+
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 
 ```md
@@ -1032,6 +1078,26 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Final live audit on root `496:18760` passed 5 screens, 18 ZDS instances, 5 prototype links, 44 visible text nodes and zero issues across 415 nodes. Exported visual: `mcp-tool/za-talk-to-figma/artifacts/zalo-login-craft-audited.png`.
 - Verification: 158 workspace tests plus one optional skip, workspace typecheck/build/smoke, 268 plugin tests/typecheck/build, full Go suite, skill validation and optional live craft audit pass.
 - Next action: when Codex quota is available, run one complete app-owned `/figma create` execution and verify the automatic screenshot-refine-audit loop without manual MCP repair.
+
+### 2026-07-26 - Studio-to-canvas consent-first replay
+
+- Separated renderer collaboration mode from canonical lifecycle state: untouched IDEA_INTAKE threads now read as Studio in header/history without introducing a second workflow state machine.
+- Made the Mock rehearsal content-aware across turns. A medicine-reminder idea surfaces its support-versus-surveillance tension, stays on a blank canvas and offers critique/boundary/sketch actions instead of forcing Discovery.
+- Added a 13-node consent-first care workflow and five authored prototype screens with distinct states, sample data, privacy boundaries and support handoff. New scenes are placed beside existing work rather than replacing complementary workflow/prototype content.
+- Completed a live two-way replay: chat -> explicit prototype -> select privacy block -> Sync critique -> accept positive-copy refinement -> exactly one canvas shape updated and read back; ProductSpec remained unchanged.
+- Cleared agent-created selection while preserving prior user selection and moved scene controls to a compact icon rail so auto-fit content is not covered.
+- Verification: 164 tests pass with two optional skips; workspace typecheck, production build and regular smoke pass. Smoke verifies Figma, Mock Jira and Mock Zdoc plus Markdown output.
+- Next action: run one full app-owned live Figma worker execution when Codex quota is available, then capture the automatic screenshot-repair-audit evidence.
+
+### 2026-07-26 - App-owned Figma craft, Page-cap recovery and critic skill
+
+- Completed the missing app-owned live acceptance on the real public ZDS file. A stale session first returned to a Figma-only immutable approval; the new action preserved verified Jira/PRD targets and their attempt counts.
+- Added safe Figma Starter recovery: the plugin reused only the same-product managed output Page, kept the complete prior `v2` root, placed the new `v1` root beside it and never touched the ZDS source or experiment Page.
+- The Codex worker executed the full sparse-scaffold -> screenshot -> compose -> screenshot critique -> multiple refinement batches -> two audits -> final text scan -> lifecycle read-back loop. Root `512:19179` reached all-target `Verified` in 396 seconds.
+- Exported `mcp-tool/za-talk-to-figma/artifacts/meal-ordering-app-worker-verified.png`. Visual review confirmed distinct browse, confirmation, pickup-code and wallet-recovery states; it also motivated a stricter product-fidelity contract for recognizable subjects and useful browse alternatives.
+- Added and validated `pm-lifecycle-figma-critic`; the design worker now reads both design and critic skills. The critic rejects abstract subject placeholders, thin browse states, repeated templates and non-actionable success/recovery screens.
+- Verification: 166 workspace tests pass with two optional skips; typecheck, production build and smoke pass. Plugin has 270 passing tests plus typecheck/build; full Go suite and both skill validators pass.
+- Next action: use the stricter dual-skill craft loop for the final hackathon product scenario, then rehearse and capture the pitch flow in a clean workspace.
 
 ## 10. End-of-session checklist
 

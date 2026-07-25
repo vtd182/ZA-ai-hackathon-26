@@ -472,16 +472,16 @@ button {
   position: absolute;
   z-index: 6;
   top: 12px;
-  left: 50%;
+  left: 82px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  min-height: 34px;
+  width: 38px;
   padding: 4px;
   border: 1px solid #d7e0e3;
   border-radius: 7px;
   background: rgb(255 255 255 / 94%);
   box-shadow: 0 4px 16px rgb(36 50 58 / 10%);
-  transform: translateX(-50%);
   backdrop-filter: blur(8px);
 }
 
@@ -496,6 +496,17 @@ button {
   font-size: 10.5px;
   font-weight: 650;
   white-space: nowrap;
+}
+
+.canvas-scene-bar .scene-health,
+.canvas-scene-bar .scene-selection {
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+}
+
+.canvas-scene-bar .scene-health > span {
+  display: none;
 }
 
 .scene-health.clean {
@@ -528,9 +539,9 @@ button {
 }
 
 .scene-divider {
-  width: 1px;
-  height: 20px;
-  margin: 0 3px;
+  width: 20px;
+  height: 1px;
+  margin: 3px 0;
   background: #dce3e5;
 }
 
@@ -564,14 +575,19 @@ button {
   justify-content: center;
   gap: 5px;
   height: 28px;
-  margin-left: 3px;
-  padding: 0 8px;
+  width: 28px;
+  margin-left: 0;
+  padding: 0;
   border: 1px solid #bfcdd2;
   border-radius: 5px;
   color: #33505d;
   background: #ffffff;
   font-size: 9.5px;
   font-weight: 750;
+}
+
+.canvas-scene-bar .scene-sync-button span {
+  display: none;
 }
 
 .scene-sync-button:hover:not(:disabled),

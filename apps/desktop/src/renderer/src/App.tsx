@@ -85,6 +85,10 @@ function errorText(error: unknown): string {
   return 'Đã xảy ra lỗi không xác định'
 }
 
+function threadModeLabel(thread: ThreadSummary): string {
+  return thread.collaborationMode === 'studio' ? 'Studio' : thread.phase
+}
+
 function isPromotionIntent(value: string): boolean {
   const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   return /(chot|xac nhan|promote).*(flow|canvas|mvp|productspec)|chot flow/.test(normalized)
@@ -559,7 +563,7 @@ export function App(): React.JSX.Element {
               <button className="thread-main" onClick={() => void openThread(thread.id)}>
                 <strong>{thread.title}</strong>
                 <span>{thread.lastMessage ?? 'Canvas trống'}</span>
-                <small>{thread.id === runningThreadId ? 'Đang reasoning' : thread.phase} · {relativeTime(thread.updatedAt)}</small>
+                <small>{thread.id === runningThreadId ? 'Đang reasoning' : threadModeLabel(thread)} · {relativeTime(thread.updatedAt)}</small>
               </button>
               <button className="thread-archive" title="Lưu trữ" onClick={() => void archiveThread(thread.id)}>
                 <Archive size={15} />
@@ -578,7 +582,7 @@ export function App(): React.JSX.Element {
           )}
           <div className="thread-heading">
             <strong>{activeThread?.title ?? 'PM Lifecycle Agent'}</strong>
-            <span>{activeThread ? `Phase · ${activeThread.phase}` : 'Tạo thread để bắt đầu'}</span>
+            <span>{activeThread ? (activeThread.collaborationMode === 'studio' ? 'Studio · tự do khám phá' : `Phase · ${activeThread.phase}`) : 'Tạo thread để bắt đầu'}</span>
           </div>
           <div className="provider-controls">
             <span className={activeProfile?.hasCredential ? 'status-dot ready' : 'status-dot'} />
@@ -974,6 +978,7 @@ function ChatPanel({
   } | undefined
   const creativeScreens = figmaPlan?.creativeBlueprint?.screens ?? []
   const creativeLayers = creativeScreens.reduce((sum, screen) => sum + (screen.elements?.length ?? 0), 0)
+  const figmaOnlyReapproval = artifactActions.length === 1 && artifactActions[0]?.target === 'figma'
   const slashQuery = draft.trimStart().toLowerCase()
   const matchingSlashCommands = slashQuery.startsWith('/') && !slashQuery.includes('\n')
     ? slashCommands.filter((item) => item.command.startsWith(slashQuery) || item.label.toLowerCase().includes(slashQuery.slice(1)))
@@ -1066,15 +1071,17 @@ function ChatPanel({
       )}
       {!promotionPreview && artifactActions.some((action) => action.status === 'pending_approval') && (
         <section className="promotion-panel artifact-plan-panel" aria-label="Artifact plan approval">
-          <header><strong>Kickoff package</strong><span>Immutable preflight</span></header>
+          <header><strong>{figmaOnlyReapproval ? 'Rebind Figma' : 'Kickoff package'}</strong><span>Immutable preflight</span></header>
           <div className="artifact-targets">
             {artifactActions.map((action) => <span key={action.id}>{action.target === 'jira' ? 'Backlog mock' : action.target === 'zdoc' ? 'PRD.md' : 'Figma'}</span>)}
           </div>
           <small>
-            Figma được guard và read-back
+            Figma được guard và read-back; ưu tiên Page mới, chỉ dùng lại Page PM cùng sản phẩm khi Figma chạm giới hạn
             {creativeScreens.length > 0 ? ` · guarded scaffold ${creativeScreens.length} màn hình/${creativeLayers} lớp` : ''}
             {figmaTimeoutMinutes ? ` · tổng budget tối đa ${figmaTimeoutMinutes} phút cho scaffold + craft` : ''}.
-            {' '}PRD được xuất local; backlog vẫn là mock cho tới khi có MCP.
+            {' '}{figmaOnlyReapproval
+              ? 'Chỉ payload Figma được thay mới; PRD và backlog đã verified được giữ nguyên.'
+              : 'PRD được xuất local; backlog vẫn là mock cho tới khi có MCP.'}
           </small>
           <footer>
             <button className="secondary-button" disabled={approving} onClick={() => void onRejectArtifacts()}>Hủy writes</button>

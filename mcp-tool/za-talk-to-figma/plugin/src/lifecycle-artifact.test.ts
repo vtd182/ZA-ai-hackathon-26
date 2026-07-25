@@ -238,7 +238,7 @@ describe("lifecycle artifact plugin handlers", () => {
     }));
     staleRoot.appendChild(interruptedScreen);
     const prepared = preflight();
-    prepared.source.metadata.pageStrategy = "create_or_recover_incomplete";
+    prepared.source.metadata.pageStrategy = "create_or_reuse_managed";
     prepared.source.metadata.idempotencyKey = "figma:RUN-1:creative-new";
 
     const applied = await handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {
@@ -251,6 +251,87 @@ describe("lifecycle artifact plugin handlers", () => {
     expect(applied?.data.artifactPageId).toBe(stalePage.id);
     expect(stalePage.children).toHaveLength(1);
     expect(stalePage.children[0]).not.toBe(staleRoot);
+  });
+
+  it("preserves prior versions on the same managed product Page at the Figma Starter limit", async () => {
+    const managedPage = (globalThis as any).figma.createPage();
+    managedPage.name = "PM · Remind backup · v2";
+    const priorRoot = containerNode("SECTION");
+    priorRoot.x = 0;
+    priorRoot.resizeWithoutConstraints(1_200, 1_020);
+    priorRoot.setPluginData("za-pm-lifecycle", JSON.stringify({
+      namespace: "za.pm-lifecycle/v1",
+      kind: "artifact_root",
+      specId: "SPEC-OLD",
+      specVersion: 2,
+      idempotencyKey: "figma:old:v2",
+      planHash: "b".repeat(64),
+      applyStatus: "complete",
+    }));
+    const priorScreen = containerNode("FRAME");
+    priorScreen.setPluginData("za-pm-lifecycle", JSON.stringify({
+      namespace: "za.pm-lifecycle/v1",
+      kind: "screen",
+      screenId: "SCREEN-OLD",
+    }));
+    priorRoot.appendChild(priorScreen);
+    managedPage.appendChild(priorRoot);
+    const unrelatedPage = (globalThis as any).figma.createPage();
+    unrelatedPage.name = "EXP · Login craft";
+    (globalThis as any).figma.createPage = () => {
+      throw new Error("In CreatePage: The Starter Plan Only Comes With 3 Pages. Upgrade To Professional For Unlimited Pages");
+    };
+    const prepared = preflight();
+    prepared.source.metadata.pageStrategy = "create_or_reuse_managed";
+
+    const applied = await handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {
+      preflightPlan: prepared,
+      planHash: "c".repeat(64),
+      targetPageId: "0:1",
+    }) as any);
+
+    expect(documentRoot.children).toHaveLength(3);
+    expect(applied?.data.artifactPageId).toBe(managedPage.id);
+    expect(managedPage.name).toBe("PM · Remind backup · v1");
+    expect(managedPage.children).toHaveLength(2);
+    expect(managedPage.children[0]).toBe(priorRoot);
+    expect(managedPage.children[1].x).toBeGreaterThan(priorRoot.x + priorRoot.width);
+    expect(JSON.parse(managedPage.children[1].getPluginData("za-pm-lifecycle"))).toMatchObject({
+      reusedManagedPageAtCapacity: true,
+      applyStatus: "complete",
+    });
+  });
+
+  it("refuses to reuse a managed Page containing user-authored nodes at the Page limit", async () => {
+    const mixedPage = (globalThis as any).figma.createPage();
+    mixedPage.name = "PM · Remind backup · v2";
+    const managedRoot = containerNode("SECTION");
+    managedRoot.setPluginData("za-pm-lifecycle", JSON.stringify({
+      namespace: "za.pm-lifecycle/v1",
+      kind: "artifact_root",
+      specId: "SPEC-OLD",
+      specVersion: 2,
+      idempotencyKey: "figma:old:v2",
+      applyStatus: "complete",
+    }));
+    mixedPage.appendChild(managedRoot);
+    mixedPage.appendChild(containerNode("FRAME"));
+    const unrelatedPage = (globalThis as any).figma.createPage();
+    unrelatedPage.name = "EXP · Login craft";
+    (globalThis as any).figma.createPage = () => {
+      throw new Error("In CreatePage: The Starter Plan Only Comes With 3 Pages. Upgrade To Professional For Unlimited Pages");
+    };
+    const prepared = preflight();
+    prepared.source.metadata.pageStrategy = "create_or_recover_incomplete";
+
+    await expect(handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {
+      preflightPlan: prepared,
+      planHash: "c".repeat(64),
+      targetPageId: "0:1",
+    }) as any)).rejects.toThrow("FIGMA_PAGE_LIMIT");
+
+    expect(mixedPage.children).toHaveLength(2);
+    expect(mixedPage.name).toBe("PM · Remind backup · v2");
   });
 
   it("rejects an interrupted artifact read and rebuilds the same page on retry", async () => {

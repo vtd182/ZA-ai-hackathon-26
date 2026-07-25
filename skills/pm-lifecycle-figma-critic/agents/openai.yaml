@@ -1,0 +1,12 @@
+interface:
+  display_name: "PM Lifecycle Figma Critic"
+  short_description: "Review product fidelity and visual craft"
+  brand_color: "#0A7C66"
+  default_prompt: "Use $pm-lifecycle-figma-critic to inspect this rendered Figma journey and prescribe concrete repairs before approval."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "za-talk-to-figma"
+      description: "Read screenshots and context from the approved Figma artifact"
+policy:
+  allow_implicit_invocation: false

@@ -124,6 +124,86 @@ describe('mock provider command inference', () => {
     expect(response.result.commands).toEqual([])
   })
 
+  it('critiques a synced selection without pretending selection-only context is a canvas change', async () => {
+    const provider = new ProviderRegistry().get('mock')
+    const response = await provider.reason({
+      threadId: 'THREAD',
+      phase: 'discover',
+      message: 'Sync canvas. Hãy đọc vùng đang chọn.',
+      recentMessages: [],
+      responseMode: 'route',
+      selection: {
+        entityId: 'privacy-status',
+        label: 'Không tự động báo ai · Đang riêng tư',
+        shapeIds: ['shape-privacy'],
+        selectedShapeCount: 1,
+      },
+      canvasDiff: {
+        schemaVersion: 1,
+        fromRevision: 7,
+        toRevision: 11,
+        changes: [],
+        selectedShapeIds: ['shape-privacy'],
+        summary: 'Không có thay đổi hình học hoặc nội dung; chỉ cập nhật vùng chọn',
+      },
+      remoteRef: null,
+    }, { modelId: 'deterministic-v1' }, new AbortController().signal)
+
+    expect(response.result.intent.kind).toBe('conversation')
+    expect(response.result.message).toContain('lượt đưa selection vào ngữ cảnh chat')
+    expect(response.result.message).toContain('Chỉ chia sẻ khi bạn chọn')
+    expect(response.result.message).not.toContain('thay đổi 7')
+    expect(response.suggestions.map((suggestion) => suggestion.label)).toEqual([
+      'Đổi sang copy tích cực',
+      'So sánh hai cách viết',
+    ])
+  })
+
+  it('turns a free-form idea into a specific tension without drawing or starting lifecycle', async () => {
+    const provider = new ProviderRegistry().get('mock')
+    const idea = 'Tôi đang nghĩ về một mini app giúp gia đình nhắc nhau uống thuốc, nhưng không muốn nó tạo cảm giác bị giám sát.'
+    const response = await provider.reason({
+      threadId: 'THREAD',
+      phase: 'discover',
+      message: idea,
+      recentMessages: [{ id: 'MESSAGE-1', threadId: 'THREAD', role: 'user', content: idea, createdAt: '2026-07-26T00:00:00.000Z' }],
+      responseMode: 'route',
+      remoteRef: null,
+    }, { modelId: 'deterministic-v1' }, new AbortController().signal)
+
+    expect(response.result.intent.kind).toBe('conversation')
+    expect(response.result.commands).toEqual([])
+    expect(response.result.message).toContain('nhắc nhau uống thuốc')
+    expect(response.result.message).toContain('bị giám sát')
+    expect(response.result.message).toContain('Canvas sẽ vẫn trống')
+    expect(response.suggestions.map((suggestion) => suggestion.label)).toEqual([
+      'Phản biện giả định',
+      'Chốt ranh giới',
+      'Phác moment chính',
+    ])
+  })
+
+  it('uses the original idea when a suggestion asks for a deeper critique', async () => {
+    const provider = new ProviderRegistry().get('mock')
+    const idea = 'Tôi đang nghĩ về một mini app giúp gia đình nhắc nhau uống thuốc, nhưng không muốn nó tạo cảm giác bị giám sát.'
+    const response = await provider.reason({
+      threadId: 'THREAD',
+      phase: 'discover',
+      message: 'Hãy phản biện giá trị người dùng và giả định nguy hiểm nhất của ý tưởng này',
+      recentMessages: [
+        { id: 'MESSAGE-1', threadId: 'THREAD', role: 'user', content: idea, createdAt: '2026-07-26T00:00:00.000Z' },
+        { id: 'MESSAGE-2', threadId: 'THREAD', role: 'assistant', content: 'Tension ban đầu', createdAt: '2026-07-26T00:00:01.000Z' },
+      ],
+      responseMode: 'route',
+      remoteRef: null,
+    }, { modelId: 'deterministic-v1' }, new AbortController().signal)
+
+    expect(response.result.message).toContain('nhắc nhau uống thuốc')
+    expect(response.result.message).toContain('Giả định nguy hiểm nhất')
+    expect(response.result.message).not.toContain('Ta có thể đào sâu')
+    expect(response.suggestions.map((suggestion) => suggestion.label)).toContain('Nêu tình huống khó')
+  })
+
   it('creates a provider-owned creative Figma blueprint with primitives and complete ZDS coverage', async () => {
     const provider = new ProviderRegistry().get('mock')
     const response = await provider.reason({

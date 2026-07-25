@@ -41,6 +41,7 @@ import type {
   ProviderIntent,
   SendChatInput,
   PlannedAction,
+  ThreadSummary,
   ProductSpec,
   FigmaCreativeBlueprint,
   FigmaArtifactPlan,
@@ -208,6 +209,24 @@ function workspaceFor(threadId: string): LifecycleWorkspaceState {
       ? latestReasoning
       : null
   return { runState, preview, execution, reasoning }
+}
+
+function threadForRenderer<T extends ThreadSummary>(thread: T): T {
+  const runState = lifecycle.getRunState(thread.id)
+  const collaborationMode = runState?.phase === 'IDEA_INTAKE'
+    || (!runState && thread.id !== DEMO_THREAD_ID)
+    ? 'studio'
+    : 'lifecycle'
+  const phase = runState
+    ? runState.phase === 'DECISION'
+      ? 'decide'
+      : runState.phase === 'DELIVERY'
+        ? 'deliver'
+        : runState.phase === 'CHANGE_IMPACT'
+          ? 'change'
+          : 'discover'
+    : thread.phase
+  return { ...thread, phase, collaborationMode }
 }
 
 function moveToDeliveryForChange(state: RunState, at: string): RunState {
@@ -542,7 +561,7 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
     runId: state.id,
     threadId: state.threadId,
     actionId: figmaAction.id,
-    pageStrategy: 'create_or_recover_incomplete' as const,
+    pageStrategy: 'create_or_reuse_managed' as const,
   }
   let figmaPlan: ReturnType<typeof createFigmaArtifactPlan>
   try {
@@ -557,7 +576,7 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
       : await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest)
     const metadata = {
       ...metadataBase,
-      idempotencyKey: `figma:${state.id}:spec-v${spec.version}:${useAgenticWorker ? 'craft' : 'creative'}-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}`,
+      idempotencyKey: `figma:${state.id}:spec-v${spec.version}:${useAgenticWorker ? 'craft' : 'creative'}-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}:${figmaContext.target.targetHash.slice(0, 12)}`,
     }
     try {
       figmaPlan = createFigmaArtifactPlan(
@@ -858,7 +877,11 @@ async function executeRun(
   else if (state.status !== 'EXECUTING') return { workspace: workspaceFor(threadId), results: [] }
   lifecycle.saveRunState(state)
 
-  const work = outbox.listRun(state.id).filter((item) => !target || item.action.target === target)
+  const currentActionIds = new Set(state.pendingActions.map((action) => action.id))
+  const work = outbox.listRun(state.id).filter((item) => (
+    currentActionIds.has(item.action.id)
+    && (!target || item.action.target === target)
+  ))
   const results = await Promise.all(work.map(async (item) => {
     const payload = item.action.payload
     if (item.action.target === 'figma') {
@@ -956,6 +979,52 @@ async function prepareArtifactsForThread(
   return { workspace: workspaceFor(threadId), message, assistantMessage }
 }
 
+function approvedFigmaTargetHash(action: PlannedAction | undefined): string | null {
+  const plan = action?.payload.plan
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan)) return null
+  const target = (plan as Record<string, unknown>).target
+  if (!target || typeof target !== 'object' || Array.isArray(target)) return null
+  const targetHash = (target as Record<string, unknown>).targetHash
+  return typeof targetHash === 'string' ? targetHash : null
+}
+
+async function reprepareFigmaForCurrentTarget(
+  threadId: string,
+): Promise<import('@pm-agent/domain').ApproveChangeOutput> {
+  const state = workspaceFor(threadId).runState
+  if (state.phase !== 'DELIVERY' || state.status !== 'PARTIAL_FAILURE') {
+    throw new Error('Chỉ có thể rebind Figma sau một artifact execution chưa hoàn tất')
+  }
+  const context = figmaExecutionContext()
+  if (context.connectorMode !== 'live') {
+    throw new Error('Figma live target chưa sẵn sàng. Mở Figma setup và allowlist lại Page ZDS trước khi retry.')
+  }
+  const oldFigmaAction = state.pendingActions.find((action) => action.target === 'figma')
+  const previousTargetHash = approvedFigmaTargetHash(oldFigmaAction)
+  if (previousTargetHash === context.target.targetHash) {
+    throw new Error('Figma target không đổi; action hiện tại có thể retry trực tiếp')
+  }
+  const revision = context.target.targetHash.slice(0, 12)
+  const baseActions = artifactActionsFor(state, state.productSpec).map((action) => (
+    action.target === 'figma'
+      ? { ...action, id: `${action.id}:rebind:${revision}` }
+      : action
+  ))
+  const prepared = await prepareExecutableActions({ ...state, pendingActions: baseActions }, state.productSpec)
+  const figmaAction = prepared.find((action) => action.target === 'figma')
+  if (!figmaAction) throw new Error('Figma rebind preflight did not produce an executable action')
+  const at = timestamp()
+  const staged = transitionRunState({
+    ...state,
+    pendingIntent: null,
+    pendingActions: [figmaAction],
+  }, 'REPREPARE_ARTIFACT', at)
+  lifecycle.savePreview(staged)
+  const message = 'Figma plugin đã reconnect nên immutable target cũ hết hiệu lực. Plan Figma mới đã preflight; PRD và backlog đã verified vẫn được giữ nguyên. Hãy duyệt lại riêng payload Figma.'
+  history.addMessage(threadId, 'assistant', message)
+  return { ...workspaceFor(threadId), message }
+}
+
 async function approveArtifactsForThread(
   threadId: string,
 ): Promise<{ workspace: LifecycleWorkspaceState; message: string; assistantMessage: ChatMessage }> {
@@ -1048,15 +1117,15 @@ async function allowFigmaTarget(sessionId: string, forceCapture: boolean): Promi
 }
 
 function registerIpc(): void {
-  ipcMain.handle('threads:list', (_event, query?: string) => history.listThreads(query))
-  ipcMain.handle('threads:create', () => history.createThread())
-  ipcMain.handle('threads:get', (_event, threadId: string) => history.getThread(threadId))
+  ipcMain.handle('threads:list', (_event, query?: string) => history.listThreads(query).map(threadForRenderer))
+  ipcMain.handle('threads:create', () => threadForRenderer(history.createThread()))
+  ipcMain.handle('threads:get', (_event, threadId: string) => threadForRenderer(history.getThread(threadId)))
   ipcMain.handle('threads:messages', (_event, threadId: string, cursor?: string, limit?: number) => history.listMessagesPage(threadId, cursor, limit))
   ipcMain.handle('threads:export-bundle', (_event, threadId: string) => exportThreadBundle(threadId))
   ipcMain.handle('threads:archive', (_event, threadId: string) => history.archiveThread(threadId))
   ipcMain.handle('threads:set-provider', (_event, threadId: string, profileId: string, confirmPaid = false) => {
     const thread = history.getThread(threadId)
-    if (thread.providerId === profileId) return thread
+    if (thread.providerId === profileId) return threadForRenderer(thread)
     const profile = history.getProfile(profileId)
     const workspace = workspaceFor(threadId)
     assertProviderSwitchAllowed({
@@ -1072,7 +1141,7 @@ function registerIpc(): void {
       toModelId: profile.modelId,
       createdAt: timestamp(),
     })
-    return history.switchThreadProvider(threadId, profile.id, providers.get(profile.providerId).capabilities, handoff)
+    return threadForRenderer(history.switchThreadProvider(threadId, profile.id, providers.get(profile.providerId).capabilities, handoff))
   })
 
   ipcMain.handle('canvas:save', (_event, threadId: string, snapshot: unknown) => history.saveCanvas(threadId, snapshot))
@@ -1239,6 +1308,18 @@ function registerIpc(): void {
     return { ...workspaceFor(threadId), message }
   })
   ipcMain.handle('lifecycle:retry-action', async (_event, threadId: string, target: PlannedAction['target']) => {
+    if (target === 'figma') {
+      const state = workspaceFor(threadId).runState
+      const oldFigmaAction = state.pendingActions.find((action) => action.target === 'figma')
+      const oldTargetHash = approvedFigmaTargetHash(oldFigmaAction)
+      const context = figmaExecutionContext()
+      if (oldFigmaAction?.payload.connectorMode === 'live' && context.connectorMode !== 'live') {
+        throw new Error('Figma live target chưa sẵn sàng. Mở Figma setup và allowlist lại Page ZDS trước khi retry.')
+      }
+      if (oldTargetHash && context.connectorMode === 'live' && oldTargetHash !== context.target.targetHash) {
+        return reprepareFigmaForCurrentTarget(threadId)
+      }
+    }
     const executed = await executeRun(threadId, target)
     const message = executed.workspace.execution?.status === 'verified'
       ? 'Retry hoàn tất; mọi artifact đã được read-back verified.'
@@ -1698,8 +1779,7 @@ function registerIpc(): void {
       if (canvasSyncIntent && input.canvas) {
         const semanticNodes = input.canvas.shapes.filter((shape) => shape.semanticId && shape.nodeKind)
         const selected = effectiveSelection?.selectedShapeCount ?? 0
-        const diffSummary = input.canvasDiff?.summary ? ` ${input.canvasDiff.summary}.` : ''
-        responseMessage = `${proposal.result.message}\n\nĐã đọc canvas: ${semanticNodes.length} semantic node, ${input.canvas.bindings?.length ?? 0} kết nối${selected > 0 ? ` và ${selected} phần tử đang chọn` : ''}.${diffSummary} ProductSpec chưa thay đổi.`
+        responseMessage = `${proposal.result.message}\n\nCanvas context đã verified: ${semanticNodes.length} semantic node, ${input.canvas.bindings?.length ?? 0} kết nối${selected > 0 ? ` và ${selected} phần tử đang chọn` : ''}. ProductSpec chưa thay đổi.`
         commands = []
       } else if (removalCommand) {
         const workspace = workspaceFor(input.threadId)

@@ -15,6 +15,7 @@ export type WorkflowEvent =
   | 'VERIFY_SUCCESS'
   | 'PARTIAL_FAILURE'
   | 'RETRY_EXECUTION'
+  | 'REPREPARE_ARTIFACT'
 
 interface StateKey {
   phase: RunState['phase']
@@ -32,6 +33,7 @@ const transitions: Record<string, StateKey> = {
   'DELIVERY:VERIFYING:VERIFY_SUCCESS': { phase: 'DELIVERY', status: 'COMPLETED' },
   'DELIVERY:EXECUTING:PARTIAL_FAILURE': { phase: 'DELIVERY', status: 'PARTIAL_FAILURE' },
   'DELIVERY:PARTIAL_FAILURE:RETRY_EXECUTION': { phase: 'DELIVERY', status: 'EXECUTING' },
+  'DELIVERY:PARTIAL_FAILURE:REPREPARE_ARTIFACT': { phase: 'DELIVERY', status: 'WAITING_FOR_APPROVAL' },
   'DELIVERY:ACTIVE:REQUEST_CHANGE': { phase: 'CHANGE_IMPACT', status: 'ACTIVE' },
   'CHANGE_IMPACT:ACTIVE:NEEDS_INPUT': { phase: 'CHANGE_IMPACT', status: 'NEEDS_USER_INPUT' },
   'CHANGE_IMPACT:NEEDS_USER_INPUT:PROVIDE_INPUT': { phase: 'CHANGE_IMPACT', status: 'ACTIVE' },

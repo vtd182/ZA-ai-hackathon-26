@@ -152,6 +152,18 @@ describe('workflow state machine', () => {
     expect(completed).toMatchObject({ phase: 'DELIVERY', status: 'COMPLETED' })
   })
 
+  it('returns a partial Delivery run to approval when an immutable artifact target changes', () => {
+    const state = {
+      ...initialRun(),
+      phase: 'DELIVERY' as const,
+      status: 'PARTIAL_FAILURE' as const,
+    }
+    expect(transitionRunState(state, 'REPREPARE_ARTIFACT', timestamp)).toMatchObject({
+      phase: 'DELIVERY',
+      status: 'WAITING_FOR_APPROVAL',
+    })
+  })
+
   it.each(['APPROVE', 'START_EXECUTION', 'VERIFY_SUCCESS', 'REQUEST_CHANGE', 'SELECT_OPTION'] satisfies WorkflowEvent[])(
     'rejects invalid event %s from idea intake',
     (event) => expect(() => transitionRunState(initialRun(), event, timestamp)).toThrow(/Invalid workflow transition/),

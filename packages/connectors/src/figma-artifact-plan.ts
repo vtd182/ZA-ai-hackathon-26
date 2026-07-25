@@ -24,6 +24,7 @@ export interface FigmaPlanMetadataInput {
   threadId: string
   actionId: string
   idempotencyKey: string
+  pageStrategy?: 'create_new' | 'create_or_recover_incomplete' | 'create_or_reuse_managed'
 }
 
 function slug(value: string): string {

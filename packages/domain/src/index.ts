@@ -187,6 +187,7 @@ export interface ThreadSummary {
   id: string
   title: string
   phase: WorkflowView
+  collaborationMode?: 'studio' | 'lifecycle'
   status: 'active' | 'archived'
   providerId: string
   modelId: string

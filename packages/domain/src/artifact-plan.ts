@@ -96,7 +96,11 @@ export const lifecycleArtifactMetadataSchema = z.object({
   specVersion: z.number().int().positive(),
   idempotencyKey: z.string().min(1),
   artifactPageName: z.string().min(1).max(80).optional(),
-  pageStrategy: z.enum(['create_new', 'create_or_recover_incomplete']).optional(),
+  pageStrategy: z.enum([
+    'create_new',
+    'create_or_recover_incomplete',
+    'create_or_reuse_managed',
+  ]).optional(),
 })
 export type LifecycleArtifactMetadata = z.infer<typeof lifecycleArtifactMetadataSchema>
 

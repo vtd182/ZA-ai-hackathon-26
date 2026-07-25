@@ -229,10 +229,11 @@ export function buildFigmaDesignWorkerPrompt(task: FigmaDesignWorkerTask): strin
     sourceComponents,
   }
   const skillPath = join(task.repositoryRoot, 'skills', 'pm-lifecycle-figma-design', 'SKILL.md')
+  const criticSkillPath = join(task.repositoryRoot, 'skills', 'pm-lifecycle-figma-critic', 'SKILL.md')
   const repairContext = task.qaFeedback?.length
     ? `\nIndependent Agent Core audit rejected the previous pass. Resume the existing artifact; do not rebuild it. Fix every issue below, then repeat screenshot/refine/audit:\n${task.qaFeedback.map((issue) => `- ${issue}`).join('\n')}\n`
     : ''
-  return `Read and follow the skill at ${skillPath}.
+  return `Read and follow the design skill at ${skillPath} and the independent critique skill at ${criticSkillPath}.
 
 You are the approved Figma craft worker for PM Lifecycle Agent. Use only the za-talk-to-figma MCP server.
 

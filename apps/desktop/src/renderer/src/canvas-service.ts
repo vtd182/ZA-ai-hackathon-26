@@ -1049,6 +1049,7 @@ export async function executeCanvasProgram(
 ): Promise<CanvasExecutionReceipt> {
   const program = canvasProgramSchema.parse(input)
   const rawOperations = program.mode === 'script' ? await runCanvasScript(program.script!) : program.operations
+  const previousSelection = editor.getSelectedShapeIds()
   const before = inspectCanvas(editor, 0)
   const prepared = rawOperations.length > 0
     ? layoutCanvasProgram({
@@ -1076,7 +1077,6 @@ export async function executeCanvasProgram(
     const hadSemanticScene = before.shapes.some((shape) => shape.nodeKind)
     if (!hadSemanticScene || createdNodeShapeIds.length > 6) {
       editor.zoomToFit({ immediate: true })
-      editor.selectNone()
     } else {
       const viewport = editor.getViewportPageBounds()
       const selectionBounds = editor.getSelectionPageBounds()
@@ -1087,6 +1087,9 @@ export async function executeCanvasProgram(
         && selectionBounds.maxY <= viewport.maxY
       if (!isVisible) editor.zoomToSelection({ immediate: true })
     }
+    const restorableSelection = previousSelection.filter((id) => editor.getShape(id))
+    if (restorableSelection.length > 0) editor.select(...restorableSelection)
+    else editor.selectNone()
   }
   const affectedSemanticIds = operations.flatMap((operation) => {
     if (operation.op === 'create_node' || operation.op === 'update' || operation.op === 'delete') return [operation.id]

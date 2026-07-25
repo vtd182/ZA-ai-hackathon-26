@@ -542,6 +542,110 @@ function inferMockIntent(request: string | ReasoningRequest): ProviderIntent {
   return { kind: 'conversation', target: null, artifactAction: null }
 }
 
+const mockFollowUpPrompts = [
+  'hãy phản biện giá trị người dùng',
+  'hãy cùng tôi chốt ranh giới',
+  'hãy nêu ba tình huống khó',
+  'hãy chỉ ra giả định',
+  'hãy critique',
+]
+
+function mockIdeaContext(request: ReasoningRequest): string {
+  const candidates = [
+    ...request.recentMessages.filter((message) => message.role === 'user').map((message) => message.content),
+    request.message,
+  ].reverse()
+  return candidates.find((message) => {
+    const normalized = message.toLocaleLowerCase('vi').trim()
+    return message.trim().length >= 32
+      && !normalized.startsWith('/')
+      && !mockFollowUpPrompts.some((prompt) => normalized.startsWith(prompt))
+      && !/^(vẽ|phác|tạo)\s/iu.test(message.trim())
+  }) ?? request.message
+}
+
+function compactIdea(value: string, limit = 150): string {
+  const compact = value.trim().replace(/\s+/g, ' ').replace(/[.!?]+$/, '')
+  if (compact.length <= limit) return compact
+  const candidate = compact.slice(0, limit + 1)
+  const boundary = candidate.lastIndexOf(' ')
+  return `${candidate.slice(0, boundary > limit * 0.65 ? boundary : limit).trim()}…`
+}
+
+function mockConversationReply(request: ReasoningRequest): {
+  message: string
+  suggestions: ConversationSuggestion[]
+} {
+  if (request.canvasDiff) {
+    const targetLabel = request.selection?.label ? compactIdea(request.selection.label, 96) : ''
+    if (request.canvasDiff.changes.length === 0 && targetLabel) {
+      return {
+        message: `Mình đang nhìn đúng vùng “${targetLabel}”. Bạn chưa đổi hình học hay nội dung; đây là một lượt đưa selection vào ngữ cảnh chat.\n\nVùng này đã nói được trạng thái riêng tư, nhưng có thể làm quyền kiểm soát rõ và tích cực hơn bằng cấu trúc: hiện tại ai được thấy → khi nào mới chia sẻ → người dùng đổi lựa chọn ở đâu. Ví dụ, “Chỉ chia sẻ khi bạn chọn” tạo cảm giác chủ động hơn “Không tự động báo ai”.`,
+        suggestions: [
+          { id: 'positive-copy', label: 'Đổi sang copy tích cực', prompt: 'Sửa canvas đúng vùng đang chọn: đổi copy để nhấn mạnh quyền chủ động chia sẻ', kind: 'refine' },
+          { id: 'compare-copy', label: 'So sánh hai cách viết', prompt: 'Hãy critique hai hướng copy: trấn an bằng phủ định và trao quyền bằng khẳng định', kind: 'explore' },
+        ],
+      }
+    }
+    const target = targetLabel ? `, nhất là vùng “${targetLabel}”` : ''
+    return {
+      message: `Mình đã đọc thay đổi ${request.canvasDiff.fromRevision} → ${request.canvasDiff.toRevision}${target}: ${request.canvasDiff.summary}. Trước khi sửa tiếp, mình muốn kiểm tra một điều: thay đổi này làm outcome của người dùng rõ hơn, hay mới chỉ làm flow chi tiết hơn?`,
+      suggestions: [
+        { id: 'canvas-impact', label: 'Đánh giá tác động', prompt: 'Hãy đánh giá thay đổi canvas vừa sync theo outcome, rủi ro và phần còn mâu thuẫn', kind: 'explore' },
+        { id: 'canvas-refine', label: 'Refine vùng chọn', prompt: 'Hãy refine đúng vùng canvas đang chọn, giữ nguyên các phần còn lại', kind: 'refine' },
+      ],
+    }
+  }
+
+  const current = request.message.toLocaleLowerCase('vi').trim()
+  const idea = compactIdea(mockIdeaContext(request))
+  const tension = idea.split(/\s+(?:nhưng|tuy nhiên)\s+/iu)
+  const tensionStatement = tension.length > 1
+    ? `“${compactIdea(tension[0]!, 92)}” nhưng đồng thời “${compactIdea(tension.slice(1).join(' nhưng '), 92)}”`
+    : `tạo ra giá trị rõ cho “${idea}” mà không lấy mất quyền chủ động của người dùng`
+
+  if (/phản biện|critique|giả định/iu.test(current)) {
+    return {
+      message: `Mình sẽ phản biện thẳng vào ý tưởng “${idea}”.\n\nĐiểm mạnh: nhu cầu hỗ trợ đã rõ, và tension cảm xúc đủ khác biệt để định hình sản phẩm.\n\nGiả định nguy hiểm nhất: nhiều nhắc nhở hơn đồng nghĩa với nhiều an tâm hơn. Thực tế, người dùng có thể thấy mình đang bị theo dõi hoặc bị đánh giá.\n\nHướng thử tốt hơn: để người nhận tự sở hữu nhịp tương tác, chọn mức chia sẻ và đặt ngưỡng khi người khác mới được can thiệp. Một prototype đầu tiên nên kiểm chứng đúng khoảnh khắc chuyển từ “tự xử lý” sang “cần hỗ trợ”, chưa cần phủ toàn bộ tính năng.`,
+      suggestions: [
+        { id: 'set-boundary', label: 'Chốt ranh giới', prompt: 'Hãy cùng tôi chốt ranh giới giữa hỗ trợ và gây áp lực cho ý tưởng này', kind: 'refine' },
+        { id: 'hard-scenarios', label: 'Nêu tình huống khó', prompt: 'Hãy nêu ba tình huống khó nhất có thể làm trải nghiệm này phản tác dụng', kind: 'explore' },
+        { id: 'sketch-moment', label: 'Phác moment chính', prompt: 'Vẽ user flow tập trung vào khoảnh khắc người dùng tự xử lý và khi họ chủ động nhờ hỗ trợ', kind: 'visualize' },
+      ],
+    }
+  }
+
+  if (/tình huống khó|phản tác dụng|edge case/iu.test(current)) {
+    return {
+      message: `Ba tình huống đáng thiết kế trước cho “${idea}”:\n\n1. Người dùng đã xử lý ngoài ứng dụng nhưng vẫn bị nhắc, khiến họ mất niềm tin.\n2. Một người thân can thiệp quá sớm, biến hỗ trợ thành áp lực.\n3. Sự im lặng có nhiều nghĩa: bận, không thấy, chủ động bỏ qua hoặc thực sự cần trợ giúp.\n\nMình sẽ không gom cả ba vào một flow ngay. Nên chọn một ngưỡng can thiệp có thể giải thích và cho người dùng quyền đổi ngưỡng đó.`,
+      suggestions: [
+        { id: 'choose-trigger', label: 'Chọn ngưỡng can thiệp', prompt: 'Giúp tôi chọn một ngưỡng can thiệp đầu tiên và giải thích trade-off', kind: 'refine' },
+        { id: 'draw-recovery', label: 'Vẽ flow có recovery', prompt: 'Vẽ user flow có happy path, im lặng, xác nhận muộn và chủ động nhờ hỗ trợ', kind: 'visualize' },
+      ],
+    }
+  }
+
+  if (/chốt ranh giới|quyền riêng tư|gây áp lực/iu.test(current)) {
+    return {
+      message: `Ranh giới mình đề xuất cho “${idea}”: mặc định người dùng giữ toàn quyền với trạng thái chi tiết; người khác chỉ nhận tín hiệu khi người dùng chủ động chia sẻ hoặc một ngưỡng đã được chính họ đồng ý từ trước bị vượt qua. Không hiển thị điểm số tuân thủ, chuỗi bỏ lỡ hay ngôn ngữ phán xét.\n\nĐiểm cần bạn quyết định là ngưỡng đó dựa trên thời gian, mức độ quan trọng hay một hành động “Tôi cần hỗ trợ”. Đây là lựa chọn sản phẩm, chưa nên để hệ thống tự đoán.`,
+      suggestions: [
+        { id: 'time-threshold', label: 'Theo thời gian', prompt: 'Khám phá phương án ngưỡng can thiệp theo thời gian và các rủi ro', kind: 'explore' },
+        { id: 'ask-for-help', label: 'Chủ động nhờ hỗ trợ', prompt: 'Khám phá phương án chỉ chia sẻ khi người dùng chủ động nhờ hỗ trợ', kind: 'explore' },
+        { id: 'visualize-boundary', label: 'Phác hai phương án', prompt: 'Vẽ hai nhánh user flow để so sánh ngưỡng theo thời gian và chủ động nhờ hỗ trợ', kind: 'visualize' },
+      ],
+    }
+  }
+
+  return {
+    message: `Mình thấy tension cốt lõi là ${tensionStatement}.\n\nGiả thuyết thiết kế đáng thử: thay vì để hệ thống hoặc người khác nắm quyền kiểm soát, người chịu tác động sẽ chọn nhịp tương tác, mức chia sẻ và thời điểm cần hỗ trợ. Điểm chưa chắc nhất là ranh giới nào khiến sự quan tâm biến thành áp lực.\n\nFeedback hữu ích nhất lúc này: khoảnh khắc nào người dùng vẫn muốn tự xử lý, và khi nào họ thật sự muốn người khác xuất hiện? Canvas sẽ vẫn trống cho đến khi bạn muốn phác một giả thuyết cụ thể.`,
+    suggestions: [
+      { id: 'challenge-assumption', label: 'Phản biện giả định', prompt: 'Hãy phản biện giá trị người dùng và giả định nguy hiểm nhất của ý tưởng này', kind: 'explore' },
+      { id: 'set-boundary', label: 'Chốt ranh giới', prompt: 'Hãy cùng tôi chốt ranh giới giữa hỗ trợ và gây áp lực cho ý tưởng này', kind: 'refine' },
+      { id: 'visualize-moment', label: 'Phác moment chính', prompt: 'Vẽ user flow tập trung vào khoảnh khắc người dùng tự xử lý và khi họ chủ động nhờ hỗ trợ', kind: 'visualize' },
+    ],
+  }
+}
+
 class MockProvider implements ReasoningProvider {
   readonly id = 'mock'
   readonly capabilities = mockCapabilities
@@ -555,13 +659,9 @@ class MockProvider implements ReasoningProvider {
     result.intent = inferMockIntent(request)
     let suggestions: ConversationSuggestion[] = []
     if (request.responseMode === 'route') {
-      result.message = request.canvasDiff
-        ? `Mình đã đọc phần bạn vừa thay đổi: ${request.canvasDiff.summary}. Mình có thể cùng bạn đánh giá tác động hoặc chỉnh tiếp đúng vùng này.`
-        : 'Mình đã hiểu hướng bạn đang cân nhắc. Ta có thể đào sâu giá trị người dùng, phác nó thành một flow để cùng phản biện, hoặc tiếp tục trao đổi mà chưa cần tạo artifact.'
-      suggestions = [
-        { id: 'explore-value', label: 'Đào sâu giá trị', prompt: 'Hãy phản biện giá trị người dùng và các giả định quan trọng của ý tưởng này', kind: 'explore' },
-        { id: 'visualize-flow', label: 'Phác user flow', prompt: 'Vẽ user flow để chúng ta cùng review và chỉnh sửa', kind: 'visualize' },
-      ]
+      const collaboration = mockConversationReply(request)
+      result.message = collaboration.message
+      suggestions = collaboration.suggestions
     }
     if (request.responseMode === 'figma') {
       if (!request.productSpec) throw new Error('Mock Figma design requires ProductSpec')

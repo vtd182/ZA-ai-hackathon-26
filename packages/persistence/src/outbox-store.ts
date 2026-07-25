@@ -141,7 +141,16 @@ export class OutboxStore {
   }
 
   summary(runId: string): ExecutionSummary {
-    const actions: ActionExecutionStatus[] = this.listRun(runId).map((item) => actionExecutionStatusSchema.parse({
+    const latestByTarget = new Map<OutboxItem['action']['target'], OutboxItem>()
+    for (const item of this.listRun(runId)) {
+      const current = latestByTarget.get(item.action.target)
+      if (!current
+        || item.createdAt > current.createdAt
+        || (item.createdAt === current.createdAt && item.action.id > current.action.id)) {
+        latestByTarget.set(item.action.target, item)
+      }
+    }
+    const actions: ActionExecutionStatus[] = [...latestByTarget.values()].map((item) => actionExecutionStatusSchema.parse({
       actionId: item.action.id,
       target: item.action.target,
       status: item.status,

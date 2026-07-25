@@ -133,6 +133,77 @@ describe('tldraw-first canvas planning', () => {
     expect(labels.some((label) => label.includes('Tôi muốn'))).toBe(false)
   })
 
+  it('turns the privacy tension in a care reminder conversation into a consent-first workflow', () => {
+    const program = planExplicitCanvasRequest(
+      'Vẽ user flow tập trung vào khoảnh khắc người dùng tự xử lý và khi họ chủ động nhờ hỗ trợ',
+      undefined,
+      {
+        intent: 'draw',
+        recentMessages: [{
+          id: 'message-care',
+          threadId: 'thread-care',
+          role: 'user',
+          content: 'Mini app giúp gia đình nhắc nhau uống thuốc nhưng không tạo cảm giác bị giám sát',
+          createdAt: '2026-07-26T00:00:00.000Z',
+        }],
+      },
+    )
+    const nodes = program?.operations.filter((operation) => operation.op === 'create_node') ?? []
+    const labels = nodes.map((operation) => operation.label)
+
+    expect(program).toMatchObject({
+      sceneType: 'workflow',
+      title: 'Care Circle · Support without surveillance',
+    })
+    expect(nodes.length).toBeGreaterThanOrEqual(12)
+    expect(labels).toEqual(expect.arrayContaining([
+      'Nhắc riêng tư',
+      'Tự xử lý hay cần hỗ trợ?',
+      'Chủ động nhờ hỗ trợ',
+      'Chọn điều được chia sẻ',
+    ]))
+    expect(nodes.find((operation) => operation.id === 'care-support-choice')).toMatchObject({
+      lane: 'Người dùng',
+      badge: 'BOUNDARY',
+      tone: 'warning',
+    })
+    expect(program?.operations).toContainEqual(expect.objectContaining({
+      op: 'connect',
+      fromId: 'care-support-choice',
+      toId: 'care-stay-private',
+      label: 'Tôi tự xử lý',
+    }))
+  })
+
+  it('creates a detailed care reminder prototype with distinct consent checkpoints', () => {
+    const program = planExplicitCanvasRequest('Vẽ prototype cho ý tưởng nhắc uống thuốc', undefined, {
+      intent: 'draw',
+      recentMessages: [{
+        id: 'message-care',
+        threadId: 'thread-care',
+        role: 'user',
+        content: 'Nhắc thuốc riêng tư, chỉ nhờ gia đình khi người dùng chủ động',
+        createdAt: '2026-07-26T00:00:00.000Z',
+      }],
+    })
+    const screens = program?.operations.filter((operation) => operation.op === 'create_node') ?? []
+
+    expect(program).toMatchObject({
+      sceneType: 'prototype',
+      title: 'Care Circle · Product Concept',
+    })
+    expect(screens.map((operation) => operation.label)).toEqual([
+      'Nhịp hôm nay',
+      'Lời nhắc riêng tư',
+      'Check-in lần hai',
+      'Review lời nhờ hỗ trợ',
+      'Đã có người bên cạnh',
+    ])
+    expect(screens.every((operation) => operation.screen && operation.description)).toBe(true)
+    expect(screens.find((operation) => operation.id === 'prototype-care-share')?.screen?.blocks)
+      .toContainEqual(expect.objectContaining({ label: 'Thông tin được chia sẻ' }))
+  })
+
   it('creates detailed backup reminder screens, replaces an old prototype and preserves the workflow', () => {
     const program = planExplicitCanvasRequest('Vẽ prototype cho remind backup', undefined, {
       intent: 'draw',
@@ -196,6 +267,24 @@ describe('tldraw-first canvas planning', () => {
     expect(program?.operations.filter((operation) => operation.op === 'create_node').every(
       (operation) => operation.x === undefined && operation.y === undefined
     )).toBe(true)
+  })
+
+  it('refines copy on the exact selected canvas shape without rebuilding the scene', () => {
+    const program = planExplicitCanvasRequest(
+      'Sửa canvas đúng vùng đang chọn: đổi copy để nhấn mạnh quyền chủ động chia sẻ',
+      { entityId: 'shape:privacy-status', label: 'Không tự động báo ai · Đang riêng tư' },
+      { intent: 'edit' },
+    )
+
+    expect(program).toMatchObject({
+      mode: 'operations',
+      operations: [{
+        op: 'update',
+        id: 'shape:privacy-status',
+        label: expect.stringContaining('CHỈ CHIA SẺ KHI BẠN CHỌN'),
+      }],
+    })
+    expect(program?.operations).toHaveLength(1)
   })
 
   it('promotes normalized canvas nodes into a valid ProductSpec', () => {
