@@ -10,6 +10,7 @@ import {
   figmaPreflightResultSchema,
   figmaRuntimeErrorEnvelopeSchema,
   figmaRuntimeHealthSchema,
+  figmaCraftAuditSchema,
   figmaTargetBindingSchema,
   type FigmaDesignSystemCapture,
   type FigmaPages,
@@ -21,6 +22,7 @@ import {
   type DesignSystemManifest,
   type FigmaRuntimeErrorCode,
   type FigmaRuntimeHealth,
+  type FigmaCraftAudit,
   type FigmaTargetBinding,
 } from '@pm-agent/domain'
 import { stableStringify, type JsonValue } from '@pm-agent/shared'
@@ -242,6 +244,25 @@ export class FigmaMcpAdapter {
       preflight,
       planHash: preflight.planHash,
     }, figmaArtifactAuditResultSchema, 20_000)
+  }
+
+  async auditProductCraft(input: {
+    target: FigmaTargetBinding
+    rootNodeId: string
+    expectedScreenCount: number
+    expectedPrototypeLinks: number
+    forbiddenTerms: string[]
+    placeholderTerms?: string[]
+  }): Promise<FigmaCraftAudit> {
+    await this.verifyTarget(input.target)
+    return this.call('audit_product_craft', {
+      sessionId: input.target.sessionId,
+      rootNodeId: input.rootNodeId,
+      expectedScreenCount: input.expectedScreenCount,
+      expectedPrototypeLinks: input.expectedPrototypeLinks,
+      forbiddenTerms: input.forbiddenTerms,
+      ...(input.placeholderTerms ? { placeholderTerms: input.placeholderTerms } : {}),
+    }, figmaCraftAuditSchema, 60_000)
   }
 
   close(): Promise<void> {

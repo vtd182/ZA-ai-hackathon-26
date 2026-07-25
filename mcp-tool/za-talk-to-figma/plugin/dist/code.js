@@ -4,6 +4,7 @@ var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
 var __getOwnPropSymbols = Object.getOwnPropertySymbols;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __propIsEnum = Object.prototype.propertyIsEnumerable;
+var __pow = Math.pow;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __spreadValues = (a, b) => {
   for (var prop in b || (b = {}))
@@ -1429,8 +1430,12 @@ var __async = (__this, __arguments, generator) => {
     return null;
   };
   const getNodeByIdLocalFirst = (nodeId) => __async(null, null, function* () {
-    var _a;
-    return (_a = getLoadedNodeById(nodeId)) != null ? _a : figma.getNodeByIdAsync(nodeId);
+    try {
+      const indexed = yield figma.getNodeByIdAsync(nodeId);
+      if (indexed) return indexed;
+    } catch (e) {
+    }
+    return getLoadedNodeById(nodeId);
   });
   const requireSourcePage = (targetPageId) => __async(null, null, function* () {
     if (typeof targetPageId !== "string" || !targetPageId) throw new Error("targetPageId is required");
@@ -1884,6 +1889,11 @@ var __async = (__this, __arguments, generator) => {
     }), creativeScreens, palette);
     let cursorX = 440;
     let maxHeight = 0;
+    const totalElements = Math.max(1, creativeScreens.reduce((total, screen) => {
+      const elements = Array.isArray(screen.elements) ? screen.elements : [];
+      return total + elements.length;
+    }, 0));
+    let completedElements = 0;
     for (const [screenIndex, creativeScreen] of creativeScreens.entries()) {
       const screenId = String(creativeScreen.screenId);
       const recipe = recipeById.get(screenId);
@@ -1924,6 +1934,7 @@ var __async = (__this, __arguments, generator) => {
           creativeElementKind: rootAlias.kind
         }));
         elementNodes.set(String(rootAlias.id), frame);
+        completedElements += 1;
       }
       for (const element of elements) {
         if (rootAlias && element.id === rootAlias.id) continue;
@@ -1938,6 +1949,8 @@ var __async = (__this, __arguments, generator) => {
           applyCreativeFrameStyle(created, element);
           node = created;
         } else if (element.kind === "component") {
+          const elementProgress2 = 18 + Math.round(completedElements / totalElements * 66);
+          postProgress(input.requestId, elementProgress2, `Binding ZDS control: ${String(element.name)}`);
           const slot = input.resolvedSlots.find(
             (candidate) => candidate.screenId === screenId && candidate.slotKey === element.id
           );
@@ -1972,6 +1985,10 @@ var __async = (__this, __arguments, generator) => {
           creativeElementKind: element.kind
         }));
         elementNodes.set(String(element.id), node);
+        completedElements += 1;
+        const elementProgress = 18 + Math.round(completedElements / totalElements * 66);
+        postProgress(input.requestId, elementProgress, `Composed ${completedElements}/${totalElements}: ${String(element.name)}`);
+        yield yieldToFigma();
       }
       const progress = 18 + Math.round((screenIndex + 1) / creativeScreens.length * 66);
       postProgress(input.requestId, progress, `Composed ${screenIndex + 1}/${creativeScreens.length}: ${String(creativeScreen.name)}`);
@@ -2011,6 +2028,18 @@ var __async = (__this, __arguments, generator) => {
     if (!("children" in node)) return false;
     return node.children.some((child) => containsLifecycleScreen(child));
   };
+  const renderedLifecycleScreenIds = (root) => {
+    if (!("children" in root)) return [];
+    return root.children.flatMap((node) => {
+      const metadata = readMetadata(node);
+      return (metadata == null ? void 0 : metadata.kind) === "screen" && typeof metadata.screenId === "string" ? [metadata.screenId] : [];
+    });
+  };
+  const hasExpectedLifecycleScreens = (root, screens) => {
+    const expected = screens.map((screen) => String(screen.screenId)).sort();
+    const rendered = renderedLifecycleScreenIds(root).sort();
+    return expected.length === rendered.length && expected.every((screenId, index) => rendered[index] === screenId);
+  };
   const recoverableArtifactPage = (metadata) => __async(null, null, function* () {
     if (metadata.pageStrategy !== "create_or_recover_incomplete") return null;
     const expectedName = artifactPageName(metadata);
@@ -2028,8 +2057,9 @@ var __async = (__this, __arguments, generator) => {
         return (stored == null ? void 0 : stored.namespace) === "za.pm-lifecycle/v1" && stored.kind === "artifact_root" && stored.specId === metadata.specId && stored.specVersion === metadata.specVersion;
       });
       if (roots.length !== 1) continue;
-      const hasScreens = containsLifecycleScreen(roots[0]);
-      if (!hasScreens) return { page, root: roots[0] };
+      const rootMetadata = readMetadata(roots[0]);
+      const isInterrupted = (rootMetadata == null ? void 0 : rootMetadata.applyStatus) === "in_progress";
+      if (isInterrupted || !containsLifecycleScreen(roots[0])) return { page, root: roots[0] };
     }
     return null;
   });
@@ -2049,24 +2079,31 @@ var __async = (__this, __arguments, generator) => {
     if (!idempotencyKey) throw new Error("lifecycle idempotencyKey is required");
     postProgress(requestId, 3, "Checking existing lifecycle artifact");
     const existing = yield findArtifactRoot(idempotencyKey);
+    let staleExistingPage = null;
     if (existing) {
       const existingMetadata = readMetadata(existing.root);
-      if (existingMetadata.planHash !== planHash) {
-        throw new Error(`IDEMPOTENCY_CONFLICT: ${idempotencyKey} already exists with another plan hash`);
+      if (hasExpectedLifecycleScreens(existing.root, screens)) {
+        if (existingMetadata.planHash !== planHash) {
+          throw new Error(`IDEMPOTENCY_CONFLICT: ${idempotencyKey} already exists with another plan hash`);
+        }
+        if (existing.page.id === figma.currentPage.id) focusArtifact(existing.root);
+        postProgress(requestId, 100, "Existing lifecycle artifact is ready");
+        return {
+          schemaVersion: 1,
+          rootNodeIds: [existing.root.id],
+          artifactPageId: existing.page.id,
+          artifactPageName: existing.page.name,
+          idempotent: true
+        };
       }
-      if (existing.page.id === figma.currentPage.id) focusArtifact(existing.root);
-      postProgress(requestId, 100, "Existing lifecycle artifact is ready");
-      return {
-        schemaVersion: 1,
-        rootNodeIds: [existing.root.id],
-        artifactPageId: existing.page.id,
-        artifactPageName: existing.page.name,
-        idempotent: true
-      };
+      postProgress(requestId, 5, "Interrupted lifecycle artifact found; rebuilding it");
+      if (existing.page.id !== sourcePage.id) staleExistingPage = existing.page;
+      existing.root.remove();
     }
     postProgress(requestId, 8, "Preparing a dedicated Figma page");
-    const recoverable = yield recoverableArtifactPage(metadata);
-    const outputPage = (_b = recoverable == null ? void 0 : recoverable.page) != null ? _b : figma.createPage();
+    const recoverable = staleExistingPage ? null : yield recoverableArtifactPage(metadata);
+    const outputPage = (_b = staleExistingPage != null ? staleExistingPage : recoverable == null ? void 0 : recoverable.page) != null ? _b : figma.createPage();
+    const reusedOutputPage = Boolean(staleExistingPage || recoverable);
     if (recoverable) recoverable.root.remove();
     outputPage.name = artifactPageName(metadata);
     const root = figma.createSection();
@@ -2081,7 +2118,10 @@ var __async = (__this, __arguments, generator) => {
       designConceptName: (_f = source.designDirection) == null ? void 0 : _f.conceptName,
       sourcePageId: sourcePage.id,
       artifactPageId: outputPage.id,
-      artifactPageName: outputPage.name
+      artifactPageName: outputPage.name,
+      applyStatus: "in_progress",
+      expectedScreenIds: screens.map((screen) => String(screen.screenId)),
+      expectedScreenCount: screens.length
     }));
     try {
       const direction = (_g = source.designDirection) != null ? _g : {};
@@ -2100,7 +2140,15 @@ var __async = (__this, __arguments, generator) => {
           requestId
         });
         root.resizeWithoutConstraints(rendered.width, rendered.height);
-        writeMetadata(root, __spreadProps(__spreadValues({}, readMetadata(root)), { prototypeEdges: rendered.edges, creative: true }));
+        if (!hasExpectedLifecycleScreens(root, screens)) {
+          throw new Error("ARTIFACT_INCOMPLETE: creative renderer did not produce every expected screen");
+        }
+        writeMetadata(root, __spreadProps(__spreadValues({}, readMetadata(root)), {
+          prototypeEdges: rendered.edges,
+          creative: true,
+          applyStatus: "complete",
+          renderedScreenCount: renderedLifecycleScreenIds(root).length
+        }));
         figma.commitUndo();
         postProgress(requestId, 100, "Creative Figma artifact created");
         return {
@@ -2233,7 +2281,14 @@ var __async = (__this, __arguments, generator) => {
         if (sourceNode && destinations.length > 0) yield setNavigationReactions(sourceNode, destinations);
       }
       root.resizeWithoutConstraints(Math.max(900, 460 + screens.length * 430), 1020);
-      writeMetadata(root, __spreadProps(__spreadValues({}, readMetadata(root)), { prototypeEdges: flattenEdges(screens) }));
+      if (!hasExpectedLifecycleScreens(root, screens)) {
+        throw new Error("ARTIFACT_INCOMPLETE: renderer did not produce every expected screen");
+      }
+      writeMetadata(root, __spreadProps(__spreadValues({}, readMetadata(root)), {
+        prototypeEdges: flattenEdges(screens),
+        applyStatus: "complete",
+        renderedScreenCount: renderedLifecycleScreenIds(root).length
+      }));
       figma.commitUndo();
       postProgress(requestId, 100, "Lifecycle artifact created");
       return {
@@ -2245,12 +2300,12 @@ var __async = (__this, __arguments, generator) => {
       };
     } catch (error) {
       root.remove();
-      if (!recoverable) outputPage.remove();
+      if (!reusedOutputPage) outputPage.remove();
       throw error;
     }
   });
   const readArtifact = (idempotencyKey, rootNodeId) => __async(null, null, function* () {
-    var _a, _b;
+    var _a, _b, _c;
     let location = null;
     if (rootNodeId) {
       const root2 = yield getNodeByIdLocalFirst(rootNodeId);
@@ -2321,6 +2376,14 @@ var __async = (__this, __arguments, generator) => {
         childSlots
       }];
     }) : [];
+    const expectedScreenIds = Array.isArray(rootMetadata.expectedScreenIds) ? rootMetadata.expectedScreenIds.map(String).sort() : [];
+    const renderedScreenIds = screens.map((screen) => screen.screenId).sort();
+    const screenSetMatches = expectedScreenIds.length === renderedScreenIds.length && expectedScreenIds.every((screenId, index) => renderedScreenIds[index] === screenId);
+    if (rootMetadata.applyStatus === "in_progress" || expectedScreenIds.length > 0 && !screenSetMatches) {
+      throw new Error(
+        `ARTIFACT_INCOMPLETE: expected ${expectedScreenIds.length || rootMetadata.expectedScreenCount || "all"} screens, found ${screens.length}`
+      );
+    }
     const screenIdByNodeId = new Map(screens.map((screen) => [screen.nodeId, screen.screenId]));
     const prototypeEdges = "children" in root ? root.children.flatMap((screenNode) => [screenNode, ...descendants(screenNode)].flatMap((node) => {
       const metadata = readMetadata(node);
@@ -2345,7 +2408,8 @@ var __async = (__this, __arguments, generator) => {
       rootNodeIds: [root.id],
       artifactPageId: page.id,
       artifactPageName: page.name,
-      designConceptName: String((_b = renderedDesignBriefMetadata == null ? void 0 : renderedDesignBriefMetadata.conceptName) != null ? _b : ""),
+      applyStatus: String((_b = rootMetadata.applyStatus) != null ? _b : "legacy"),
+      designConceptName: String((_c = renderedDesignBriefMetadata == null ? void 0 : renderedDesignBriefMetadata.conceptName) != null ? _c : ""),
       screens,
       prototypeEdges,
       readAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -2368,9 +2432,306 @@ var __async = (__this, __arguments, generator) => {
         return null;
     }
   });
+  const DEFAULT_PLACEHOLDERS = [
+    "button",
+    "long text button",
+    "helper text",
+    "weak",
+    "slot",
+    "lorem ipsum",
+    "product moment",
+    "product detail",
+    "thông tin chính",
+    "lựa chọn của người dùng",
+    "trạng thái hiện tại",
+    "có 3 level button cơ bản"
+  ];
+  const normalize = (value) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+  const isVisible = (node, root) => {
+    let current = node;
+    while (current) {
+      if ("visible" in current && current.visible === false) return false;
+      if (current === root) break;
+      current = current.parent;
+    }
+    return true;
+  };
+  const effectiveOpacity = (node, root) => {
+    let current = node;
+    let opacity = 1;
+    while (current) {
+      if ("opacity" in current && typeof current.opacity === "number") opacity *= current.opacity;
+      if (current === root) break;
+      current = current.parent;
+    }
+    return opacity;
+  };
+  const solidPaint = (value) => {
+    if (!Array.isArray(value)) return null;
+    const paint = value.find((candidate) => (candidate == null ? void 0 : candidate.type) === "SOLID" && candidate.visible !== false && candidate.color);
+    if (!paint) return null;
+    const { r, g, b } = paint.color;
+    if (![r, g, b].every((channel) => typeof channel === "number" && Number.isFinite(channel))) return null;
+    return {
+      color: { r, g, b },
+      opacity: typeof paint.opacity === "number" ? paint.opacity : 1
+    };
+  };
+  const blend = (foreground, background, opacity) => ({
+    r: foreground.r * opacity + background.r * (1 - opacity),
+    g: foreground.g * opacity + background.g * (1 - opacity),
+    b: foreground.b * opacity + background.b * (1 - opacity)
+  });
+  const luminance = (color) => {
+    const channel = (value) => value <= 0.03928 ? value / 12.92 : __pow((value + 0.055) / 1.055, 2.4);
+    return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b);
+  };
+  const contrastRatio = (first, second) => {
+    const light = Math.max(luminance(first), luminance(second));
+    const dark = Math.min(luminance(first), luminance(second));
+    return (light + 0.05) / (dark + 0.05);
+  };
+  const coveringSiblingBackground = (node) => {
+    const parent = node.parent;
+    const nodeBounds = boundsOf(node);
+    if (!parent || !nodeBounds || !Array.isArray(parent.children)) return null;
+    const nodeIndex = parent.children.indexOf(node);
+    const centerX = nodeBounds.x + nodeBounds.width / 2;
+    const centerY = nodeBounds.y + nodeBounds.height / 2;
+    for (let index = nodeIndex - 1; index >= 0; index -= 1) {
+      const sibling = parent.children[index];
+      if (!sibling || sibling.visible === false) continue;
+      const siblingBounds = boundsOf(sibling);
+      const paint = solidPaint(sibling.fills);
+      if (siblingBounds && paint && centerX >= siblingBounds.x && centerX <= siblingBounds.x + siblingBounds.width && centerY >= siblingBounds.y && centerY <= siblingBounds.y + siblingBounds.height) {
+        return blend(paint.color, { r: 1, g: 1, b: 1 }, paint.opacity);
+      }
+    }
+    return null;
+  };
+  const nearestBackground = (node, root) => {
+    const siblingBackground = coveringSiblingBackground(node);
+    if (siblingBackground) return siblingBackground;
+    let current = node.parent;
+    while (current) {
+      const paint = solidPaint(current.fills);
+      if (paint) return blend(paint.color, { r: 1, g: 1, b: 1 }, paint.opacity);
+      if (current === root) break;
+      current = current.parent;
+    }
+    return { r: 1, g: 1, b: 1 };
+  };
+  const boundsOf = (node) => {
+    const bounds = node.absoluteBoundingBox;
+    if (!bounds) return null;
+    const values = [bounds.x, bounds.y, bounds.width, bounds.height];
+    return values.every((value) => typeof value === "number" && Number.isFinite(value)) ? { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : null;
+  };
+  const inside = (child, parent, tolerance = 1) => child.x >= parent.x - tolerance && child.y >= parent.y - tolerance && child.x + child.width <= parent.x + parent.width + tolerance && child.y + child.height <= parent.y + parent.height + tolerance;
+  const insideImmediateParent = (node, tolerance = 1) => {
+    const parent = node.parent;
+    const values = [node.x, node.y, node.width, node.height, parent == null ? void 0 : parent.width, parent == null ? void 0 : parent.height];
+    if (!parent || !["FRAME", "COMPONENT", "INSTANCE", "GROUP"].includes(parent.type) || !values.every((value) => typeof value === "number" && Number.isFinite(value))) {
+      return true;
+    }
+    return node.x >= -tolerance && node.y >= -tolerance && node.x + node.width <= parent.width + tolerance && node.y + node.height <= parent.height + tolerance;
+  };
+  const nearestScreen = (node, screens) => {
+    let current = node.parent;
+    while (current) {
+      if (screens.includes(current)) return current;
+      current = current.parent;
+    }
+    return null;
+  };
+  const hasInstanceAncestor = (node, root) => {
+    let current = node.parent;
+    while (current && current !== root) {
+      if (current.type === "INSTANCE") return true;
+      current = current.parent;
+    }
+    return false;
+  };
+  const directMobileScreens = (root) => {
+    const children = "children" in root ? root.children : [];
+    const direct = children.filter((node) => node.type === "FRAME" && node.width >= 320 && node.width <= 480 && node.height >= 600 && node.height <= 1e3);
+    if (direct.length > 0) return direct;
+    if (!("findAll" in root)) return [];
+    return root.findAll((node) => node.type === "FRAME" && node.width >= 320 && node.width <= 480 && node.height >= 600 && node.height <= 1e3 && !hasInstanceAncestor(node, root));
+  };
+  const handleProductCraftAuditRequest = (request) => __async(null, null, function* () {
+    if (request.type !== "audit_product_craft") return null;
+    const params = request.params || {};
+    const rootNodeId = String(params.rootNodeId || "");
+    if (!rootNodeId) throw new Error("rootNodeId is required");
+    const root = yield figma.getNodeByIdAsync(rootNodeId);
+    if (!root || root.type === "DOCUMENT") throw new Error(`Node not found: ${rootNodeId}`);
+    const expectedScreenCount = Number(params.expectedScreenCount || 0);
+    const expectedPrototypeLinks = Number(params.expectedPrototypeLinks || 0);
+    const forbiddenTerms = (Array.isArray(params.forbiddenTerms) ? params.forbiddenTerms : []).filter((item) => typeof item === "string" && item.trim().length > 0).map(normalize);
+    const placeholderTerms = [
+      ...DEFAULT_PLACEHOLDERS,
+      ...Array.isArray(params.placeholderTerms) ? params.placeholderTerms : []
+    ].filter((item) => typeof item === "string" && item.trim().length > 0).map(normalize);
+    const screens = directMobileScreens(root);
+    const issues = [];
+    let visitedNodes = 0;
+    let textCount = 0;
+    let visibleTextCount = 0;
+    let zdsInstanceCount = 0;
+    let prototypeLinkCount = 0;
+    const placeholderNodeIds = /* @__PURE__ */ new Set();
+    const forbiddenNodeIds = /* @__PURE__ */ new Set();
+    const clippedNodeIds = /* @__PURE__ */ new Set();
+    const lowVisibilityNodeIds = /* @__PURE__ */ new Set();
+    const visit = (node) => {
+      var _a;
+      visitedNodes += 1;
+      const visible = isVisible(node, root);
+      if (node.type === "INSTANCE" && !hasInstanceAncestor(node, root)) zdsInstanceCount += 1;
+      if (visible && "reactions" in node && Array.isArray(node.reactions)) {
+        for (const reaction of node.reactions) {
+          const actions = Array.isArray(reaction == null ? void 0 : reaction.actions) ? reaction.actions : [];
+          prototypeLinkCount += actions.filter((action) => (action == null ? void 0 : action.type) === "NODE" && action.destinationId).length;
+        }
+      }
+      if (node.type === "TEXT") {
+        textCount += 1;
+        if (visible) {
+          visibleTextCount += 1;
+          const content = normalize(String(node.characters || ""));
+          if (content) {
+            const placeholder = placeholderTerms.find((term) => content === term || term.length >= 12 && content.includes(term));
+            if (placeholder) {
+              placeholderNodeIds.add(node.id);
+              issues.push({
+                code: "STALE_COMPONENT_COPY",
+                severity: "error",
+                nodeId: node.id,
+                message: `Visible text still contains placeholder/default copy: "${String(node.characters).slice(0, 96)}".`
+              });
+            }
+            const forbidden = forbiddenTerms.find((term) => content.includes(term));
+            if (forbidden) {
+              forbiddenNodeIds.add(node.id);
+              issues.push({
+                code: "FORBIDDEN_PRODUCT_COPY",
+                severity: "error",
+                nodeId: node.id,
+                message: `Visible text mentions forbidden ProductSpec content: "${forbidden}".`
+              });
+            }
+          }
+          const opacity = effectiveOpacity(node, root);
+          if (opacity < 0.45) {
+            lowVisibilityNodeIds.add(node.id);
+            issues.push({
+              code: "LOW_VISIBILITY_TEXT",
+              severity: "error",
+              nodeId: node.id,
+              message: `Visible text effective opacity is ${opacity.toFixed(2)}.`
+            });
+          }
+          const foregroundPaint = solidPaint(node.fills);
+          const directScreenText = screens.includes(node.parent);
+          const paintedImmediateParent = solidPaint((_a = node.parent) == null ? void 0 : _a.fills) !== null;
+          if (foregroundPaint && (hasInstanceAncestor(node, root) || directScreenText || paintedImmediateParent)) {
+            const background = nearestBackground(node, root);
+            const foreground = blend(
+              foregroundPaint.color,
+              background,
+              foregroundPaint.opacity * Math.min(1, opacity)
+            );
+            const ratio = contrastRatio(foreground, background);
+            const fontSize = typeof node.fontSize === "number" ? node.fontSize : 14;
+            const requiredRatio = fontSize >= 18 ? 3 : 4.5;
+            if (ratio < requiredRatio && !lowVisibilityNodeIds.has(node.id)) {
+              lowVisibilityNodeIds.add(node.id);
+              issues.push({
+                code: "LOW_TEXT_CONTRAST",
+                severity: "error",
+                nodeId: node.id,
+                message: `Visible text contrast is ${ratio.toFixed(2)}:1; expected at least ${requiredRatio}:1.`
+              });
+            }
+          }
+          const screen = nearestScreen(node, screens);
+          const nodeBounds = boundsOf(node);
+          const screenBounds = screen ? boundsOf(screen) : null;
+          if (nodeBounds && screenBounds && !inside(nodeBounds, screenBounds)) {
+            clippedNodeIds.add(node.id);
+            issues.push({
+              code: "TEXT_OUTSIDE_SCREEN",
+              severity: "error",
+              nodeId: node.id,
+              message: `Text "${String(node.characters || "").slice(0, 72)}" extends outside ${screen.name}.`
+            });
+          } else if (!insideImmediateParent(node)) {
+            clippedNodeIds.add(node.id);
+            issues.push({
+              code: "TEXT_OUTSIDE_PARENT",
+              severity: "error",
+              nodeId: node.id,
+              message: `Text "${String(node.characters || "").slice(0, 72)}" extends outside its immediate container ${node.parent.name}.`
+            });
+          }
+        }
+      }
+      if ("children" in node) {
+        for (const child of node.children) visit(child);
+      }
+    };
+    visit(root);
+    if (expectedScreenCount > 0 && screens.length !== expectedScreenCount) {
+      issues.push({
+        code: "SCREEN_COUNT_MISMATCH",
+        severity: "error",
+        nodeId: root.id,
+        message: `Found ${screens.length}/${expectedScreenCount} mobile screens.`
+      });
+    }
+    if (prototypeLinkCount < expectedPrototypeLinks) {
+      issues.push({
+        code: "PROTOTYPE_LINKS_MISSING",
+        severity: "error",
+        nodeId: root.id,
+        message: `Found ${prototypeLinkCount}/${expectedPrototypeLinks} prototype links.`
+      });
+    }
+    if (zdsInstanceCount === 0) {
+      issues.push({
+        code: "NO_ZDS_INSTANCES",
+        severity: "error",
+        nodeId: root.id,
+        message: "No top-level ZDS component instances were found in the artifact."
+      });
+    }
+    return {
+      type: request.type,
+      requestId: request.requestId,
+      data: {
+        schemaVersion: 1,
+        rootNodeId: root.id,
+        passed: issues.every((issue) => issue.severity !== "error"),
+        metrics: {
+          screenCount: screens.length,
+          textCount,
+          visibleTextCount,
+          zdsInstanceCount,
+          prototypeLinkCount,
+          staleCopyCount: placeholderNodeIds.size,
+          forbiddenCopyCount: forbiddenNodeIds.size,
+          clippedTextCount: clippedNodeIds.size,
+          lowVisibilityTextCount: lowVisibilityNodeIds.size,
+          visitedNodes
+        },
+        issues
+      }
+    };
+  });
   const handleReadRequest = (request) => __async(null, null, function* () {
-    var _a, _b, _c;
-    return (_c = (_b = (_a = yield handleReadDocumentRequest(request)) != null ? _a : yield handleReadStyleRequest(request)) != null ? _b : yield handleReadExportRequest(request)) != null ? _c : yield handleLifecycleArtifactRequest(request);
+    var _a, _b, _c, _d;
+    return (_d = (_c = (_b = (_a = yield handleReadDocumentRequest(request)) != null ? _a : yield handleReadStyleRequest(request)) != null ? _b : yield handleReadExportRequest(request)) != null ? _c : yield handleLifecycleArtifactRequest(request)) != null ? _d : yield handleProductCraftAuditRequest(request);
   });
   const readRequestTypes = [
     "get_document",
@@ -2396,7 +2757,8 @@ var __async = (__this, __arguments, generator) => {
     "get_screenshot",
     "export_node_as_svg",
     "export_frames_to_pdf",
-    "read_lifecycle_artifact"
+    "read_lifecycle_artifact",
+    "audit_product_craft"
   ];
   const writeRequestTypes = [
     "create_frame",
@@ -2457,7 +2819,8 @@ var __async = (__this, __arguments, generator) => {
     "rename_page",
     "delete_page",
     "navigate_to_page",
-    "apply_lifecycle_artifact_plan"
+    "apply_lifecycle_artifact_plan",
+    "apply_craft_patch"
   ];
   const isReadRequestType = (value) => readRequestTypes.includes(value);
   const isWriteRequestType = (value) => writeRequestTypes.includes(value);
@@ -4054,9 +4417,159 @@ var __async = (__this, __arguments, generator) => {
         return null;
     }
   });
+  const SUPPORTED_OPERATIONS = /* @__PURE__ */ new Set([
+    "create_frame",
+    "create_rectangle",
+    "create_ellipse",
+    "create_text",
+    "import_svg",
+    "clone_node",
+    "move_nodes",
+    "resize_nodes",
+    "set_text",
+    "set_text_properties",
+    "set_fills",
+    "set_strokes",
+    "set_corner_radius",
+    "set_effects",
+    "set_opacity",
+    "set_visible",
+    "set_auto_layout",
+    "set_constraints",
+    "reparent_nodes",
+    "reorder_nodes",
+    "set_reactions"
+  ]);
+  const CREATE_OPERATIONS = /* @__PURE__ */ new Set([
+    "create_frame",
+    "create_rectangle",
+    "create_ellipse",
+    "create_text",
+    "import_svg"
+  ]);
+  const handlers = [
+    handleWriteCreateRequest,
+    handleWriteModifyRequest,
+    handleWriteVectorRequest,
+    handleWriteStyleRequest,
+    handleWriteComponentRequest,
+    handleWritePrototypeRequest
+  ];
+  const resolveAliases = (value, aliases) => {
+    if (typeof value === "string" && value.startsWith("$")) {
+      const resolved = aliases.get(value.slice(1));
+      if (!resolved) throw new Error(`Unknown craft patch alias: ${value}`);
+      return resolved;
+    }
+    if (Array.isArray(value)) return value.map((item) => resolveAliases(item, aliases));
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveAliases(item, aliases)]));
+    }
+    return value;
+  };
+  const isInside = (node, root) => {
+    let current = node;
+    while (current) {
+      if (current.id === root.id) return true;
+      current = current.parent;
+    }
+    return false;
+  };
+  const assertInside = (nodeId, root, label) => __async(null, null, function* () {
+    const node = yield figma.getNodeByIdAsync(nodeId);
+    if (!node || !isInside(node, root)) throw new Error(`${label} ${nodeId} is outside approved craft root ${root.id}`);
+  });
+  const createdNodeId = (response) => {
+    const data = response.data;
+    return typeof (data == null ? void 0 : data.id) === "string" ? data.id : null;
+  };
+  const handleCraftPatchRequest = (request) => __async(null, null, function* () {
+    var _a, _b, _c;
+    if (request.type !== "apply_craft_patch") return null;
+    const params = request.params || {};
+    const rootNodeId = String(params.rootNodeId || "");
+    const root = yield figma.getNodeByIdAsync(rootNodeId);
+    if (!root || root.type === "DOCUMENT") throw new Error(`Craft root not found: ${rootNodeId}`);
+    const operations = Array.isArray(params.operations) ? params.operations : [];
+    if (operations.length === 0 || operations.length > 80) {
+      throw new Error("operations must contain 1-80 craft operations");
+    }
+    const aliases = /* @__PURE__ */ new Map();
+    const results = [];
+    for (let index = 0; index < operations.length; index += 1) {
+      const raw = operations[index];
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error(`operations[${index}] must be an object`);
+      const operation = raw;
+      const type = String(operation.type || "");
+      const alias = String(operation.id || "");
+      if (!SUPPORTED_OPERATIONS.has(type)) throw new Error(`operations[${index}] uses unsupported type: ${type}`);
+      if (!alias || !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(alias)) {
+        throw new Error(`operations[${index}].id must be a stable alias`);
+      }
+      if (aliases.has(alias)) throw new Error(`Duplicate craft patch alias: ${alias}`);
+      const resolvedNodeIds = resolveAliases(
+        Array.isArray(operation.nodeIds) ? operation.nodeIds : [],
+        aliases
+      );
+      const resolvedParams = resolveAliases(
+        operation.params && typeof operation.params === "object" ? operation.params : {},
+        aliases
+      );
+      if (CREATE_OPERATIONS.has(type)) {
+        resolvedParams.parentId = resolvedParams.parentId || root.id;
+        yield assertInside(String(resolvedParams.parentId), root, "Parent");
+      } else if (type === "clone_node") {
+        resolvedParams.parentId = resolvedParams.parentId || root.id;
+        yield assertInside(String(resolvedParams.parentId), root, "Clone parent");
+        if (resolvedNodeIds.length !== 1) throw new Error(`operations[${index}] clone_node requires one source nodeId`);
+      } else {
+        for (const nodeId2 of resolvedNodeIds) yield assertInside(nodeId2, root, "Target");
+        if (type === "reparent_nodes") {
+          yield assertInside(String(resolvedParams.parentId || ""), root, "Reparent destination");
+        }
+        if (type === "set_reactions") {
+          const reactions = Array.isArray(resolvedParams.reactions) ? resolvedParams.reactions : [];
+          for (const reaction of reactions) {
+            const actions = Array.isArray(reaction == null ? void 0 : reaction.actions) ? reaction.actions : [];
+            for (const action of actions) {
+              if ((action == null ? void 0 : action.type) === "NODE" && action.destinationId) {
+                yield assertInside(String(action.destinationId), root, "Prototype destination");
+              }
+            }
+          }
+        }
+      }
+      const childRequest = {
+        type,
+        requestId: `${request.requestId}:${index}`,
+        nodeIds: resolvedNodeIds,
+        params: resolvedParams
+      };
+      let response = null;
+      for (const handler of handlers) {
+        response = yield handler(childRequest);
+        if (response) break;
+      }
+      if (!response) throw new Error(`No handler for craft operation ${type}`);
+      if (response.error) throw new Error(`operations[${index}] ${type} failed: ${response.error}`);
+      const nodeId = (_b = (_a = createdNodeId(response)) != null ? _a : resolvedNodeIds[0]) != null ? _b : null;
+      if (nodeId) aliases.set(alias, nodeId);
+      results.push({ index, id: alias, type, nodeId, data: (_c = response.data) != null ? _c : null });
+    }
+    return {
+      type: request.type,
+      requestId: request.requestId,
+      data: {
+        rootNodeId: root.id,
+        applied: results.length,
+        aliases: Object.fromEntries(aliases),
+        results
+      }
+    };
+  });
   const handleWriteRequest = (request) => __async(null, null, function* () {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
-    return (_h = (_g = (_f = (_e = (_d = (_c = (_b = (_a = yield handleWriteCreateRequest(request)) != null ? _a : yield handleWriteModifyRequest(request)) != null ? _b : yield handleWriteVectorRequest(request)) != null ? _c : yield handleWriteStyleRequest(request)) != null ? _d : yield handleWriteVariableRequest(request)) != null ? _e : yield handleWriteComponentRequest(request)) != null ? _f : yield handleWritePrototypeRequest(request)) != null ? _g : yield handleWritePageRequest(request)) != null ? _h : yield handleLifecycleArtifactRequest(request);
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+    return (_i = (_h = (_g = (_f = (_e = (_d = (_c = (_b = (_a = yield handleWriteCreateRequest(request)) != null ? _a : yield handleWriteModifyRequest(request)) != null ? _b : yield handleWriteVectorRequest(request)) != null ? _c : yield handleWriteStyleRequest(request)) != null ? _d : yield handleWriteVariableRequest(request)) != null ? _e : yield handleWriteComponentRequest(request)) != null ? _f : yield handleWritePrototypeRequest(request)) != null ? _g : yield handleWritePageRequest(request)) != null ? _h : yield handleLifecycleArtifactRequest(request)) != null ? _i : yield handleCraftPatchRequest(request);
   });
   const requestHandlers = [handleReadRequest, handleWriteRequest];
   const debugLog = (scope, message, extra) => {

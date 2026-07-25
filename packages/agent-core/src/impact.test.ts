@@ -83,7 +83,9 @@ describe('deterministic change impact', () => {
     const preview = createImpactPreview(mealOrderingProductSpec, intent, 'RUN-TEST', timestamp)
 
     expect(preview.affectedEntityIds).toEqual([
+      'DECISION-MVP-SCOPE',
       'DEP-WALLET-SDK',
+      'IDEA-MEAL-ORDERING',
       'REQ-PAYMENT',
       'SCREEN-CHECKOUT',
       'SCREEN-WALLET-ERROR',
@@ -91,7 +93,15 @@ describe('deterministic change impact', () => {
     ])
     expect(preview.after.version).toBe(2)
     expect(preview.after.requirements.find((item) => item.id === 'REQ-PAYMENT')).toMatchObject({ status: 'removed', priority: 'wont' })
-    expect(preview.after.screens.find((item) => item.id === 'SCREEN-CHECKOUT')?.requirementIds).toEqual(['REQ-ORDER'])
+    expect(preview.after.idea.summary).not.toMatch(/thanh toán|ví nội bộ/i)
+    expect(preview.after.decisions.find((item) => item.id === 'DECISION-MVP-SCOPE')).toMatchObject({
+      choice: 'MVP chưa gồm thanh toán ví nội bộ.',
+    })
+    expect(preview.after.screens.find((item) => item.id === 'SCREEN-CHECKOUT')).toMatchObject({
+      purpose: 'Kiểm tra đơn trước khi xác nhận',
+      requirementIds: ['REQ-ORDER'],
+      designSystemRoles: ['app-header', 'order-summary', 'primary-button'],
+    })
     expect(preview.after.screens.some((item) => item.id === 'SCREEN-WALLET-ERROR')).toBe(false)
     expect(preview.after.stories.some((item) => item.id === 'STORY-PAY-WALLET')).toBe(false)
     expect(preview.after.dependencies.some((item) => item.id === 'DEP-WALLET-SDK')).toBe(false)

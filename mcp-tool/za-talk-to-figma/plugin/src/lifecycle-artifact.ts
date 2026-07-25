@@ -88,9 +88,15 @@ const getLoadedNodeById = (nodeId: string): BaseNode | null => {
   return null;
 };
 
-const getNodeByIdLocalFirst = async (nodeId: string): Promise<BaseNode | null> => (
-  getLoadedNodeById(nodeId) ?? figma.getNodeByIdAsync(nodeId)
-);
+const getNodeByIdLocalFirst = async (nodeId: string): Promise<BaseNode | null> => {
+  try {
+    const indexed = await figma.getNodeByIdAsync(nodeId);
+    if (indexed) return indexed;
+  } catch {
+    // Test doubles and partially loaded pages may not support indexed lookup.
+  }
+  return getLoadedNodeById(nodeId);
+};
 
 const requireSourcePage = async (targetPageId: unknown): Promise<PageNode> => {
   if (typeof targetPageId !== "string" || !targetPageId) throw new Error("targetPageId is required");
@@ -661,6 +667,11 @@ const renderCreativeBlueprint = async (input: {
 
   let cursorX = 440;
   let maxHeight = 0;
+  const totalElements = Math.max(1, creativeScreens.reduce((total, screen) => {
+    const elements = Array.isArray(screen.elements) ? screen.elements as JsonRecord[] : [];
+    return total + elements.length;
+  }, 0));
+  let completedElements = 0;
   for (const [screenIndex, creativeScreen] of creativeScreens.entries()) {
     const screenId = String(creativeScreen.screenId);
     const recipe = recipeById.get(screenId);
@@ -707,6 +718,7 @@ const renderCreativeBlueprint = async (input: {
         creativeElementKind: rootAlias.kind,
       });
       elementNodes.set(String(rootAlias.id), frame);
+      completedElements += 1;
     }
     for (const element of elements) {
       if (rootAlias && element.id === rootAlias.id) continue;
@@ -723,6 +735,8 @@ const renderCreativeBlueprint = async (input: {
         applyCreativeFrameStyle(created, element);
         node = created;
       } else if (element.kind === "component") {
+        const elementProgress = 18 + Math.round((completedElements / totalElements) * 66);
+        postProgress(input.requestId, elementProgress, `Binding ZDS control: ${String(element.name)}`);
         const slot = input.resolvedSlots.find((candidate) =>
           candidate.screenId === screenId && candidate.slotKey === element.id,
         );
@@ -760,6 +774,10 @@ const renderCreativeBlueprint = async (input: {
         creativeElementKind: element.kind,
       });
       elementNodes.set(String(element.id), node);
+      completedElements += 1;
+      const elementProgress = 18 + Math.round((completedElements / totalElements) * 66);
+      postProgress(input.requestId, elementProgress, `Composed ${completedElements}/${totalElements}: ${String(element.name)}`);
+      await yieldToFigma();
     }
     const progress = 18 + Math.round(((screenIndex + 1) / creativeScreens.length) * 66);
     postProgress(input.requestId, progress, `Composed ${screenIndex + 1}/${creativeScreens.length}: ${String(creativeScreen.name)}`);
@@ -802,6 +820,23 @@ const containsLifecycleScreen = (node: BaseNode): boolean => {
   return node.children.some((child) => containsLifecycleScreen(child));
 };
 
+const renderedLifecycleScreenIds = (root: BaseNode): string[] => {
+  if (!("children" in root)) return [];
+  return root.children.flatMap((node) => {
+    const metadata = readMetadata(node);
+    return metadata?.kind === "screen" && typeof metadata.screenId === "string"
+      ? [metadata.screenId]
+      : [];
+  });
+};
+
+const hasExpectedLifecycleScreens = (root: BaseNode, screens: JsonRecord[]): boolean => {
+  const expected = screens.map((screen) => String(screen.screenId)).sort();
+  const rendered = renderedLifecycleScreenIds(root).sort();
+  return expected.length === rendered.length
+    && expected.every((screenId, index) => rendered[index] === screenId);
+};
+
 const recoverableArtifactPage = async (
   metadata: JsonRecord,
 ): Promise<{ page: PageNode; root: BaseNode } | null> => {
@@ -824,8 +859,9 @@ const recoverableArtifactPage = async (
         && stored.specVersion === metadata.specVersion;
     });
     if (roots.length !== 1) continue;
-    const hasScreens = containsLifecycleScreen(roots[0]);
-    if (!hasScreens) return { page, root: roots[0] };
+    const rootMetadata = readMetadata(roots[0]);
+    const isInterrupted = rootMetadata?.applyStatus === "in_progress";
+    if (isInterrupted || !containsLifecycleScreen(roots[0])) return { page, root: roots[0] };
   }
   return null;
 };
@@ -846,25 +882,32 @@ const applyArtifact = async (params: JsonRecord, requestId: string): Promise<Jso
 
   postProgress(requestId, 3, "Checking existing lifecycle artifact");
   const existing = await findArtifactRoot(idempotencyKey);
+  let staleExistingPage: PageNode | null = null;
   if (existing) {
     const existingMetadata = readMetadata(existing.root)!;
-    if (existingMetadata.planHash !== planHash) {
-      throw new Error(`IDEMPOTENCY_CONFLICT: ${idempotencyKey} already exists with another plan hash`);
+    if (hasExpectedLifecycleScreens(existing.root, screens)) {
+      if (existingMetadata.planHash !== planHash) {
+        throw new Error(`IDEMPOTENCY_CONFLICT: ${idempotencyKey} already exists with another plan hash`);
+      }
+      if (existing.page.id === figma.currentPage.id) focusArtifact(existing.root as SceneNode);
+      postProgress(requestId, 100, "Existing lifecycle artifact is ready");
+      return {
+        schemaVersion: 1,
+        rootNodeIds: [existing.root.id],
+        artifactPageId: existing.page.id,
+        artifactPageName: existing.page.name,
+        idempotent: true,
+      };
     }
-    if (existing.page.id === figma.currentPage.id) focusArtifact(existing.root as SceneNode);
-    postProgress(requestId, 100, "Existing lifecycle artifact is ready");
-    return {
-      schemaVersion: 1,
-      rootNodeIds: [existing.root.id],
-      artifactPageId: existing.page.id,
-      artifactPageName: existing.page.name,
-      idempotent: true,
-    };
+    postProgress(requestId, 5, "Interrupted lifecycle artifact found; rebuilding it");
+    if (existing.page.id !== sourcePage.id) staleExistingPage = existing.page;
+    existing.root.remove();
   }
 
   postProgress(requestId, 8, "Preparing a dedicated Figma page");
-  const recoverable = await recoverableArtifactPage(metadata);
-  const outputPage = recoverable?.page ?? figma.createPage();
+  const recoverable = staleExistingPage ? null : await recoverableArtifactPage(metadata);
+  const outputPage = staleExistingPage ?? recoverable?.page ?? figma.createPage();
+  const reusedOutputPage = Boolean(staleExistingPage || recoverable);
   if (recoverable) recoverable.root.remove();
   outputPage.name = artifactPageName(metadata);
   const root = figma.createSection();
@@ -881,6 +924,9 @@ const applyArtifact = async (params: JsonRecord, requestId: string): Promise<Jso
     sourcePageId: sourcePage.id,
     artifactPageId: outputPage.id,
     artifactPageName: outputPage.name,
+    applyStatus: "in_progress",
+    expectedScreenIds: screens.map((screen) => String(screen.screenId)),
+    expectedScreenCount: screens.length,
   });
 
   try {
@@ -900,7 +946,16 @@ const applyArtifact = async (params: JsonRecord, requestId: string): Promise<Jso
         requestId,
       });
       root.resizeWithoutConstraints(rendered.width, rendered.height);
-      writeMetadata(root, { ...readMetadata(root), prototypeEdges: rendered.edges, creative: true });
+      if (!hasExpectedLifecycleScreens(root, screens)) {
+        throw new Error("ARTIFACT_INCOMPLETE: creative renderer did not produce every expected screen");
+      }
+      writeMetadata(root, {
+        ...readMetadata(root),
+        prototypeEdges: rendered.edges,
+        creative: true,
+        applyStatus: "complete",
+        renderedScreenCount: renderedLifecycleScreenIds(root).length,
+      });
       figma.commitUndo();
       postProgress(requestId, 100, "Creative Figma artifact created");
       return {
@@ -1037,7 +1092,15 @@ const applyArtifact = async (params: JsonRecord, requestId: string): Promise<Jso
       if (sourceNode && destinations.length > 0) await setNavigationReactions(sourceNode, destinations);
     }
     root.resizeWithoutConstraints(Math.max(900, 460 + screens.length * 430), 1_020);
-    writeMetadata(root, { ...readMetadata(root), prototypeEdges: flattenEdges(screens) });
+    if (!hasExpectedLifecycleScreens(root, screens)) {
+      throw new Error("ARTIFACT_INCOMPLETE: renderer did not produce every expected screen");
+    }
+    writeMetadata(root, {
+      ...readMetadata(root),
+      prototypeEdges: flattenEdges(screens),
+      applyStatus: "complete",
+      renderedScreenCount: renderedLifecycleScreenIds(root).length,
+    });
     figma.commitUndo();
     postProgress(requestId, 100, "Lifecycle artifact created");
     return {
@@ -1049,7 +1112,7 @@ const applyArtifact = async (params: JsonRecord, requestId: string): Promise<Jso
     };
   } catch (error) {
     root.remove();
-    if (!recoverable) outputPage.remove();
+    if (!reusedOutputPage) outputPage.remove();
     throw error;
   }
 };
@@ -1133,6 +1196,17 @@ const readArtifact = async (idempotencyKey: string, rootNodeId?: string): Promis
       childSlots,
     }];
   }) : [];
+  const expectedScreenIds = Array.isArray(rootMetadata.expectedScreenIds)
+    ? rootMetadata.expectedScreenIds.map(String).sort()
+    : [];
+  const renderedScreenIds = screens.map((screen) => screen.screenId).sort();
+  const screenSetMatches = expectedScreenIds.length === renderedScreenIds.length
+    && expectedScreenIds.every((screenId, index) => renderedScreenIds[index] === screenId);
+  if (rootMetadata.applyStatus === "in_progress" || (expectedScreenIds.length > 0 && !screenSetMatches)) {
+    throw new Error(
+      `ARTIFACT_INCOMPLETE: expected ${expectedScreenIds.length || rootMetadata.expectedScreenCount || "all"} screens, found ${screens.length}`,
+    );
+  }
   const screenIdByNodeId = new Map(screens.map((screen) => [screen.nodeId, screen.screenId]));
   const prototypeEdges = "children" in root ? root.children.flatMap((screenNode) =>
     [screenNode, ...descendants(screenNode)].flatMap((node) => {
@@ -1159,6 +1233,7 @@ const readArtifact = async (idempotencyKey: string, rootNodeId?: string): Promis
     rootNodeIds: [root.id],
     artifactPageId: page.id,
     artifactPageName: page.name,
+    applyStatus: String(rootMetadata.applyStatus ?? "legacy"),
     designConceptName: String(renderedDesignBriefMetadata?.conceptName ?? ""),
     screens,
     prototypeEdges,

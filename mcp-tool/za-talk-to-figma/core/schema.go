@@ -55,6 +55,65 @@ func ValidateRPC(tool string, nodeIDs []string, params map[string]interface{}) s
 			return msg
 		}
 
+	case "audit_product_craft":
+		rootNodeID, _ := params["rootNodeId"].(string)
+		if !ValidNodeID(rootNodeID) {
+			return "rootNodeId is required and must use colon format e.g. 4029:12345"
+		}
+		if count, ok := params["expectedScreenCount"].(float64); ok && (count < 0 || count > 40) {
+			return "expectedScreenCount must be between 0 and 40"
+		}
+		if count, ok := params["expectedPrototypeLinks"].(float64); ok && (count < 0 || count > 100) {
+			return "expectedPrototypeLinks must be between 0 and 100"
+		}
+		for _, key := range []string{"forbiddenTerms", "placeholderTerms"} {
+			if raw, ok := params[key]; ok {
+				terms, valid := raw.([]interface{})
+				if !valid || len(terms) > 100 {
+					return fmt.Sprintf("%s must be an array with at most 100 strings", key)
+				}
+				for _, term := range terms {
+					if value, ok := term.(string); !ok || strings.TrimSpace(value) == "" || len(value) > 200 {
+						return fmt.Sprintf("%s must contain non-empty strings up to 200 characters", key)
+					}
+				}
+			}
+		}
+
+	case "apply_craft_patch":
+		rootNodeID, _ := params["rootNodeId"].(string)
+		if !ValidNodeID(rootNodeID) {
+			return "rootNodeId is required and must use colon format e.g. 4029:12345"
+		}
+		rawOperations, ok := params["operations"].([]interface{})
+		if !ok || len(rawOperations) == 0 || len(rawOperations) > 80 {
+			return "operations must contain 1-80 objects"
+		}
+		allowed := map[string]bool{
+			"create_frame": true, "create_rectangle": true, "create_ellipse": true, "create_text": true,
+			"import_svg": true, "clone_node": true, "move_nodes": true, "resize_nodes": true,
+			"set_text": true, "set_text_properties": true, "set_fills": true, "set_strokes": true,
+			"set_corner_radius": true, "set_effects": true, "set_opacity": true, "set_visible": true,
+			"set_auto_layout": true, "set_constraints": true, "reparent_nodes": true,
+			"reorder_nodes": true, "set_reactions": true,
+		}
+		aliases := map[string]bool{}
+		for index, raw := range rawOperations {
+			operation, valid := raw.(map[string]interface{})
+			if !valid {
+				return fmt.Sprintf("operations[%d] must be an object", index)
+			}
+			alias, _ := operation["id"].(string)
+			if alias == "" || len(alias) > 64 || aliases[alias] {
+				return fmt.Sprintf("operations[%d].id must be a unique alias up to 64 characters", index)
+			}
+			aliases[alias] = true
+			operationType, _ := operation["type"].(string)
+			if !allowed[operationType] {
+				return fmt.Sprintf("operations[%d].type is not allowed: %s", index, operationType)
+			}
+		}
+
 	case "get_nodes_info":
 		if len(nodeIDs) == 0 {
 			return "nodeIds is required and must not be empty"

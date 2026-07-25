@@ -18,6 +18,7 @@ export * from './product-spec'
 export * from './state-machine'
 export * from './canvas-program'
 export * from './figma-creative'
+export * from './figma-craft-audit'
 
 export const workflowViews = ['discover', 'decide', 'deliver', 'change'] as const
 export type WorkflowView = (typeof workflowViews)[number]
@@ -70,6 +71,23 @@ export const providerIntentSchema = z.object({
   artifactAction: z.enum(providerArtifactActions).nullable(),
 }).default({ kind: 'conversation', target: null, artifactAction: null })
 export type ProviderIntent = z.infer<typeof providerIntentSchema>
+
+export const conversationSuggestionKinds = ['explore', 'visualize', 'refine', 'commit', 'artifact'] as const
+export const conversationSuggestionSchema = z.object({
+  id: z.string().min(1).max(64),
+  label: z.string().min(1).max(48),
+  prompt: z.string().min(1).max(320),
+  kind: z.enum(conversationSuggestionKinds),
+})
+export type ConversationSuggestion = z.infer<typeof conversationSuggestionSchema>
+
+export const conversationRouteResultSchema = z.object({
+  schemaVersion: z.literal(1),
+  message: z.string().min(1),
+  intent: providerIntentSchema,
+  suggestions: z.array(conversationSuggestionSchema).max(3),
+})
+export type ConversationRouteResult = z.infer<typeof conversationRouteResultSchema>
 
 const clarificationQuestionSchema = z.object({
   id: z.string().min(1),
@@ -216,6 +234,7 @@ export interface SendChatOutput {
   userMessage: ChatMessage
   assistantMessage: ChatMessage
   commands: ProviderCommand[]
+  suggestions: ConversationSuggestion[]
   canvasProgram: CanvasProgram
   canvasProgramSource: 'provider' | 'provider_augmented' | 'deterministic_fallback' | 'none'
   canvasRequestId: string | null
@@ -413,6 +432,32 @@ const providerIntentJsonSchema = {
   },
 } as const
 
+export const conversationRouteJsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['schemaVersion', 'message', 'intent', 'suggestions'],
+  properties: {
+    schemaVersion: { type: 'integer', const: 1 },
+    message: { type: 'string' },
+    intent: providerIntentJsonSchema,
+    suggestions: {
+      type: 'array',
+      maxItems: 3,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'label', 'prompt', 'kind'],
+        properties: {
+          id: { type: 'string' },
+          label: { type: 'string' },
+          prompt: { type: 'string' },
+          kind: { type: 'string', enum: conversationSuggestionKinds },
+        },
+      },
+    },
+  },
+} as const
+
 export function reasoningJsonSchemaForPhase(
   phase: WorkflowView,
   options: { includeCanvasProgram?: boolean; includeFigmaBlueprint?: boolean; intentKind?: ProviderIntent['kind'] } = {},
@@ -456,6 +501,10 @@ export function reasoningJsonSchemaForPhase(
 
 export function parseReasoningResult(value: unknown): ReasoningResult {
   return reasoningResultSchema.parse(value)
+}
+
+export function parseConversationRouteResult(value: unknown): ConversationRouteResult {
+  return conversationRouteResultSchema.parse(value)
 }
 
 export function parsePhaseReasoningResult(value: unknown, expectedPhase: WorkflowView): PhaseReasoningResult {

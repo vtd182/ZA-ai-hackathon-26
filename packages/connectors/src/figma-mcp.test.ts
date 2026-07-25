@@ -205,4 +205,46 @@ describe('FigmaMcpAdapter', () => {
     expect(transport.calls.find((call) => call.name === 'apply_design_system_plan')?.timeoutMs)
       .toBe(figmaApplyTimeoutMs(preflight.plan.estimatedOperations))
   })
+
+  it('runs an independent product-craft audit against the approved session', async () => {
+    const bootstrap = new FakeTransport({ get_runtime_health: health, get_pages: pages })
+    const target = await new FigmaMcpAdapter({ binaryPath: '/unused' }, bootstrap)
+      .pinTarget(sessionId, '0:1', '2026-07-22T12:00:00.000Z')
+    const audit = {
+      schemaVersion: 1,
+      rootNodeId: '10:1',
+      passed: true,
+      metrics: {
+        screenCount: 4,
+        textCount: 24,
+        visibleTextCount: 20,
+        zdsInstanceCount: 12,
+        prototypeLinkCount: 3,
+        staleCopyCount: 0,
+        forbiddenCopyCount: 0,
+        clippedTextCount: 0,
+        lowVisibilityTextCount: 0,
+        visitedNodes: 160,
+      },
+      issues: [],
+    }
+    const transport = new FakeTransport({
+      get_runtime_health: health,
+      get_pages: pages,
+      audit_product_craft: audit,
+    })
+    const adapter = new FigmaMcpAdapter({ binaryPath: '/unused' }, transport)
+
+    await expect(adapter.auditProductCraft({
+      target,
+      rootNodeId: '10:1',
+      expectedScreenCount: 4,
+      expectedPrototypeLinks: 3,
+      forbiddenTerms: ['payment'],
+    })).resolves.toEqual(audit)
+    expect(transport.calls.at(-1)).toMatchObject({
+      name: 'audit_product_craft',
+      args: { sessionId, rootNodeId: '10:1', forbiddenTerms: ['payment'] },
+    })
+  })
 })

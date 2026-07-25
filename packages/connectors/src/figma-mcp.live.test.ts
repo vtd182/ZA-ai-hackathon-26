@@ -6,6 +6,7 @@ import { createLivePrimitiveFallbackManifest, normalizeFigmaDesignSystemContext 
 import { FigmaMcpAdapter } from './figma-mcp'
 
 const runLive = process.env.PM_AGENT_FIGMA_LIVE === '1' ? it : it.skip
+const runCraftAudit = process.env.PM_AGENT_FIGMA_CRAFT_ROOT ? it : it.skip
 
 describe('FigmaMcpAdapter live', () => {
   runLive('pins, writes and independently reads back a live Figma artifact', async () => {
@@ -54,4 +55,37 @@ describe('FigmaMcpAdapter live', () => {
       await adapter.close()
     }
   }, 60_000)
+
+  runCraftAudit('audits an existing product-craft root on the visible Page', async () => {
+    const binaryPath = process.env.PM_AGENT_FIGMA_BINARY
+      ?? new URL('../../../mcp-tool/za-talk-to-figma/bin/za-talk-to-figma', import.meta.url).pathname
+    const adapter = new FigmaMcpAdapter({ binaryPath })
+
+    try {
+      const health = await adapter.health()
+      const session = health.sessions.find((item) => item.sessionId === health.activeSession) ?? health.sessions[0]!
+      const pages = await adapter.pages(session.sessionId)
+      const target = await adapter.pinTarget(session.sessionId, pages.currentPageId)
+      const audit = await adapter.auditProductCraft({
+        target,
+        rootNodeId: process.env.PM_AGENT_FIGMA_CRAFT_ROOT!,
+        expectedScreenCount: Number(process.env.PM_AGENT_FIGMA_EXPECTED_SCREENS ?? 5),
+        expectedPrototypeLinks: Number(process.env.PM_AGENT_FIGMA_EXPECTED_LINKS ?? 4),
+        forbiddenTerms: (process.env.PM_AGENT_FIGMA_FORBIDDEN_TERMS ?? '')
+          .split('|')
+          .map((term) => term.trim())
+          .filter(Boolean),
+      })
+
+      console.info(JSON.stringify(audit, null, 2))
+      expect(audit.metrics.screenCount).toBe(Number(process.env.PM_AGENT_FIGMA_EXPECTED_SCREENS ?? 5))
+      if (process.env.PM_AGENT_FIGMA_EXPECT_CRAFT_PASS === '1') {
+        expect(audit.passed).toBe(true)
+      } else {
+        expect(audit.issues.length).toBeGreaterThan(0)
+      }
+    } finally {
+      await adapter.close()
+    }
+  }, 90_000)
 })

@@ -32,7 +32,7 @@ Signature moment:
 
 ## 3. Current status
 
-- **Date:** 2026-07-24
+- **Date:** 2026-07-26
 - **Milestone:** M2 guarded artifact execution and demo readiness.
 - **Completed task:** `P0-FND-001` Bootstrap workspace.
 - **Completed tasks:** Foundation/fixtures/domain schemas, workflow state machine, ProductSpec invariants, deterministic impact graph and immutable approval policy.
@@ -68,8 +68,8 @@ Signature moment:
 - **Completed task:** `P0-AGT-006` thread-specific decision-to-ProductSpec synthesis with atomic empty-draft replacement.
 - **Completed task:** `P0-FIG-007` allowlisted same-file ZDS instance catalog, strict clone/apply and instance-backed read-back.
 - **Completed task:** `P0-FIG-008` provider-owned product-grade Figma synthesis with live ZDS capture, guarded creative execution and visual review.
-- **Current task:** `P0-FIG-009` stable ZDS source binding is complete; `P0-UX-001` remains the next paused release slice.
-- **Current slice:** source-page identity now survives viewing generated output Pages; explicit rebind, semantic readiness and pre-planning role coverage prevent false live manifests.
+- **Current task:** `P0-CRE-001` Creative Studio conversation and agentic Figma craft.
+- **Current slice:** verify the conversation-first collaboration contract and approved iterative Figma craft worker end to end; code, direct MCP craft and independent live audit are complete, while one app-owned live worker run remains pending provider quota.
 - **Last known repository state:** Runnable Electron app with one blank-first infinite canvas per thread, typed Canvas Programs, Mock/Codex provider paths, thread-specific ProductSpec synthesis, editable prototypes, deterministic impact preview, Markdown PRD export and approved strict live Figma ZDS write/read-back verification.
 - **Known blockers:** cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -106,7 +106,7 @@ Signature moment:
 - Metadata tối thiểu trên node: runId, screenId, requirementIds, specVersion, idempotency key.
 - Postflight dùng read-back snapshot từ Figma/mock store.
 - Target file/page phải ở sandbox allowlist.
-- MCP hiện có 98 tools, stdio transport, local WebSocket plugin bridge, multi-session routing và typed error contract.
+- MCP hiện có 104 tools, stdio transport, local WebSocket plugin bridge, multi-session routing và typed error contract.
 - Existing DS apply đang hard-code registration form slots và cho phép primitive fallback; strict hackathon flow cần generic recipe + zero-write preflight.
 - Pin explicit Figma `sessionId`; không dựa vào global active route.
 - The public framework duplicate is an allowlisted same-file ZDS catalog: most DS definitions are exposed as copied `INSTANCE` nodes rather than local `COMPONENT` nodes.
@@ -604,6 +604,28 @@ Signature moment:
 - **Regression test:** Figma adapter verifies a source while an output Page is current; plugin applies and reads back from the non-current source; source-policy and unmapped-manifest tests cover rejection. Live app prepare returned a valid 4-screen/45-layer immutable preflight after plugin reload. Full evidence: 148 workspace tests, 263 plugin tests, Go suite, build and smoke.
 - **Caveat:** a new Figma plugin session still requires explicit source allowlisting because the immutable target includes the session ID.
 
+### BUG-044 - Iterative Figma craft exhausted provider quota through tiny MCP calls
+
+- **Status:** FIXED
+- **Found:** 2026-07-26, `P0-CRE-001` direct login craft forward test.
+- **Symptom:** the direct design agent improved the artifact for roughly 14 minutes but stopped before final QA when the Codex usage quota was reached.
+- **Trigger:** compose and refine a five-screen product journey through hundreds of independent low-level MCP calls.
+- **Root cause:** the MCP write surface required one provider round-trip per create/clone/style operation, so tool-call overhead consumed the worker budget even though Figma execution itself stayed responsive.
+- **Fix:** added guarded `apply_craft_patch` with 1-80 ordered operations, stable aliases and same-root enforcement; worker retries preserve and repair the existing Page under one 30-minute total deadline instead of rebuilding.
+- **Regression test:** `craft-patch.test.ts`, full 268-test plugin suite and Go schema/registration tests pass; direct live repair applied 12 dependent operations in one call.
+- **Caveat:** a full app-owned worker run still needs fresh Codex quota; usage-limit errors now preserve the partial artifact and report retry/resume semantics.
+
+### BUG-045 - Figma worker could self-report visual QA without proving visible quality
+
+- **Status:** FIXED
+- **Found:** 2026-07-26, `P0-CRE-001` screenshot review of the direct login craft.
+- **Symptom:** a structurally complete artifact still contained source-demo copy, near-invisible consent labels and a title extending outside its card.
+- **Trigger:** trust the model report or structural lifecycle read-back without comparing screenshots and rendered text conditions.
+- **Root cause:** screenshot calls, post-screenshot refinement and visual defect checks were claims in the provider report rather than independently observed gates.
+- **Fix:** the host now requires observed initial/final screenshot calls with a write between them, then runs `audit_product_craft` independently and feeds exact findings into bounded repair passes. The audit checks stale/forbidden copy, effective opacity, paint contrast including covering siblings, screen/container overflow, ZDS adoption and prototype links.
+- **Regression test:** `product-craft-audit.test.ts`, worker evidence tests and optional live craft audit pass. Final live root `496:18760` reports five screens, 18 ZDS instances, five prototype links and zero issues across 415 nodes; the final screenshot was visually reviewed.
+- **Caveat:** deterministic audit complements rather than replaces screenshot critique; taste, hierarchy and narrative still require the skill-driven visual review loop.
+
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 
 ```md
@@ -662,10 +684,10 @@ App commands đã chạy thành công:
 ./run.sh             # verified 2026-07-22; Electron dev app opens
 ./run.sh setup       # verified 2026-07-22; installs/builds app, Go runtime and Figma plugin bundle
 ./run.sh reset       # verified by shared reset path 2026-07-22; resets then opens dev app
-./run.sh typecheck   # verified 2026-07-24
-./run.sh test        # verified 2026-07-24; 134 tests pass, 1 optional live test skipped
-./run.sh build       # verified 2026-07-23
-./run.sh smoke       # verified 2026-07-23; Mock provider + canvas + Markdown artifact
+./run.sh typecheck   # verified 2026-07-26
+./run.sh test        # verified 2026-07-26; 158 tests pass, 1 optional live test skipped
+./run.sh build       # verified 2026-07-26
+./run.sh smoke       # verified 2026-07-26; Mock provider + canvas + Markdown artifact
 ./run.sh smoke-recovery  # verified 2026-07-22; injected Jira failure + target-only UI retry
 ./run.sh smoke-reset # verified 2026-07-22; UI reset + three deterministic seeds + full flow
 ./run.sh smoke-canvas # verified 2026-07-22; drag/undo/delete boundary + invalid command + full flow
@@ -679,9 +701,9 @@ PM_AGENT_FIGMA_LIVE=1 ./run.sh smoke  # verified 2026-07-23; strict same-file ZD
 Command MCP đã chạy thành công:
 
 ```text
-cd mcp-tool/za-talk-to-figma && go test ./...  # verified 2026-07-23
-cd mcp-tool/za-talk-to-figma/plugin && bun run typecheck  # verified 2026-07-23
-cd mcp-tool/za-talk-to-figma/plugin && bun test  # verified 2026-07-23; 259 tests pass
+cd mcp-tool/za-talk-to-figma && go test ./...  # verified 2026-07-26
+cd mcp-tool/za-talk-to-figma/plugin && bun run typecheck  # verified 2026-07-26
+cd mcp-tool/za-talk-to-figma/plugin && bun test  # verified 2026-07-26; 268 tests pass
 PM_AGENT_FIGMA_LIVE=1 pnpm exec vitest run packages/connectors/src/figma-mcp.live.test.ts  # verified 2026-07-23
 pnpm vitest run --exclude apps/desktop/src/main/canvas-bridge.test.ts --exclude packages/connectors/src/figma-runtime.test.ts  # verified 2026-07-23; 118 pass, 1 optional live skip
 ```
@@ -1000,6 +1022,16 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Approved live apply recovered only an incomplete agent-owned Page, wrote in 4.7 seconds, read back in 0.5 seconds and verified root `489:16542`, 4 distinct screens, 16 real ZDS instances and 4 prototype edges.
 - Final regression: workspace typecheck/build; 144 tests plus one optional skip; 262 plugin tests and plugin typecheck; full Go suite; canvas, semantic flow and approval-reject smokes. The semantic smoke caught and fixed overlong deterministic header copy before close-out.
 - Next action: rehearse the exact hackathon script in a clean workspace, export the review bundle and capture final canvas/progress/Figma visuals.
+
+### 2026-07-26 - Conversation-first studio and independently audited Figma craft
+
+- Replaced phase-shaped ordinary chat output with a compact collaboration route containing a direct response, explicit intent and up to three content-specific suggestions. Canvas selection is context only; `/studio explore|critique|sketch|refine` provides deterministic user control.
+- Replaced the live one-shot composition path with an approved iterative Codex worker. The worker receives immutable ProductSpec truth, a sparse execution scaffold and a repository skill for experience direction, ZDS craft and screenshot QA; partial Pages are repaired rather than rebuilt.
+- Added `apply_craft_patch` to batch dependent create/clone/style/prototype operations and `audit_product_craft` as an independent gate for screen count, ZDS adoption, real prototype links, stale/forbidden copy, contrast and text overflow.
+- Forward-tested a five-screen ZaloPass login journey directly through the MCP. The provider stopped on usage quota after a long low-level pass, but the partial Page was retained; batch repair then removed stale source copy, corrected header/consent/action contrast and fixed a screenshot-detected success-card overflow.
+- Final live audit on root `496:18760` passed 5 screens, 18 ZDS instances, 5 prototype links, 44 visible text nodes and zero issues across 415 nodes. Exported visual: `mcp-tool/za-talk-to-figma/artifacts/zalo-login-craft-audited.png`.
+- Verification: 158 workspace tests plus one optional skip, workspace typecheck/build/smoke, 268 plugin tests/typecheck/build, full Go suite, skill validation and optional live craft audit pass.
+- Next action: when Codex quota is available, run one complete app-owned `/figma create` execution and verify the automatic screenshot-refine-audit loop without manual MCP repair.
 
 ## 10. End-of-session checklist
 

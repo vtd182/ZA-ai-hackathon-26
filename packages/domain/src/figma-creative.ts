@@ -52,7 +52,7 @@ export const figmaCreativeScreenSchema = z.object({
   height: z.number().min(568).max(1_600),
   background: z.string().min(1).max(32),
   presentationNote: z.string().min(1).max(240),
-  elements: z.array(figmaCreativeElementSchema).min(4).max(32),
+  elements: z.array(figmaCreativeElementSchema).min(2).max(32),
 })
 export type FigmaCreativeScreen = z.infer<typeof figmaCreativeScreenSchema>
 
@@ -135,7 +135,7 @@ export const figmaCreativeBlueprintJsonSchema = {
           presentationNote: { type: 'string' },
           elements: {
             type: 'array',
-            minItems: 4,
+            minItems: 2,
             maxItems: 18,
             items: {
               type: 'object',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ProviderRegistry, inferLocalCommands } from './index'
+import { createScaffoldFigmaBlueprint, ProviderRegistry, inferLocalCommands } from './index'
 import { parseProductSpec } from '@pm-agent/domain'
 
 const creativeTestSpec = parseProductSpec({
@@ -103,6 +103,27 @@ describe('mock provider command inference', () => {
     expect(response.capabilities).toEqual(provider.capabilities)
   })
 
+  it('treats a canvas selection as conversation context instead of implicit edit permission', async () => {
+    const provider = new ProviderRegistry().get('mock')
+    const response = await provider.reason({
+      threadId: 'THREAD',
+      phase: 'discover',
+      message: 'Bạn thấy phần đăng nhập này đã đủ rõ chưa?',
+      recentMessages: [],
+      responseMode: 'route',
+      selection: {
+        entityId: 'SCREEN-LOGIN',
+        label: 'Màn hình đăng nhập',
+        shapeIds: ['shape-login'],
+        selectedShapeCount: 1,
+      },
+      remoteRef: null,
+    }, { modelId: 'deterministic-v1' }, new AbortController().signal)
+
+    expect(response.result.intent.kind).toBe('conversation')
+    expect(response.result.commands).toEqual([])
+  })
+
   it('creates a provider-owned creative Figma blueprint with primitives and complete ZDS coverage', async () => {
     const provider = new ProviderRegistry().get('mock')
     const response = await provider.reason({
@@ -125,6 +146,22 @@ describe('mock provider command inference', () => {
       expect(generated?.elements.some((element) => element.kind === 'frame')).toBe(true)
       expect(generated?.elements.some((element) => element.kind === 'text' && Boolean(element.text))).toBe(true)
     }
+  })
+
+  it('creates a sparse agentic scaffold without prescribing generic card composition', () => {
+    const blueprint = createScaffoldFigmaBlueprint(
+      creativeTestSpec,
+      ['app-header', 'location-input', 'primary-button'],
+      { sparse: true },
+    )
+    const elements = blueprint.screens[0]!.elements
+
+    expect(elements.map((element) => element.name)).not.toContain('Product moment')
+    expect(elements.map((element) => element.name)).not.toContain('Product detail')
+    expect(elements.some((element) => element.kind === 'text')).toBe(false)
+    expect(elements.filter((element) => element.kind === 'component').map((element) => element.componentRole))
+      .toEqual(expect.arrayContaining(['app-header', 'location-input', 'primary-button']))
+    expect(blueprint.visualNarrative).toContain('Scaffold tối thiểu')
   })
 
   it('keeps deterministic fallback copy inside compact ZDS control limits', async () => {

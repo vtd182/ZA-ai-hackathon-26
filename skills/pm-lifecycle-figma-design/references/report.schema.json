@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifactPageName",
+    "rootNodeId",
+    "screenCount",
+    "zdsInstanceCount",
+    "prototypeLinkCount",
+    "screenshotsReviewed",
+    "refinementPasses",
+    "removedRequirementMentions",
+    "visualQaPassed",
+    "summary"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "artifactPageName": { "type": "string" },
+    "rootNodeId": { "type": "string" },
+    "screenCount": { "type": "integer", "minimum": 1 },
+    "zdsInstanceCount": { "type": "integer", "minimum": 1 },
+    "prototypeLinkCount": { "type": "integer", "minimum": 0 },
+    "screenshotsReviewed": { "type": "integer", "minimum": 2 },
+    "refinementPasses": { "type": "integer", "minimum": 1 },
+    "removedRequirementMentions": { "type": "integer", "const": 0 },
+    "visualQaPassed": { "type": "boolean", "const": true },
+    "summary": { "type": "string", "minLength": 1 }
+  }
+}

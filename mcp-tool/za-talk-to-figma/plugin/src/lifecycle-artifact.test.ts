@@ -227,8 +227,16 @@ describe("lifecycle artifact plugin handlers", () => {
       specVersion: 1,
       idempotencyKey: "figma:stale",
       planHash: "b".repeat(64),
+      applyStatus: "in_progress",
     }));
     stalePage.appendChild(staleRoot);
+    const interruptedScreen = containerNode("FRAME");
+    interruptedScreen.setPluginData("za-pm-lifecycle", JSON.stringify({
+      namespace: "za.pm-lifecycle/v1",
+      kind: "screen",
+      screenId: "SCREEN-MENU",
+    }));
+    staleRoot.appendChild(interruptedScreen);
     const prepared = preflight();
     prepared.source.metadata.pageStrategy = "create_or_recover_incomplete";
     prepared.source.metadata.idempotencyKey = "figma:RUN-1:creative-new";
@@ -243,6 +251,68 @@ describe("lifecycle artifact plugin handlers", () => {
     expect(applied?.data.artifactPageId).toBe(stalePage.id);
     expect(stalePage.children).toHaveLength(1);
     expect(stalePage.children[0]).not.toBe(staleRoot);
+  });
+
+  it("rejects an interrupted artifact read and rebuilds the same page on retry", async () => {
+    const interruptedPage = (globalThis as any).figma.createPage();
+    interruptedPage.name = "PM · Remind backup · v1";
+    const interruptedRoot = containerNode("SECTION");
+    interruptedRoot.setPluginData("za-pm-lifecycle", JSON.stringify({
+      namespace: "za.pm-lifecycle/v1",
+      kind: "artifact_root",
+      specId: "SPEC-1",
+      specVersion: 1,
+      idempotencyKey: "figma:RUN-1:v1",
+      planHash: "old-plan",
+      applyStatus: "in_progress",
+      expectedScreenIds: ["SCREEN-MENU", "SCREEN-DETAIL"],
+      expectedScreenCount: 2,
+    }));
+    interruptedPage.appendChild(interruptedRoot);
+    const partialScreen = containerNode("FRAME");
+    partialScreen.setPluginData("za-pm-lifecycle", JSON.stringify({
+      namespace: "za.pm-lifecycle/v1",
+      kind: "screen",
+      screenId: "SCREEN-MENU",
+    }));
+    interruptedRoot.appendChild(partialScreen);
+
+    await expect(handleLifecycleArtifactRequest(request("read_lifecycle_artifact", {
+      targetPageId: "0:1",
+      idempotencyKey: "figma:RUN-1:v1",
+      rootNodeId: interruptedRoot.id,
+    }) as any)).rejects.toThrow("ARTIFACT_INCOMPLETE");
+
+    const retryPlan = preflight();
+    retryPlan.source.screens.push({
+      ...structuredClone(retryPlan.source.screens[0]),
+      screenId: "SCREEN-DETAIL",
+      name: "Detail",
+    });
+    retryPlan.resolvedSlots.push({
+      ...structuredClone(retryPlan.resolvedSlots[0]),
+      screenId: "SCREEN-DETAIL",
+      slotKey: "detail",
+    });
+    const applied = await handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {
+      preflightPlan: retryPlan,
+      planHash: "new-plan",
+      targetPageId: "0:1",
+    }) as any);
+    const read = await handleLifecycleArtifactRequest(request("read_lifecycle_artifact", {
+      targetPageId: "0:1",
+      idempotencyKey: "figma:RUN-1:v1",
+      rootNodeId: applied?.data.rootNodeIds[0],
+    }) as any);
+
+    expect(applied?.data.idempotent).toBe(false);
+    expect(applied?.data.artifactPageId).toBe(interruptedPage.id);
+    expect(documentRoot.children).toHaveLength(2);
+    expect(read?.data.applyStatus).toBe("complete");
+    expect(read?.data.screens.map((screen: any) => screen.screenId).sort()).toEqual([
+      "SCREEN-DETAIL",
+      "SCREEN-MENU",
+    ]);
   });
 
   it("rejects a mismatched page with zero writes", async () => {

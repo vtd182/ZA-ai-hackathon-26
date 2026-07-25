@@ -4,7 +4,9 @@ import Anthropic from '@anthropic-ai/sdk'
 import { GoogleGenAI } from '@google/genai'
 import OpenAI from 'openai'
 import {
+  conversationRouteJsonSchema,
   extractJson,
+  parseConversationRouteResult,
   parsePhaseReasoningResult,
   reasoningJsonSchemaForPhase,
   type CanvasSelectionContext,
@@ -18,6 +20,7 @@ import {
   type ProviderIntent,
   type ProductSpec,
   type FigmaCreativeBlueprint,
+  type ConversationSuggestion,
   type WorkflowView,
   validateFigmaCreativeBlueprintStructure,
 } from '@pm-agent/domain'
@@ -46,6 +49,7 @@ export interface ProviderRuntimeConfig {
 
 export interface ProviderResponse {
   result: PhaseReasoningResult
+  suggestions: ConversationSuggestion[]
   remoteRef: string | null
   capabilities: ProviderCapabilities
   events: ProviderEvent[]
@@ -62,6 +66,7 @@ function normalizedResponse(
   result: PhaseReasoningResult,
   remoteRef: string | null,
   capabilities: ProviderCapabilities,
+  suggestions: ConversationSuggestion[] = [],
   usage?: { inputTokens: number; outputTokens: number },
 ): ProviderResponse {
   const at = new Date().toISOString()
@@ -72,7 +77,16 @@ function normalizedResponse(
   ]
   if (usage) events.push({ type: 'usage', sequence: events.length, at, ...usage })
   events.push({ type: 'turn_completed', sequence: events.length, at })
-  return { result, remoteRef, capabilities, events }
+  return { result, suggestions, remoteRef, capabilities, events }
+}
+
+function normalizedParsedResponse(
+  parsed: ParsedProviderOutput,
+  remoteRef: string | null,
+  capabilities: ProviderCapabilities,
+  usage?: { inputTokens: number; outputTokens: number },
+): ProviderResponse {
+  return normalizedResponse(parsed.result, remoteRef, capabilities, parsed.suggestions, usage)
 }
 
 const mockCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: false, remoteResume: false, usage: false }
@@ -95,6 +109,7 @@ Luôn phân loại yêu cầu bằng intent:
 Không suy ra canvas mutation chỉ vì câu có các động từ chung. Khi không chắc, dùng conversation.
 Mỗi legacy command luôn có đủ type, label, query, view, nodeId, nodeKind, fromId, toId; field không áp dụng phải là null.
 Canvas là không gian sáng tạo, không phải một lifecycle form. Chỉ đề xuất thay đổi canvas khi người dùng yêu cầu vẽ/sửa rõ ràng hoặc đang feedback vùng chọn; hội thoại bình thường phải dùng mode none.
+Canvas selection chỉ là context chú ý, không phải quyền sửa. Khi người dùng hỏi, critique hoặc explore về vùng chọn, vẫn dùng conversation; chỉ dùng edit khi họ yêu cầu thay đổi rõ ràng.
 Khi schema có canvasProgram, luôn trả field này. Với flow/prototype, ưu tiên mode operations. Mode script chỉ dành cho developer automation lặp lại; mode none khi không cần đổi canvas.
 Mỗi canvas operation luôn có đủ op, id, label, kind, fromId, toId, color, x, y, description, badge, lane, icon, tone, screen; field không áp dụng phải là null.
 CanvasProgram luôn có sceneType, title, description; field không áp dụng phải là null.
@@ -121,6 +136,7 @@ Tạo prototype edge từ CTA component thật đến màn hình đích. fromEle
 Chỉ trả JSON đúng schema.`
 
 function outputSchemaFor(request: ReasoningRequest): Record<string, unknown> {
+  if (request.responseMode === 'route') return conversationRouteJsonSchema
   const creative = request.responseMode === 'creative'
   const figma = request.responseMode === 'figma'
   return reasoningJsonSchemaForPhase(request.phase, {
@@ -162,7 +178,13 @@ ${(request.figmaComponentRoles ?? []).join(', ')}
 Hãy trả figmaBlueprint. message chỉ tóm tắt design direction và những lựa chọn quan trọng. intent phải là artifact/prepare. commands để trống.`
     : request.responseMode === 'creative'
     ? `Agent Core đã khóa intent ${request.intentHint?.kind ?? 'draw'}. Hãy hiện thực hóa đúng yêu cầu bằng Canvas Program có thể chỉnh sửa; không đổi sang intent khác.`
-    : 'Hãy phân loại intent trước. Đây là route nhẹ: không tạo Canvas Program trong lượt này.'
+    : request.responseMode === 'route'
+    ? `Đây là một lượt cộng tác, không phải lifecycle form.
+Trả lời trực tiếp như một senior product/design collaborator: phản biện giả định, làm rõ điều quan trọng và giúp người dùng thấy họ có thể feedback vào đâu.
+Trong message, cho người dùng thấy một giả thuyết hoặc lựa chọn thiết kế cụ thể, điều còn chưa chắc và điểm feedback hữu ích nhất. Không kể chain-of-thought và không dùng câu trả lời quy trình chung chung.
+Chỉ dùng intent khác conversation khi câu hiện tại yêu cầu hành động rõ ràng. Không tự bắt đầu Discovery, không tự vẽ và không tự chuẩn bị artifact chỉ vì người dùng đang kể một ý tưởng.
+Đưa 0-3 suggestions ngắn, cụ thể theo nội dung vừa trao đổi, khác nhau và hoàn toàn tùy chọn. Suggestions có thể là khám phá thêm, phác trực quan, refine ý tưởng, chốt ProductSpec hoặc chuẩn bị artifact. Không dùng nhãn chung chung kiểu "Tiếp tục" và không biến suggestions thành checklist bắt buộc.`
+    : 'Đây là lượt lifecycle có cấu trúc. Hoàn thành đúng phaseData của phase hiện tại.'
   return `${systemPolicy}\n\n${responseInstruction}\n\nPhase hiện tại: ${request.phase}\n${selection}\n${canvas}\n${diff}\n\nLịch sử gần đây:\n${transcript}\n\nYêu cầu mới:\n${request.message}`
 }
 
@@ -182,10 +204,41 @@ function parseProviderFigmaBlueprint(text: string, phase: WorkflowView): PhaseRe
   return result
 }
 
-function parseProviderOutput(text: string, request: ReasoningRequest): PhaseReasoningResult {
-  return request.responseMode === 'figma'
-    ? parseProviderFigmaBlueprint(text, request.phase)
-    : parseProviderText(text, request.phase)
+interface ParsedProviderOutput {
+  result: PhaseReasoningResult
+  suggestions: ConversationSuggestion[]
+}
+
+function conversationPhaseEnvelope(
+  route: ReturnType<typeof parseConversationRouteResult>,
+  phase: WorkflowView,
+): PhaseReasoningResult {
+  return parsePhaseReasoningResult({
+    schemaVersion: 1,
+    phase,
+    message: route.message,
+    commands: [],
+    intent: route.intent,
+    phaseData: phaseData(phase, ''),
+  }, phase)
+}
+
+function parseProviderOutput(text: string, request: ReasoningRequest): ParsedProviderOutput {
+  if (request.responseMode === 'route') {
+    try {
+      const route = parseConversationRouteResult(extractJson(text))
+      return { result: conversationPhaseEnvelope(route, request.phase), suggestions: route.suggestions }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'invalid output'
+      throw new Error(`Provider trả về dữ liệu không đúng schema: ${detail}`)
+    }
+  }
+  return {
+    result: request.responseMode === 'figma'
+      ? parseProviderFigmaBlueprint(text, request.phase)
+      : parseProviderText(text, request.phase),
+    suggestions: [],
+  }
 }
 
 function compactControlCopy(value: string, limit: number): string {
@@ -196,7 +249,11 @@ function compactControlCopy(value: string, limit: number): string {
   return candidate.slice(0, wordBoundary >= Math.floor(limit * 0.6) ? wordBoundary : limit).trim()
 }
 
-function mockCreativeBlueprint(spec: ProductSpec, roles: string[]): FigmaCreativeBlueprint {
+export function createScaffoldFigmaBlueprint(
+  spec: ProductSpec,
+  roles: string[],
+  options: { sparse?: boolean } = {},
+): FigmaCreativeBlueprint {
   const available = new Set(roles)
   const activeRequirements = new Set(spec.requirements.filter((item) => item.status !== 'removed').map((item) => item.id))
   const screens = spec.screens
@@ -205,7 +262,6 @@ function mockCreativeBlueprint(spec: ProductSpec, roles: string[]): FigmaCreativ
   const headerRole = available.has('app-header') ? 'app-header' : null
   const outputScreens = screens.map((screen, index) => {
     const root = `root-${screen.id}`
-    const hero = `hero-${screen.id}`
     const action = `action-${screen.id}`
     const elements: FigmaCreativeBlueprint['screens'][number]['elements'] = [
       {
@@ -224,52 +280,55 @@ function mockCreativeBlueprint(spec: ProductSpec, roles: string[]): FigmaCreativ
         componentText: compactControlCopy(screen.title, 32), layoutGrow: 0,
       })
     }
-    elements.push(
-      {
-        id: hero, kind: 'frame', parentId: root, name: 'Product moment', x: null, y: null, width: 350, height: 220,
-        layout: 'vertical', gap: 10, paddingTop: 24, paddingRight: 20, paddingBottom: 24, paddingLeft: 20,
-        fill: index === screens.length - 1 ? '#E8F8EF' : '#EAF3FF', stroke: null, strokeWidth: 0, radius: 20, opacity: 1,
-        text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: null, componentText: null, layoutGrow: 0,
-      },
-      {
-        id: `eyebrow-${screen.id}`, kind: 'text', parentId: hero, name: 'Journey label', x: null, y: null, width: 310, height: 20,
-        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
-        fill: '#0068FF', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
-        text: `BƯỚC ${index + 1} · ${screen.title.toUpperCase()}`, fontSize: 12, fontWeight: 'semibold', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
-      },
-      {
-        id: `title-${screen.id}`, kind: 'text', parentId: hero, name: 'Screen headline', x: null, y: null, width: 310, height: 66,
-        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
-        fill: '#101828', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
-        text: screen.title, fontSize: 30, fontWeight: 'bold', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
-      },
-      {
-        id: `purpose-${screen.id}`, kind: 'text', parentId: hero, name: 'Outcome copy', x: null, y: null, width: 310, height: 56,
-        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
-        fill: '#475467', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
-        text: screen.purpose, fontSize: 15, fontWeight: 'regular', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
-      },
-      {
-        id: `detail-${screen.id}`, kind: 'frame', parentId: root, name: 'Product detail', x: null, y: null, width: 350, height: 230,
-        layout: 'vertical', gap: 12, paddingTop: 18, paddingRight: 18, paddingBottom: 18, paddingLeft: 18,
-        fill: '#FFFFFF', stroke: '#E4E7EC', strokeWidth: 1, radius: 16, opacity: 1,
-        text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: null, componentText: null, layoutGrow: 0,
-      },
-      {
-        id: `detail-title-${screen.id}`, kind: 'text', parentId: `detail-${screen.id}`, name: 'Detail title', x: null, y: null, width: 314, height: 28,
-        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
-        fill: '#101828', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
-        text: index === 0 ? 'Mọi thứ cần biết trong một nhịp nhìn' : `Điều người dùng cần hoàn tất tại ${screen.title}`,
-        fontSize: 18, fontWeight: 'semibold', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
-      },
-      {
-        id: `detail-body-${screen.id}`, kind: 'text', parentId: `detail-${screen.id}`, name: 'Concrete product content', x: null, y: null, width: 314, height: 96,
-        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
-        fill: '#344054', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
-        text: `${screen.purpose}\n\nTrạng thái được lưu ngay trên thiết bị và có thể tiếp tục ở lần mở sau.`,
-        fontSize: 14, fontWeight: 'regular', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
-      },
-    )
+    if (!options.sparse) {
+      const hero = `hero-${screen.id}`
+      elements.push(
+        {
+          id: hero, kind: 'frame', parentId: root, name: 'Product moment', x: null, y: null, width: 350, height: 220,
+          layout: 'vertical', gap: 10, paddingTop: 24, paddingRight: 20, paddingBottom: 24, paddingLeft: 20,
+          fill: index === screens.length - 1 ? '#E8F8EF' : '#EAF3FF', stroke: null, strokeWidth: 0, radius: 20, opacity: 1,
+          text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: null, componentText: null, layoutGrow: 0,
+        },
+        {
+          id: `eyebrow-${screen.id}`, kind: 'text', parentId: hero, name: 'Journey label', x: null, y: null, width: 310, height: 20,
+          layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+          fill: '#0068FF', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+          text: `BƯỚC ${index + 1} · ${screen.title.toUpperCase()}`, fontSize: 12, fontWeight: 'semibold', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
+        },
+        {
+          id: `title-${screen.id}`, kind: 'text', parentId: hero, name: 'Screen headline', x: null, y: null, width: 310, height: 66,
+          layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+          fill: '#101828', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+          text: screen.title, fontSize: 30, fontWeight: 'bold', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
+        },
+        {
+          id: `purpose-${screen.id}`, kind: 'text', parentId: hero, name: 'Outcome copy', x: null, y: null, width: 310, height: 56,
+          layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+          fill: '#475467', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+          text: screen.purpose, fontSize: 15, fontWeight: 'regular', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
+        },
+        {
+          id: `detail-${screen.id}`, kind: 'frame', parentId: root, name: 'Product detail', x: null, y: null, width: 350, height: 230,
+          layout: 'vertical', gap: 12, paddingTop: 18, paddingRight: 18, paddingBottom: 18, paddingLeft: 18,
+          fill: '#FFFFFF', stroke: '#E4E7EC', strokeWidth: 1, radius: 16, opacity: 1,
+          text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: null, componentText: null, layoutGrow: 0,
+        },
+        {
+          id: `detail-title-${screen.id}`, kind: 'text', parentId: `detail-${screen.id}`, name: 'Detail title', x: null, y: null, width: 314, height: 28,
+          layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+          fill: '#101828', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+          text: index === 0 ? 'Mọi thứ cần biết trong một nhịp nhìn' : `Điều người dùng cần hoàn tất tại ${screen.title}`,
+          fontSize: 18, fontWeight: 'semibold', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
+        },
+        {
+          id: `detail-body-${screen.id}`, kind: 'text', parentId: `detail-${screen.id}`, name: 'Concrete product content', x: null, y: null, width: 314, height: 96,
+          layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+          fill: '#344054', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
+          text: `${screen.purpose}\n\nTrạng thái được lưu ngay trên thiết bị và có thể tiếp tục ở lần mở sau.`,
+          fontSize: 14, fontWeight: 'regular', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
+        },
+      )
+    }
     const screenRoles = [...new Set(screen.designSystemRoles.filter((role) => available.has(role) && role !== 'app-header'))]
     let actionRoleIndex = -1
     screenRoles.forEach((role, roleIndex) => {
@@ -326,7 +385,9 @@ function mockCreativeBlueprint(spec: ProductSpec, roles: string[]): FigmaCreativ
       width: 390,
       height: 844,
       background: index === 0 ? '#F2F7FF' : '#FFFFFF',
-      presentationNote: `Màn ${index + 1} ưu tiên outcome ${screen.purpose}`,
+      presentationNote: options.sparse
+        ? `Sparse guarded scaffold only; create a product-specific composition for ${screen.purpose}`
+        : `Màn ${index + 1} ưu tiên outcome ${screen.purpose}`,
       elements,
     }
   })
@@ -334,8 +395,12 @@ function mockCreativeBlueprint(spec: ProductSpec, roles: string[]): FigmaCreativ
     schemaVersion: 1,
     conceptName: `Product story · ${spec.title}`,
     productPromise: spec.idea.summary,
-    visualNarrative: 'Một hành trình Mini App rõ nhịp, dùng ZDS cho interaction và composition riêng cho từng product moment.',
-    principles: ['Một nhiệm vụ chính trên mỗi màn hình', 'Nội dung thật trước trang trí', 'ZDS cho controls, primitives cho product expression'],
+    visualNarrative: options.sparse
+      ? 'Scaffold tối thiểu chỉ giữ traceability và ZDS controls; design worker sở hữu toàn bộ art direction và composition.'
+      : 'Một hành trình Mini App rõ nhịp, dùng ZDS cho interaction và composition riêng cho từng product moment.',
+    principles: options.sparse
+      ? ['Không coi scaffold là design direction', 'ProductSpec quyết định nội dung', 'ZDS giữ interaction, design worker sở hữu expression']
+      : ['Một nhiệm vụ chính trên mỗi màn hình', 'Nội dung thật trước trang trí', 'ZDS cho controls, primitives cho product expression'],
     screens: outputScreens,
     prototypeEdges: outputScreens.slice(0, -1).map((screen, index) => ({
       key: `edge:${screen.screenId}:${outputScreens[index + 1]!.screenId}`,
@@ -442,9 +507,6 @@ function inferMockIntent(request: string | ReasoningRequest): ProviderIntent {
     return { kind: 'conversation', target: null, artifactAction: null }
   }
   const text = message.toLocaleLowerCase('vi').trim()
-  if (typeof request !== 'string' && request.selection) {
-    return { kind: 'edit', target: request.selection.entityId, artifactAction: null }
-  }
   if (/(^|\s)(kick[\s-]*off|bắt đầu discovery|khởi động discovery)(\s|$)/i.test(text)) {
     return { kind: 'discovery', target: null, artifactAction: null }
   }
@@ -455,7 +517,11 @@ function inferMockIntent(request: string | ReasoningRequest): ProviderIntent {
     return { kind: 'draw', target: null, artifactAction: null }
   }
   if (/(sửa|chỉnh).*(canvas|node|workflow|prototype)/i.test(text)) {
-    return { kind: 'edit', target: null, artifactAction: null }
+    return {
+      kind: 'edit',
+      target: typeof request !== 'string' ? request.selection?.entityId ?? null : null,
+      artifactAction: null,
+    }
   }
   if (/^bỏ cái (đó|này)[.!?]?$/iu.test(text)) {
     return { kind: 'change', target: null, artifactAction: null }
@@ -487,16 +553,26 @@ class MockProvider implements ReasoningProvider {
   async reason(request: ReasoningRequest): Promise<ProviderResponse> {
     const result = inferLocalCommands(request.message, request.phase)
     result.intent = inferMockIntent(request)
+    let suggestions: ConversationSuggestion[] = []
+    if (request.responseMode === 'route') {
+      result.message = request.canvasDiff
+        ? `Mình đã đọc phần bạn vừa thay đổi: ${request.canvasDiff.summary}. Mình có thể cùng bạn đánh giá tác động hoặc chỉnh tiếp đúng vùng này.`
+        : 'Mình đã hiểu hướng bạn đang cân nhắc. Ta có thể đào sâu giá trị người dùng, phác nó thành một flow để cùng phản biện, hoặc tiếp tục trao đổi mà chưa cần tạo artifact.'
+      suggestions = [
+        { id: 'explore-value', label: 'Đào sâu giá trị', prompt: 'Hãy phản biện giá trị người dùng và các giả định quan trọng của ý tưởng này', kind: 'explore' },
+        { id: 'visualize-flow', label: 'Phác user flow', prompt: 'Vẽ user flow để chúng ta cùng review và chỉnh sửa', kind: 'visualize' },
+      ]
+    }
     if (request.responseMode === 'figma') {
       if (!request.productSpec) throw new Error('Mock Figma design requires ProductSpec')
       result.intent = { kind: 'artifact', target: null, artifactAction: 'prepare' }
-      result.figmaBlueprint = mockCreativeBlueprint(request.productSpec, request.figmaComponentRoles ?? [])
+      result.figmaBlueprint = createScaffoldFigmaBlueprint(request.productSpec, request.figmaComponentRoles ?? [])
       result.message = `Đã tạo creative blueprint cho ${result.figmaBlueprint.screens.length} màn hình.`
     }
-    if (request.canvasDiff) {
+    if (request.canvasDiff && request.responseMode !== 'route') {
       result.message = `Mình đã đọc phần bạn vừa thay đổi: ${request.canvasDiff.summary}. Vùng chọn và scene hiện tại sẽ là context ưu tiên cho lượt chỉnh tiếp theo.`
     }
-    return normalizedResponse(result, null, this.capabilities)
+    return normalizedResponse(result, null, this.capabilities, suggestions)
   }
 }
 
@@ -524,7 +600,7 @@ class OpenAIProvider implements ReasoningProvider {
         },
       },
     }, { signal })
-    return normalizedResponse(parseProviderOutput(response.output_text, request), response.id, this.capabilities, response.usage
+    return normalizedParsedResponse(parseProviderOutput(response.output_text, request), response.id, this.capabilities, response.usage
       ? { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens }
       : undefined)
   }
@@ -551,7 +627,7 @@ class GeminiProvider implements ReasoningProvider {
       },
     })
     const usage = response.usageMetadata
-    return normalizedResponse(parseProviderOutput(response.text ?? '', request), null, this.capabilities, usage
+    return normalizedParsedResponse(parseProviderOutput(response.text ?? '', request), null, this.capabilities, usage
       ? { inputTokens: usage.promptTokenCount ?? 0, outputTokens: usage.candidatesTokenCount ?? 0 }
       : undefined)
   }
@@ -581,7 +657,7 @@ class AnthropicProvider implements ReasoningProvider {
       .filter((block): block is Anthropic.TextBlock => block.type === 'text')
       .map((block) => block.text)
       .join('')
-    return normalizedResponse(parseProviderOutput(text, request), response.id, this.capabilities, {
+    return normalizedParsedResponse(parseProviderOutput(text, request), response.id, this.capabilities, {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
     })
@@ -736,7 +812,7 @@ class CodexProvider implements ReasoningProvider {
         outputSchema: outputSchemaFor(request),
       })
       await completed
-      return normalizedResponse(parseProviderOutput(output, request), threadId, this.capabilities)
+      return normalizedParsedResponse(parseProviderOutput(output, request), threadId, this.capabilities)
     } finally {
       signal.removeEventListener('abort', abort)
       client.stop()

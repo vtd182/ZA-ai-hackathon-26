@@ -104,6 +104,52 @@ func TestValidateRPC_GetNodeContext(t *testing.T) {
 	}
 }
 
+func TestValidateRPC_AuditProductCraft(t *testing.T) {
+	if msg := ValidateRPC("audit_product_craft", nil, nil); msg == "" {
+		t.Error("expected error for missing rootNodeId")
+	}
+	if msg := ValidateRPC("audit_product_craft", nil, map[string]interface{}{"rootNodeId": "bad"}); msg == "" {
+		t.Error("expected error for invalid rootNodeId")
+	}
+	if msg := ValidateRPC("audit_product_craft", nil, map[string]interface{}{
+		"rootNodeId":             "1:1",
+		"expectedScreenCount":    float64(5),
+		"expectedPrototypeLinks": float64(4),
+		"forbiddenTerms":         []interface{}{"payment", "wallet"},
+	}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	if msg := ValidateRPC("audit_product_craft", nil, map[string]interface{}{
+		"rootNodeId":     "1:1",
+		"forbiddenTerms": []interface{}{""},
+	}); msg == "" {
+		t.Error("expected error for blank forbidden term")
+	}
+}
+
+func TestValidateRPC_ApplyCraftPatch(t *testing.T) {
+	if msg := ValidateRPC("apply_craft_patch", nil, map[string]interface{}{"rootNodeId": "1:1"}); msg == "" {
+		t.Error("expected error for missing operations")
+	}
+	if msg := ValidateRPC("apply_craft_patch", nil, map[string]interface{}{
+		"rootNodeId": "1:1",
+		"operations": []interface{}{
+			map[string]interface{}{"id": "screen", "type": "create_frame"},
+			map[string]interface{}{"id": "title", "type": "create_text"},
+		},
+	}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	if msg := ValidateRPC("apply_craft_patch", nil, map[string]interface{}{
+		"rootNodeId": "1:1",
+		"operations": []interface{}{
+			map[string]interface{}{"id": "screen", "type": "delete_page"},
+		},
+	}); msg == "" {
+		t.Error("expected error for unsupported operation")
+	}
+}
+
 func TestValidateRPC_GetScreenshot(t *testing.T) {
 	// invalid format
 	msg := ValidateRPC("get_screenshot", []string{"1:1"}, map[string]interface{}{"format": "GIF"})
@@ -521,14 +567,14 @@ func TestValidateRPC_InstantiateComponent(t *testing.T) {
 		t.Error("expected invalid componentId to be rejected")
 	}
 	if msg := ValidateRPC("instantiate_component", nil, map[string]interface{}{
-		"componentSetId": "1:1",
+		"componentSetId":    "1:1",
 		"variantProperties": []interface{}{"bad"},
 	}); msg == "" {
 		t.Error("expected variantProperties type mismatch to be rejected")
 	}
 	if msg := ValidateRPC("instantiate_component", nil, map[string]interface{}{
 		"componentId": "1:1",
-		"parentId": "2:2",
+		"parentId":    "2:2",
 	}); msg != "" {
 		t.Errorf("unexpected error: %s", msg)
 	}

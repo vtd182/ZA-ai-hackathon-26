@@ -21,28 +21,33 @@ var bridgeLogger = logging.Module("bridge")
 
 const lifecycleArtifactTimeout = 30 * time.Minute
 const progressInactivityTimeout = 5 * time.Minute
+const lifecycleProgressInactivityTimeout = 15 * time.Minute
 
 type requestPolicy struct {
-	timeout time.Duration
+	timeout            time.Duration
+	progressInactivity time.Duration
 }
 
 func requestPolicyFor(tool string) requestPolicy {
 	switch tool {
 	case "get_document":
-		return requestPolicy{timeout: 60 * time.Second}
+		return requestPolicy{timeout: 60 * time.Second, progressInactivity: progressInactivityTimeout}
 	case "get_design_context", "get_node", "get_node_context", "get_nodes_info",
 		"get_styles", "get_variable_defs", "get_local_components",
-		"search_nodes", "scan_nodes_by_types", "scan_text_nodes", "discover_design_system_instances", "get_fonts":
-		return requestPolicy{timeout: 45 * time.Second}
+		"search_nodes", "scan_nodes_by_types", "scan_text_nodes", "discover_design_system_instances", "get_fonts",
+		"audit_product_craft":
+		return requestPolicy{timeout: 45 * time.Second, progressInactivity: progressInactivityTimeout}
 	// SVG parsing can be CPU-intensive in Figma's JS VM; give it more headroom.
 	case "import_svg", "import_component_by_key":
-		return requestPolicy{timeout: 60 * time.Second}
+		return requestPolicy{timeout: 60 * time.Second, progressInactivity: progressInactivityTimeout}
 	case "apply_lifecycle_artifact_plan":
-		return requestPolicy{timeout: lifecycleArtifactTimeout}
+		return requestPolicy{timeout: lifecycleArtifactTimeout, progressInactivity: lifecycleProgressInactivityTimeout}
+	case "apply_craft_patch":
+		return requestPolicy{timeout: 5 * time.Minute, progressInactivity: progressInactivityTimeout}
 	case "read_lifecycle_artifact":
-		return requestPolicy{timeout: 3 * time.Minute}
+		return requestPolicy{timeout: 3 * time.Minute, progressInactivity: progressInactivityTimeout}
 	default:
-		return requestPolicy{timeout: 30 * time.Second}
+		return requestPolicy{timeout: 30 * time.Second, progressInactivity: progressInactivityTimeout}
 	}
 }
 
@@ -60,9 +65,10 @@ func requestParamKeys(params map[string]interface{}) []string {
 
 // pendingEntry holds the response channel and inactivity timer for an in-flight request.
 type pendingEntry struct {
-	ch    chan BridgeResponse
-	timer *time.Timer
-	once  sync.Once // guards channel close/send — prevents panic on concurrent timeout + response
+	ch                 chan BridgeResponse
+	timer              *time.Timer
+	progressInactivity time.Duration
+	once               sync.Once // guards channel close/send — prevents panic on concurrent timeout + response
 }
 
 type pluginSession struct {
@@ -197,7 +203,7 @@ func (b *Bridge) readLoop(conn *websocket.Conn) {
 			if ok {
 				// Stop before Reset to avoid the AfterFunc firing during Reset.
 				entry.timer.Stop()
-				entry.timer.Reset(progressInactivityTimeout)
+				entry.timer.Reset(entry.progressInactivity)
 				bridgeLogger.Debug("progress update", "requestId", resp.RequestID, "progress", resp.Progress, "message", resp.Message)
 			} else {
 				bridgeLogger.Debug("progress update for unknown request (already resolved or timed out)", "requestId", resp.RequestID, "progress", resp.Progress, "message", resp.Message)
@@ -447,11 +453,12 @@ func (b *Bridge) Send(ctx context.Context, requestType string, nodeIDs []string,
 	}
 
 	ch := make(chan BridgeResponse, 1)
-	entry := &pendingEntry{ch: ch}
+	policy := requestPolicyFor(requestType)
+	entry := &pendingEntry{ch: ch, progressInactivity: policy.progressInactivity}
 
 	// Register before sending to avoid a race where the response
 	// arrives before we store the channel.
-	timeout := requestPolicyFor(requestType).timeout
+	timeout := policy.timeout
 	entry.timer = time.AfterFunc(timeout, func() {
 		// AfterFunc runs the callback in its own goroutine — guard it.
 		defer recoverPanic("bridge.timeout")

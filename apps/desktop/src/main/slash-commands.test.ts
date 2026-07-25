@@ -17,6 +17,25 @@ describe('slash commands', () => {
     })
   })
 
+  it('parses explicit creative studio modes without guessing from prose', () => {
+    expect(parseSlashCommand('/studio explore luồng nhắc backup')).toEqual({
+      kind: 'studio_explore',
+      prompt: 'luồng nhắc backup',
+    })
+    expect(parseSlashCommand('/studio critique màn OTP')).toEqual({
+      kind: 'studio_critique',
+      prompt: 'màn OTP',
+    })
+    expect(parseSlashCommand('/studio sketch onboarding')).toEqual({
+      kind: 'studio_sketch',
+      prompt: 'onboarding',
+    })
+    expect(parseSlashCommand('/studio refine làm CTA rõ hơn')).toEqual({
+      kind: 'studio_refine',
+      prompt: 'làm CTA rõ hơn',
+    })
+  })
+
   it('returns null for natural language and guards unknown slash commands', () => {
     expect(parseSlashCommand('Tạo thiết kế trên Figma')).toBeNull()
     expect(parseSlashCommand('/figma destroy')).toEqual({ kind: 'invalid', command: '/figma destroy' })

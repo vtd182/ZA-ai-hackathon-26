@@ -67,6 +67,7 @@ func NewCapabilityRegistry() *CapabilityRegistry {
 		"set_reactions", "remove_reactions", "add_page", "rename_page", "delete_page",
 		"navigate_to_page",
 		"apply_lifecycle_artifact_plan",
+		"apply_craft_patch",
 	}
 	exportOps := []string{
 		"get_screenshot", "export_node_as_svg", "save_screenshots", "export_frames_to_pdf", "export_tokens",
@@ -80,6 +81,7 @@ func NewCapabilityRegistry() *CapabilityRegistry {
 		"get_runtime_sessions", "set_runtime_session",
 		"capture_design_system_context", "apply_design_system_screen", "audit_design_system_adoption",
 		"plan_design_system_screens", "read_lifecycle_artifact", "audit_lifecycle_artifact",
+		"audit_product_craft",
 		"scan_icon_components",
 	}
 

@@ -1,0 +1,12 @@
+interface:
+  display_name: "PM Lifecycle Figma Designer"
+  short_description: "Craft and visually refine Zalo Mini App journeys"
+  brand_color: "#0868DF"
+  default_prompt: "Use $pm-lifecycle-figma-design to turn this approved ProductSpec into a polished, screenshot-verified Figma journey."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "za-talk-to-figma"
+      description: "Read and write the approved Figma session"
+policy:
+  allow_implicit_invocation: false

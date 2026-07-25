@@ -19,6 +19,9 @@ import {
   normalizeFigmaDesignSystemContext,
   renderProductSpecMarkdown,
   SqliteMockArtifactStore,
+  type ArtifactConnector,
+  type PreflightResult,
+  type VerificationResult,
 } from '@pm-agent/connectors'
 import type {
   ChangeIntent,
@@ -40,6 +43,10 @@ import type {
   PlannedAction,
   ProductSpec,
   FigmaCreativeBlueprint,
+  FigmaArtifactPlan,
+  FigmaArtifactSnapshot,
+  FigmaPreflightPlan,
+  ActionReceipt,
 } from '@pm-agent/domain'
 import {
   createDraftProductSpec,
@@ -58,15 +65,19 @@ import {
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
 import { syntheticZaloDesignSystem } from '@pm-agent/fixture-zalo-design-system'
 import { DEMO_FIXTURE_VERSION, DEMO_THREAD_ID, FigmaIntegrationStore, HistoryStore, LifecycleStore, OutboxStore } from '@pm-agent/persistence'
-import { ProviderRegistry } from '@pm-agent/reasoning'
+import { createScaffoldFigmaBlueprint, ProviderRegistry } from '@pm-agent/reasoning'
 import { SecretStore } from './secret-store'
 import { CanvasBridge } from './canvas-bridge'
 import { assertProviderTurnAvailable } from './active-turns'
 import { parseSlashCommand, slashHelpMessage } from './slash-commands'
 import { mapFreeformDiscoveryAnswers } from './workflow-intent'
 import { isManagedFigmaArtifactPage, missingFigmaRoles } from './figma-source-policy'
+import { CodexFigmaDesignWorker, type FigmaDesignWorkerStage, type FigmaDesignWorkerTask } from './figma-design-worker'
 
 const { app, BrowserWindow, ipcMain, shell } = electron
+if (process.env.PM_AGENT_REMOTE_DEBUG_PORT) {
+  app.commandLine.appendSwitch('remote-debugging-port', process.env.PM_AGENT_REMOTE_DEBUG_PORT)
+}
 
 let mainWindow: BrowserWindowType | null = null
 let history: HistoryStore
@@ -81,6 +92,7 @@ let mockZdoc: MockZdocConnector
 let secrets: SecretStore
 let canvasBridge: CanvasBridge
 const providers = new ProviderRegistry()
+const figmaDesignWorker = new CodexFigmaDesignWorker()
 const activeRuns = new Map<string, AbortController>()
 const promotionPreviews = new Map<string, CanvasPromotionPreview>()
 const pendingCanvasExecutions = new Map<string, {
@@ -163,6 +175,10 @@ function figmaRuntimePaths(): { binaryPath: string; manifestPath: string } {
     binaryPath: join(runtimeRoot, 'bin', 'za-talk-to-figma'),
     manifestPath: join(runtimeRoot, 'plugin', 'manifest.json'),
   }
+}
+
+function repositoryRoot(): string {
+  return resolve(dirname(figmaRuntimePaths().binaryPath), '../../..')
 }
 
 function workspaceFor(threadId: string): LifecycleWorkspaceState {
@@ -503,13 +519,23 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
   if (!figmaAction || !jiraAction || !zdocAction) throw new Error('Change plan must contain Figma, Jira and Zdoc actions')
   const figmaContext = figmaExecutionContext()
   assertFigmaRoleCoverage(spec, figmaContext)
+  const workerProbe = figmaContext.connectorMode === 'live' && process.env.PM_AGENT_FIGMA_DESIGN_WORKER !== 'blueprint'
+    ? await figmaDesignWorker.probe()
+    : { available: false, detail: 'Blueprint compositor được cấu hình' }
+  const useAgenticWorker = figmaContext.connectorMode === 'live' && workerProbe.available
+  const thread = history.getThread(state.threadId)
+  const threadProfile = history.getProfile(thread.providerId)
+  const designWorkerModelId = process.env.PM_AGENT_FIGMA_DESIGN_MODEL
+    ?? (threadProfile.providerId === 'codex' ? threadProfile.modelId : 'gpt-5.5')
   emitArtifactProgress(state.threadId, {
     target: 'figma',
     stage: 'planning',
     status: 'running',
     stageElapsedMs: Date.now() - planningStartedAt,
     totalElapsedMs: Date.now() - planningStartedAt,
-    message: 'Design agent đang tạo art direction, screen composition và ZDS placements',
+    message: useAgenticWorker
+      ? `Đang chuẩn bị guarded scaffold; craft worker ${workerProbe.detail} sẽ thiết kế sau approval`
+      : 'Design agent đang tạo art direction, screen composition và ZDS placements',
   })
   let creativeBlueprint: FigmaCreativeBlueprint
   const metadataBase = {
@@ -520,10 +546,18 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
   }
   let figmaPlan: ReturnType<typeof createFigmaArtifactPlan>
   try {
-    creativeBlueprint = await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest)
+    creativeBlueprint = useAgenticWorker
+      ? createScaffoldFigmaBlueprint(
+          spec,
+          [...new Set(figmaContext.manifest.components
+            .filter((component) => !component.deprecated)
+            .map((component) => component.semanticRole))],
+          { sparse: true },
+        )
+      : await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest)
     const metadata = {
       ...metadataBase,
-      idempotencyKey: `figma:${state.id}:spec-v${spec.version}:creative-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}`,
+      idempotencyKey: `figma:${state.id}:spec-v${spec.version}:${useAgenticWorker ? 'craft' : 'creative'}-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}`,
     }
     try {
       figmaPlan = createFigmaArtifactPlan(
@@ -535,6 +569,7 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
         creativeBlueprint,
       )
     } catch (error) {
+      if (useAgenticWorker) throw error
       const feedback = error instanceof Error ? error.message : 'Creative blueprint failed preflight'
       emitArtifactProgress(state.threadId, {
         target: 'figma',
@@ -593,7 +628,9 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
       status: 'completed',
       stageElapsedMs: elapsed,
       totalElapsedMs: elapsed,
-      message: `Creative plan sẵn sàng: ${creativeBlueprint.screens.length} màn hình, ${creativeBlueprint.screens.reduce((sum, screen) => sum + screen.elements.length, 0)} lớp (${figmaContext.connectorMode})`,
+      message: useAgenticWorker
+        ? `Guarded scaffold sẵn sàng: ${creativeBlueprint.screens.length} màn hình; craft + screenshot/refine sẽ chạy sau approval`
+        : `Creative plan sẵn sàng: ${creativeBlueprint.screens.length} màn hình, ${creativeBlueprint.screens.reduce((sum, screen) => sum + screen.elements.length, 0)} lớp (${figmaContext.connectorMode})`,
     })
   } catch (error) {
     const elapsed = Date.now() - planningStartedAt
@@ -615,6 +652,8 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
     ].filter(Boolean)
     throw new Error(`Artifact preflight contains blocking issues: ${blockingIssues.join('; ') || 'unknown issue'}`)
   }
+  const scaffoldTimeoutBudgetMs = figmaApplyTimeoutMs(figmaPreflight.plan.estimatedOperations)
+  const craftTimeoutBudgetMs = 30 * 60_000
 
   const executable = <T extends Record<string, unknown>>(
     base: PlannedAction,
@@ -633,11 +672,179 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
       manifest: figmaContext.manifest,
       preflight: figmaPreflight,
       estimatedOperations: figmaPreflight.plan.estimatedOperations,
-      timeoutBudgetMs: figmaApplyTimeoutMs(figmaPreflight.plan.estimatedOperations),
+      timeoutBudgetMs: useAgenticWorker
+        ? scaffoldTimeoutBudgetMs + craftTimeoutBudgetMs
+        : scaffoldTimeoutBudgetMs,
+      designWorker: useAgenticWorker ? {
+        mode: 'codex_mcp',
+        modelId: designWorkerModelId,
+        skill: 'pm-lifecycle-figma-design',
+        maxReviewPasses: 3,
+        timeoutBudgetMs: craftTimeoutBudgetMs,
+        productTruth: {
+          idea: {
+            id: spec.idea.id,
+            title: spec.idea.title,
+            summary: spec.idea.summary,
+            targetUsers: spec.idea.targetUsers,
+          },
+          activeRequirements: spec.requirements
+            .filter((requirement) => requirement.status !== 'removed')
+            .map((requirement) => ({
+              id: requirement.id,
+              title: requirement.title,
+              description: requirement.description,
+              acceptanceCriteria: requirement.acceptanceCriteria,
+            })),
+          removedRequirements: spec.requirements
+            .filter((requirement) => requirement.status === 'removed')
+            .map((requirement) => ({
+              id: requirement.id,
+              title: requirement.title,
+              description: requirement.description,
+            })),
+          decisions: spec.decisions.map((decision) => ({
+            id: decision.id,
+            question: decision.question,
+            choice: decision.choice,
+            rationale: decision.rationale,
+            status: decision.status,
+          })),
+        },
+      } : {
+        mode: 'blueprint',
+      },
     }),
     executable(jiraAction, 'mock_jira_plan', jiraPreflight.planHash, jiraPreflight.plan),
     executable(zdocAction, 'mock_zdoc_plan', zdocPreflight.planHash, zdocPreflight.plan),
   ]
+}
+
+function designWorkerMessage(stage: FigmaDesignWorkerStage, message: string): string {
+  const labels: Record<FigmaDesignWorkerStage, string> = {
+    starting: 'Khởi tạo craft session',
+    inspecting: 'Đọc ProductSpec, scaffold và ZDS',
+    crafting: 'Compose trải nghiệm sản phẩm',
+    reviewing: 'Chụp và review thiết kế',
+    refining: 'Refine từ visual feedback',
+    completed: 'Visual QA hoàn tất',
+  }
+  return `${labels[stage]}: ${message}`
+}
+
+function withFigmaDesignWorker(
+  base: FigmaMcpArtifactConnector,
+  threadId: string,
+  manifest: DesignSystemManifest,
+  workerConfig: Record<string, unknown>,
+): ArtifactConnector<FigmaArtifactPlan, FigmaPreflightPlan, FigmaArtifactSnapshot> {
+  return {
+    target: 'figma',
+    checkAvailability: () => base.checkAvailability(),
+    preflight: (plan) => base.preflight(plan),
+    execute: async (action: PlannedAction, preflight: PreflightResult<FigmaPreflightPlan>): Promise<ActionReceipt> => {
+      const receipt = await base.execute(action, preflight)
+      const artifactPageName = preflight.plan.source.metadata.artifactPageName
+      if (!artifactPageName) throw new Error('Approved design task has no dedicated artifact Page')
+      const modelId = typeof workerConfig.modelId === 'string' ? workerConfig.modelId : 'gpt-5.5'
+      const timeoutMs = typeof workerConfig.timeoutBudgetMs === 'number'
+        ? workerConfig.timeoutBudgetMs
+        : 30 * 60_000
+      const productTruth = workerConfig.productTruth
+      if (!productTruth || typeof productTruth !== 'object' || Array.isArray(productTruth)) {
+        throw new Error('Approved design task has no immutable ProductSpec truth')
+      }
+      const typedProductTruth = productTruth as FigmaDesignWorkerTask['productTruth']
+      const maxReviewPasses = Math.max(1, Math.min(3, typeof workerConfig.maxReviewPasses === 'number'
+        ? Math.floor(workerConfig.maxReviewPasses)
+        : 2))
+      const workerStartedAt = Date.now()
+      const workerDeadline = workerStartedAt + timeoutMs
+      let stageStartedAt = workerStartedAt
+      let currentStage: FigmaDesignWorkerStage = 'starting'
+      let qaFeedback: string[] | undefined
+      const expectedPrototypeLinks = preflight.plan.source.screens
+        .reduce((count, screen) => count + screen.prototypeEdges.length, 0)
+      const forbiddenTerms = typedProductTruth.removedRequirements.flatMap((requirement) => [
+        requirement.title,
+        requirement.description,
+      ]).filter((term) => term.trim().length >= 3)
+
+      for (let iteration = 1; iteration <= maxReviewPasses; iteration += 1) {
+        const remainingMs = workerDeadline - Date.now()
+        if (remainingMs < 60_000) throw new Error('Figma craft budget đã hết trước independent QA repair pass')
+        await figmaDesignWorker.run({
+          modelId,
+          repositoryRoot: repositoryRoot(),
+          mcpBinaryPath: figmaRuntimePaths().binaryPath,
+          sessionId: preflight.plan.source.target.sessionId,
+          sourcePageId: preflight.plan.source.target.pageId,
+          sourcePageName: preflight.plan.source.target.pageName,
+          artifactPageName,
+          rootNodeId: receipt.externalId,
+          idempotencyKey: receipt.idempotencyKey,
+          plan: preflight.plan,
+          manifest,
+          productTruth: typedProductTruth,
+          iteration,
+          ...(qaFeedback ? { qaFeedback } : {}),
+          timeoutMs: remainingMs,
+        }, {
+          ...(activeRuns.get(threadId)?.signal ? { signal: activeRuns.get(threadId)!.signal } : {}),
+          onProgress: (stage, message) => {
+            const now = Date.now()
+            if (stage !== currentStage) {
+              currentStage = stage
+              stageStartedAt = now
+            }
+            emitArtifactProgress(threadId, {
+              target: 'figma',
+              stage: 'write',
+              status: 'running',
+              stageElapsedMs: now - stageStartedAt,
+              totalElapsedMs: now - workerStartedAt,
+              message: `${designWorkerMessage(stage, message)} · pass ${iteration}/${maxReviewPasses}`,
+            })
+          },
+        })
+
+        const audit = await figmaMcp.auditProductCraft({
+          target: preflight.plan.source.target,
+          rootNodeId: receipt.externalId,
+          expectedScreenCount: preflight.plan.source.screens.length,
+          expectedPrototypeLinks,
+          forbiddenTerms,
+        })
+        if (audit.passed) {
+          const now = Date.now()
+          emitArtifactProgress(threadId, {
+            target: 'figma',
+            stage: 'write',
+            status: 'completed',
+            stageElapsedMs: now - stageStartedAt,
+            totalElapsedMs: now - workerStartedAt,
+            message: `Independent craft QA pass: ${audit.metrics.screenCount} màn hình, ${audit.metrics.zdsInstanceCount} ZDS instance, ${audit.metrics.prototypeLinkCount} prototype link`,
+          })
+          return receipt
+        }
+        qaFeedback = audit.issues
+          .filter((issue) => issue.severity === 'error')
+          .map((issue) => `${issue.code} tại ${issue.nodeId}: ${issue.message}`)
+        const now = Date.now()
+        emitArtifactProgress(threadId, {
+          target: 'figma',
+          stage: 'write',
+          status: 'running',
+          stageElapsedMs: now - stageStartedAt,
+          totalElapsedMs: now - workerStartedAt,
+          message: `Independent QA tìm thấy ${qaFeedback.length} lỗi; đang mở repair pass ${iteration + 1}/${maxReviewPasses}`,
+        })
+      }
+      throw new Error(`Independent Figma craft QA vẫn còn lỗi sau ${maxReviewPasses} pass: ${(qaFeedback ?? []).join('; ')}`)
+    },
+    readBack: (receipt) => base.readBack(receipt),
+    verify: (plan: FigmaPreflightPlan, snapshot: FigmaArtifactSnapshot): Promise<VerificationResult> => base.verify(plan, snapshot),
+  }
 }
 
 async function executeRun(
@@ -657,8 +864,16 @@ async function executeRun(
     if (item.action.target === 'figma') {
       const plan = figmaArtifactPlanSchema.parse(payload.plan)
       const manifest = designSystemManifestSchema.parse(payload.manifest)
-      const connector = payload.connectorMode === 'live'
+      const liveConnector = payload.connectorMode === 'live'
         ? new FigmaMcpArtifactConnector(figmaMcp, manifest, plan.target)
+        : null
+      const workerConfig = payload.designWorker && typeof payload.designWorker === 'object' && !Array.isArray(payload.designWorker)
+        ? payload.designWorker as Record<string, unknown>
+        : null
+      const connector = liveConnector
+        ? workerConfig?.mode === 'codex_mcp'
+          ? withFigmaDesignWorker(liveConnector, threadId, manifest, workerConfig)
+          : liveConnector
         : new MockFigmaArtifactConnector(manifest, plan.target, { store: mockFigmaStore })
       return executeConnectorAction({
         action: item.action,
@@ -1164,6 +1379,14 @@ function registerIpc(): void {
         routedContent = `Vẽ user flow ${slashCommand.prompt || 'MVP dựa trên ProductSpec hiện tại'}`
       } else if (slashCommand?.kind === 'canvas_prototype') {
         routedContent = `Tạo prototype ${slashCommand.prompt || 'các màn hình MVP dựa trên ProductSpec hiện tại'}`
+      } else if (slashCommand?.kind === 'studio_explore') {
+        routedContent = `Cùng tôi khám phá ${slashCommand.prompt || 'ý tưởng hiện tại'}. Chỉ trao đổi và đề xuất góc nhìn; chưa vẽ hoặc sửa canvas.`
+      } else if (slashCommand?.kind === 'studio_critique') {
+        routedContent = `Phản biện ${slashCommand.prompt || input.selection?.label || 'ý tưởng hiện tại'}. Chỉ critique và nêu điểm feedback; chưa sửa canvas.`
+      } else if (slashCommand?.kind === 'studio_sketch') {
+        routedContent = `Phác trực quan ${slashCommand.prompt || 'ý tưởng hiện tại'} trên canvas để cùng feedback.`
+      } else if (slashCommand?.kind === 'studio_refine') {
+        routedContent = `Sửa đúng vùng canvas đang chọn: ${slashCommand.prompt || 'làm rõ hierarchy và nội dung'}`
       }
       const appOwnedReply = (
         message: string,
@@ -1173,6 +1396,7 @@ function registerIpc(): void {
         userMessage: ChatMessage
         assistantMessage: ChatMessage
         commands: []
+        suggestions: []
         canvasProgram: CanvasProgram
         canvasProgramSource: 'none'
         canvasRequestId: null
@@ -1187,6 +1411,7 @@ function registerIpc(): void {
           userMessage,
           assistantMessage,
           commands: [],
+          suggestions: [],
           canvasProgram: { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null },
           canvasProgramSource: 'none',
           canvasRequestId: null,
@@ -1230,6 +1455,7 @@ function registerIpc(): void {
           userMessage,
           assistantMessage: result.assistantMessage,
           commands: [],
+          suggestions: [],
           canvasProgram: { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null },
           canvasProgramSource: 'none',
           canvasRequestId: null,
@@ -1252,6 +1478,7 @@ function registerIpc(): void {
           userMessage,
           assistantMessage: result.assistantMessage,
           commands: [],
+          suggestions: [],
           canvasProgram: { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null },
           canvasProgramSource: 'none',
           canvasRequestId: null,
@@ -1292,6 +1519,7 @@ function registerIpc(): void {
             userMessage,
             assistantMessage,
             commands: proposal.result.commands,
+            suggestions: [],
             canvasProgram: { schemaVersion: 1, mode: 'none' as const, summary: '', operations: [], script: null },
             canvasProgramSource: 'none' as const,
             canvasRequestId: null,
@@ -1300,10 +1528,15 @@ function registerIpc(): void {
       }
 
       const apiKey = secrets.get(profile.id)
-      const forcedIntent: ProviderIntent | undefined = slashCommand?.kind === 'canvas_flow'
+      const forcedCanvasIntent: ProviderIntent | undefined = slashCommand?.kind === 'canvas_flow'
         || slashCommand?.kind === 'canvas_prototype'
+        || slashCommand?.kind === 'studio_sketch'
         ? { kind: 'draw', target: null, artifactAction: null }
-        : undefined
+        : slashCommand?.kind === 'studio_refine'
+          ? { kind: 'edit', target: input.selection?.entityId ?? null, artifactAction: null }
+          : undefined
+      const forcedConversation = slashCommand?.kind === 'studio_explore'
+        || slashCommand?.kind === 'studio_critique'
       const provider = providers.get(profile.providerId)
       let response = await provider.reason({
         threadId: input.threadId,
@@ -1311,10 +1544,10 @@ function registerIpc(): void {
         message: routedContent,
         recentMessages: history.recentMessages(input.threadId),
         ...(input.selection ? { selection: input.selection } : {}),
-        ...(forcedIntent && input.canvas ? { canvas: input.canvas } : {}),
+        ...((forcedCanvasIntent || forcedConversation) && input.canvas ? { canvas: input.canvas } : {}),
         ...(input.canvasDiff ? { canvasDiff: input.canvasDiff } : {}),
-        responseMode: forcedIntent ? 'creative' : 'route',
-        ...(forcedIntent ? { intentHint: forcedIntent } : {}),
+        responseMode: forcedCanvasIntent ? 'creative' : 'route',
+        ...(forcedCanvasIntent ? { intentHint: forcedCanvasIntent } : {}),
         remoteRef: history.getActiveRemoteRef(input.threadId, profile.id),
       }, {
         modelId: profile.modelId,
@@ -1322,7 +1555,10 @@ function registerIpc(): void {
       }, controller.signal)
       let proposal = acceptCompletedProviderEvents(workspaceFor(input.threadId).runState, response.events, thread.phase)
       let providerEvents = response.events
-      const routedIntent = forcedIntent ?? proposal.result.intent
+      const conversationSuggestions = response.suggestions
+      const routedIntent = forcedConversation
+        ? { kind: 'conversation', target: null, artifactAction: null } as const
+        : forcedCanvasIntent ?? proposal.result.intent
       let effectiveSelection = input.selection
       if (routedIntent.kind === 'edit' && !effectiveSelection) {
         effectiveSelection = resolveCanvasSelection(
@@ -1337,7 +1573,7 @@ function registerIpc(): void {
           response.remoteRef,
         )
       }
-      if (!forcedIntent && (routedIntent.kind === 'draw' || routedIntent.kind === 'edit')) {
+      if (!forcedCanvasIntent && (routedIntent.kind === 'draw' || routedIntent.kind === 'edit')) {
         const creativeResponse = await provider.reason({
           threadId: input.threadId,
           phase: thread.phase,
@@ -1425,6 +1661,7 @@ function registerIpc(): void {
           userMessage,
           assistantMessage: artifactResult.assistantMessage,
           commands: [],
+          suggestions: [],
           canvasProgram: { schemaVersion: 1, mode: 'none' as const, summary: '', operations: [], script: null },
           canvasProgramSource: 'none' as const,
           canvasRequestId: null,
@@ -1529,6 +1766,7 @@ function registerIpc(): void {
         userMessage,
         assistantMessage,
         commands,
+        suggestions: routedIntent.kind === 'conversation' ? conversationSuggestions : [],
         canvasProgram: canvasProgram ?? { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null },
         canvasProgramSource,
         canvasRequestId,
@@ -2117,7 +2355,11 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       documentReady: false,
     }
     const providerNeedsDesignTime = process.env.PM_AGENT_SMOKE_PROVIDER && process.env.PM_AGENT_SMOKE_PROVIDER !== 'mock-local'
-    const approvalAttempts = figmaLive.required || providerNeedsDesignTime ? 2_400 : 60
+    const approvalAttempts = figmaLive.required
+      ? 8_000
+      : providerNeedsDesignTime
+        ? 2_400
+        : 60
     for (let attempt = 0; attempt < approvalAttempts; attempt += 1) {
       await wait(250)
       approval = await window.webContents.executeJavaScript(`(async () => {

@@ -21,6 +21,7 @@ func RegisterTools(s *server.MCPServer, node *Node) {
 	registerReadTools(s, runtime)
 	registerWriteTools(s, runtime)
 	registerSmartTools(s, runtime)
+	registerProductCraftTools(s, runtime)
 	registerRuntimeObservabilityTools(s, runtime)
 }
 

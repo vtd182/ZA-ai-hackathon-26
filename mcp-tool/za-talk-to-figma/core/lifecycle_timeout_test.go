@@ -9,6 +9,9 @@ func TestLifecycleArtifactTimeoutPolicy(t *testing.T) {
 	if got := requestPolicyFor("apply_lifecycle_artifact_plan").timeout; got != 30*time.Minute {
 		t.Fatalf("apply timeout = %s, want 30m", got)
 	}
+	if got := requestPolicyFor("apply_lifecycle_artifact_plan").progressInactivity; got != 15*time.Minute {
+		t.Fatalf("apply progress inactivity = %s, want 15m", got)
+	}
 	if got := requestPolicyFor("read_lifecycle_artifact").timeout; got != 3*time.Minute {
 		t.Fatalf("read timeout = %s, want 3m", got)
 	}

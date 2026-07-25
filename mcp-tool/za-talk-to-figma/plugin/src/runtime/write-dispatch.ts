@@ -8,6 +8,7 @@ import { handleWriteComponentRequest } from "../write-components";
 import { handleWritePrototypeRequest } from "../write-prototype";
 import { handleWritePageRequest } from "../write-page";
 import { handleLifecycleArtifactRequest } from "../lifecycle-artifact";
+import { handleCraftPatchRequest } from "../craft-patch";
 
 export const handleWriteRequest = async (
   request: PluginToolRequest,
@@ -20,4 +21,5 @@ export const handleWriteRequest = async (
   (await handleWriteComponentRequest(request)) ??
   (await handleWritePrototypeRequest(request)) ??
   (await handleWritePageRequest(request)) ??
-  (await handleLifecycleArtifactRequest(request));
+  (await handleLifecycleArtifactRequest(request)) ??
+  (await handleCraftPatchRequest(request));

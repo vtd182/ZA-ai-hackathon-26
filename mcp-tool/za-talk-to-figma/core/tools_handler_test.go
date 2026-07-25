@@ -168,6 +168,16 @@ func TestHandlers_SmartTools(t *testing.T) {
 		"depth": float64(2), "maxNodes": float64(500), "maxTimeMs": float64(4000),
 	})
 	callTool(t, s, "cleanup_board_layout", map[string]any{"spacing": float64(80)})
+	callTool(t, s, "audit_product_craft", map[string]any{
+		"rootNodeId": "1:1", "expectedScreenCount": float64(4), "expectedPrototypeLinks": float64(3),
+		"forbiddenTerms": []any{"payment"},
+	})
+	callTool(t, s, "apply_craft_patch", map[string]any{
+		"rootNodeId": "1:1",
+		"operations": []any{
+			map[string]any{"id": "screen", "type": "create_frame", "params": map[string]any{"width": float64(390), "height": float64(844)}},
+		},
+	})
 	callTool(t, s, "prepare_export_bundle", map[string]any{
 		"nodeIds":     []any{"1:1", "2:2"},
 		"bundleName":  "smoke",

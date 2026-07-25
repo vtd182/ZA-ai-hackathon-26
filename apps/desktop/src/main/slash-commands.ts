@@ -7,6 +7,10 @@ export type SlashCommand =
   | { kind: 'figma_retry' }
   | { kind: 'canvas_flow'; prompt: string }
   | { kind: 'canvas_prototype'; prompt: string }
+  | { kind: 'studio_explore'; prompt: string }
+  | { kind: 'studio_critique'; prompt: string }
+  | { kind: 'studio_sketch'; prompt: string }
+  | { kind: 'studio_refine'; prompt: string }
   | { kind: 'invalid'; command: string }
 
 export function parseSlashCommand(input: string): SlashCommand | null {
@@ -28,6 +32,12 @@ export function parseSlashCommand(input: string): SlashCommand | null {
     if (action === 'flow') return { kind: 'canvas_flow', prompt }
     if (action === 'prototype') return { kind: 'canvas_prototype', prompt }
   }
+  if (namespace === '/studio') {
+    if (action === 'explore') return { kind: 'studio_explore', prompt }
+    if (action === 'critique') return { kind: 'studio_critique', prompt }
+    if (action === 'sketch') return { kind: 'studio_sketch', prompt }
+    if (action === 'refine') return { kind: 'studio_refine', prompt }
+  }
   return { kind: 'invalid', command: [namespace, action].filter(Boolean).join(' ') }
 }
 
@@ -41,5 +51,9 @@ export function slashHelpMessage(): string {
     '/figma retry — retry riêng Figma sau lỗi',
     '/canvas flow [mô tả] — ép tạo user flow trên canvas',
     '/canvas prototype [mô tả] — ép tạo prototype trên canvas',
+    '/studio explore [chủ đề] — cùng mở rộng ý tưởng, không tự vẽ',
+    '/studio critique [chủ đề] — phản biện ý tưởng hoặc vùng chọn, không tự sửa',
+    '/studio sketch [mô tả] — phác trực quan khi bạn yêu cầu',
+    '/studio refine [mô tả] — sửa đúng vùng canvas đang chọn',
   ].join('\n')
 }

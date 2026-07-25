@@ -24,6 +24,7 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  Sparkles,
   Square,
   SquareTerminal,
   X,
@@ -38,6 +39,7 @@ import type {
   CanvasPromotionPreview,
   ChangePreview,
   ChatMessage,
+  ConversationSuggestion,
   FigmaSetupStatus,
   ExecutionSummary,
   LifecycleWorkspaceState,
@@ -58,6 +60,10 @@ const slashCommands = [
   { command: '/figma retry', label: 'Retry Figma', detail: 'Giữ nguyên target đã thành công' },
   { command: '/canvas flow', label: 'Canvas flow', detail: 'Ép tạo user flow', acceptsPrompt: true },
   { command: '/canvas prototype', label: 'Canvas prototype', detail: 'Ép tạo prototype', acceptsPrompt: true },
+  { command: '/studio explore', label: 'Explore', detail: 'Mở rộng ý tưởng, không tự vẽ', acceptsPrompt: true },
+  { command: '/studio critique', label: 'Critique', detail: 'Phản biện, không tự sửa', acceptsPrompt: true },
+  { command: '/studio sketch', label: 'Sketch', detail: 'Phác khi được yêu cầu', acceptsPrompt: true },
+  { command: '/studio refine', label: 'Refine selection', detail: 'Sửa vùng canvas đang chọn', acceptsPrompt: true },
   { command: '/help', label: 'Slash help', detail: 'Danh sách lệnh' },
 ]
 
@@ -106,6 +112,7 @@ export function App(): React.JSX.Element {
   const [programBatch, setProgramBatch] = useState<{ id: number; requestId?: string; program: CanvasProgram; source: CanvasExecutionReceipt['source'] }>({ id: 0, program: noCanvasProgram, source: 'provider' })
   const [artifactProgress, setArtifactProgress] = useState<Partial<Record<PlannedAction['target'], ArtifactProgressEvent>>>({})
   const [artifactClock, setArtifactClock] = useState(Date.now())
+  const [suggestions, setSuggestions] = useState<ConversationSuggestion[]>([])
   const activeThreadIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -122,6 +129,7 @@ export function App(): React.JSX.Element {
     activeThreadIdRef.current = threadId
     setLoading(true)
     setError(null)
+    setSuggestions([])
     try {
       const [detail, workspace] = await Promise.all([
         window.pmAgent.threads.get(threadId),
@@ -287,6 +295,7 @@ export function App(): React.JSX.Element {
     }
     setActiveThread({ ...activeThread, messages: [...activeThread.messages, optimistic] })
     setRunningThreadId(requestThreadId)
+    setSuggestions([])
     setError(null)
     try {
       const effectiveSelection = selectionOverride ?? selection
@@ -311,6 +320,7 @@ export function App(): React.JSX.Element {
           program: result.canvasProgram,
           source: result.canvasProgramSource === 'none' ? 'provider' : result.canvasProgramSource,
         })
+        setSuggestions(result.suggestions)
       }
       if (isPromotionIntent(content) && canvasContext && canvasContext.shapes.length > 0) {
         const preview = await window.pmAgent.lifecycle.previewPromotion(requestThreadId, canvasContext)
@@ -628,6 +638,15 @@ export function App(): React.JSX.Element {
                   await window.pmAgent.canvas.recordExecution(receipt)
                   if (activeThread?.id === receipt.threadId) {
                     setActiveThread(await window.pmAgent.threads.get(receipt.threadId))
+                    setSuggestions(programBatch.program.sceneType === 'prototype'
+                      ? [
+                          { id: 'review-screen', label: 'Review một màn', prompt: 'Hãy critique màn hình tôi đang chọn và chỉ ra điểm cần refine', kind: 'refine' },
+                          { id: 'check-edge-cases', label: 'Thêm trạng thái lỗi', prompt: 'Hãy đề xuất các trạng thái lỗi và recovery còn thiếu trước khi sửa canvas', kind: 'explore' },
+                        ]
+                      : [
+                          { id: 'challenge-flow', label: 'Phản biện flow', prompt: 'Hãy phản biện flow vừa vẽ: điểm mù, nhánh lỗi và giả định nào còn yếu?', kind: 'explore' },
+                          { id: 'refine-selection', label: 'Sửa vùng chọn', prompt: 'Hãy sửa đúng vùng canvas tôi đang chọn theo feedback tiếp theo', kind: 'refine' },
+                        ])
                     await refreshThreads()
                   }
                 }}
@@ -663,6 +682,7 @@ export function App(): React.JSX.Element {
 
       <ChatPanel
         messages={activeThread?.messages ?? []}
+        suggestions={suggestions}
         hasEarlierMessages={Boolean(activeThread?.messageNextCursor)}
         selection={selection}
         sending={runningThreadId === activeThread?.id}
@@ -871,6 +891,7 @@ function FigmaSetupDialog({
 
 function ChatPanel({
   messages,
+  suggestions,
   hasEarlierMessages,
   selection,
   sending,
@@ -905,6 +926,7 @@ function ChatPanel({
   onExport,
 }: {
   messages: ChatMessage[]
+  suggestions: ConversationSuggestion[]
   hasEarlierMessages: boolean
   selection?: CanvasSelectionContext
   sending: boolean
@@ -1008,6 +1030,16 @@ function ChatPanel({
             <p>{message.content}</p>
           </article>
         ))}
+        {!sending && suggestions.length > 0 && (
+          <div className="conversation-suggestions" aria-label="Gợi ý tiếp tục">
+            {suggestions.map((suggestion) => (
+              <button key={suggestion.id} type="button" disabled={disabled} onClick={() => void onSend(suggestion.prompt)}>
+                <Sparkles size={14} />
+                <span>{suggestion.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {sending && (
           <article className="message assistant pending">
             <span>Agent</span>
@@ -1040,8 +1072,8 @@ function ChatPanel({
           </div>
           <small>
             Figma được guard và read-back
-            {creativeScreens.length > 0 ? ` · creative blueprint ${creativeScreens.length} màn hình/${creativeLayers} lớp` : ''}
-            {figmaTimeoutMinutes ? ` · budget tối đa ${figmaTimeoutMinutes} phút theo quy mô plan` : ''}.
+            {creativeScreens.length > 0 ? ` · guarded scaffold ${creativeScreens.length} màn hình/${creativeLayers} lớp` : ''}
+            {figmaTimeoutMinutes ? ` · tổng budget tối đa ${figmaTimeoutMinutes} phút cho scaffold + craft` : ''}.
             {' '}PRD được xuất local; backlog vẫn là mock cho tới khi có MCP.
           </small>
           <footer>

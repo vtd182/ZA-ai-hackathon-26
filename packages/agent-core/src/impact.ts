@@ -94,13 +94,31 @@ function paymentRemoval(spec: ProductSpec, targetId: string, updatedAt: string):
 
   const kinds = kindById(spec)
   const relatedIds = new Set<string>([targetId])
+  const removesPayment = targetId === 'REQ-PAYMENT'
+  if (removesPayment) {
+    relatedIds.add(spec.idea.id)
+    spec.decisions
+      .filter((decision) => /payment|thanh toán|ví nội bộ/i.test(`${decision.question} ${decision.choice}`))
+      .forEach((decision) => relatedIds.add(decision.id))
+  }
   for (const edge of spec.relationships) {
     if (edge.source.id === targetId && ['IMPLEMENTS', 'DESIGNED_BY', 'DEPENDS_ON', 'AFFECTS'].includes(edge.type)) {
       relatedIds.add(edge.target.id)
     }
   }
 
-  const screens = spec.screens.map((screen) => ({ ...screen, requirementIds: screen.requirementIds.filter((id) => id !== targetId) }))
+  const screens = spec.screens.map((screen) => {
+    const requirementIds = screen.requirementIds.filter((id) => id !== targetId)
+    if (targetId !== 'REQ-PAYMENT' || requirementIds.length === 0) return { ...screen, requirementIds }
+    return {
+      ...screen,
+      purpose: screen.id === 'SCREEN-CHECKOUT'
+        ? 'Kiểm tra đơn trước khi xác nhận'
+        : screen.purpose,
+      requirementIds,
+      designSystemRoles: screen.designSystemRoles.filter((role) => role !== 'payment-method'),
+    }
+  })
   const stories = spec.stories.map((story) => ({ ...story, requirementIds: story.requirementIds.filter((id) => id !== targetId) }))
   const dependencies = spec.dependencies.map((dependency) => ({ ...dependency, requirementIds: dependency.requirementIds.filter((id) => id !== targetId) }))
   const removedIds = new Set<string>([
@@ -114,12 +132,27 @@ function paymentRemoval(spec: ProductSpec, targetId: string, updatedAt: string):
     ...structuredClone(spec),
     version: spec.version + 1,
     status: 'draft',
+    idea: removesPayment
+      ? {
+          ...spec.idea,
+          summary: 'Nhân viên đặt món trước và nhận theo mã tại pantry, giảm thời gian chờ trong giờ cao điểm.',
+        }
+      : spec.idea,
     requirements: spec.requirements.map((requirement) => requirement.id === targetId
       ? { ...requirement, status: 'removed', priority: 'wont' }
       : { ...requirement, dependsOn: requirement.dependsOn.filter((id) => id !== targetId) }),
     screens: screens.filter((screen) => !removedIds.has(screen.id)),
     stories: stories.filter((story) => !removedIds.has(story.id)),
     dependencies: dependencies.filter((dependency) => !removedIds.has(dependency.id)),
+    decisions: spec.decisions.map((decision) => (
+      removesPayment && relatedIds.has(decision.id)
+        ? {
+            ...decision,
+            choice: 'MVP chưa gồm thanh toán ví nội bộ.',
+            rationale: 'Hoãn payment để tập trung vào luồng đặt món và nhận tại pantry.',
+          }
+        : decision
+    )),
     relationships: spec.relationships.filter((edge) => !removedIds.has(edge.source.id) && !removedIds.has(edge.target.id)),
     artifactMappings: spec.artifactMappings.map((mapping) => mapping.entityIds.some((id) => relatedIds.has(id)) ? { ...mapping, status: 'stale' } : mapping),
     updatedAt,
