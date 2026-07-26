@@ -71,6 +71,31 @@ function semanticNodes(context: CanvasDocumentContext): CanvasShapeContext[] {
   return context.shapes.filter((shape) => Boolean(shape.semanticId && shape.nodeKind))
 }
 
+// Sequence diagram: each distinct lane becomes a vertical actor column; nodes flow
+// downward in emission (message) order. Read like a UML sequence chart.
+function arrangeSequence(
+  raw: Map<string, Rectangle>,
+  nodes: Array<Extract<CanvasOperation, { op: 'create_node' }>>,
+): Map<string, Rectangle> {
+  const lanes: string[] = []
+  for (const node of nodes) {
+    const lane = node.lane ?? '—'
+    if (!lanes.includes(lane)) lanes.push(lane)
+  }
+  const columnWidth = Math.max(...nodes.map((node) => raw.get(node.id)!.width)) + 96
+  const arranged = new Map<string, Rectangle>()
+  for (const [row, node] of nodes.entries()) {
+    const rectangle = raw.get(node.id)!
+    const column = lanes.indexOf(node.lane ?? '—')
+    arranged.set(node.id, {
+      ...rectangle,
+      x: column * columnWidth,
+      y: row * (rectangle.height + 72),
+    })
+  }
+  return arranged
+}
+
 function arrangePrototypeDeck(
   raw: Map<string, Rectangle>,
   nodes: Array<Extract<CanvasOperation, { op: 'create_node' }>>,
@@ -151,16 +176,24 @@ export function layoutCanvasProgram(
   const isPrototypeDeck = nodeOperations.length >= 3
     && nodeOperations.length <= 5
     && nodeOperations.every((node) => node.kind === 'screen' && node.id.startsWith('prototype-'))
-  // A fresh large flow reads far better as a clean top-to-bottom layered graph
-  // (narrow, minimal edge crossings) than as a wide strip or a hand-rolled snake.
-  // Small flows stay left-to-right; prototype decks use their own grid.
-  const useVertical = !hasExistingParticipant
-    && !isPrototypeDeck
-    && nodeOperations.length > LARGE_SCENE_NODE_COUNT
+  const sceneType = program.sceneType
+  const isSequence = !hasExistingParticipant && sceneType === 'sequence'
+  // Per-diagram orientation:
+  //  - sequence: custom actor-column grid (below).
+  //  - state machine: top-to-bottom transitions read like a lifecycle.
+  //  - mind map / ER: left-to-right so the root/entities fan out horizontally.
+  //  - workflow: L→R when small, T→B once large so it stays narrow and crossing-light.
+  let rankdir: 'TB' | 'LR' = 'LR'
+  if (!hasExistingParticipant && !isPrototypeDeck && !isSequence) {
+    if (sceneType === 'state') rankdir = 'TB'
+    else if (sceneType === 'mindmap' || sceneType === 'er') rankdir = 'LR'
+    else if (nodeOperations.length > LARGE_SCENE_NODE_COUNT) rankdir = 'TB'
+  }
+  const useVertical = rankdir === 'TB'
 
   const graph = new dagre.graphlib.Graph({ multigraph: true })
   graph.setGraph({
-    rankdir: useVertical ? 'TB' : 'LR',
+    rankdir,
     align: 'UL',
     nodesep: useVertical ? 72 : 88,
     edgesep: useVertical ? 28 : 48,
@@ -194,7 +227,9 @@ export function layoutCanvasProgram(
       height: value.height,
     })
   }
-  if (!hasExistingParticipant && isPrototypeDeck) {
+  if (isSequence) {
+    raw = arrangeSequence(raw, nodeOperations)
+  } else if (!hasExistingParticipant && isPrototypeDeck) {
     raw = arrangePrototypeDeck(raw, nodeOperations)
   }
   // Large fresh flows already used the vertical (TB) dagre pass above, which lays them

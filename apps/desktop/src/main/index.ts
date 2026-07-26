@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
 import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, changeIntentFromCanvasCommand, createHandoffPackage, createImpactPreview, customDecisionOptionId, executeConnectorAction, normalizeClarificationAnswers, rejectActions, resolveRemovalChangeIntent, selectDecisionOption, synthesizeProductSpecFromDecision, type ConnectorExecutionResult } from '@pm-agent/agent-core'
-import { legacyCommandsToCanvasProgram, planExplicitCanvasRequest, resolveCanvasSelection, synthesizeProductSpecFromCanvas } from '@pm-agent/canvas'
+import { legacyCommandsToCanvasProgram, planDiagramScene, planExplicitCanvasRequest, resolveCanvasSelection, synthesizeProductSpecFromCanvas } from '@pm-agent/canvas'
 import {
   createFigmaArtifactPlan,
   createMockJiraPlan,
@@ -1537,6 +1537,30 @@ function registerIpc(): void {
       if (slashCommand?.kind === 'help') return appOwnedReply(slashHelpMessage())
       if (slashCommand?.kind === 'invalid') {
         return appOwnedReply(`Slash command không hợp lệ: ${slashCommand.command}\n\n${slashHelpMessage()}`)
+      }
+      if (slashCommand?.kind === 'canvas_diagram') {
+        const program = planDiagramScene(slashCommand.diagram)
+        const diagramRequestId = `canvas-request:${turnId}`
+        pendingCanvasExecutions.set(diagramRequestId, { threadId: input.threadId, program, kind: 'draw' })
+        const diagramLabels: Record<typeof slashCommand.diagram, string> = {
+          sequence: 'sequence diagram', state: 'state machine', mindmap: 'mind map', er: 'ER data model',
+        }
+        const assistantMessage = history.addMessage(
+          input.threadId, 'assistant',
+          `Mình đã dựng ${diagramLabels[slashCommand.diagram]} (${program.title ?? program.summary}) trên canvas; sau checkpoint sẽ có read-back để bạn review.`,
+        )
+        history.saveProviderSegment(input.threadId, profile.id, profile.modelId, null)
+        history.completeTurn(turnId, 'completed', [])
+        turnFinished = true
+        return {
+          userMessage,
+          assistantMessage,
+          commands: [],
+          suggestions: [],
+          canvasProgram: program,
+          canvasProgramSource: 'deterministic_fallback' as const,
+          canvasRequestId: diagramRequestId,
+        }
       }
       if (slashCommand?.kind === 'figma_status') {
         const status = await figmaStatus()

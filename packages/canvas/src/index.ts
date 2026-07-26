@@ -1,4 +1,4 @@
-import { canvasProgramSchema, parseProductSpec, type CanvasDocumentContext, type CanvasOperation, type CanvasProgram, type CanvasSelectionContext, type ChatMessage, type EntityKind, type ProductSpec, type ProviderCommand, type WorkflowView } from '@pm-agent/domain'
+import { canvasProgramSchema, parseProductSpec, type CanvasDocumentContext, type CanvasNodeKind, type CanvasOperation, type CanvasProgram, type CanvasSelectionContext, type ChatMessage, type EntityKind, type ProductSpec, type ProviderCommand, type WorkflowView } from '@pm-agent/domain'
 
 export * from './scene-layout'
 
@@ -664,6 +664,129 @@ function prototypeScreens(message: string, context: CanvasPlanningContext): Canv
     })),
     { sceneType: 'prototype', title: 'MVP Product Prototype', description: 'Các màn hình chính để review luồng và nội dung.' },
   )
+}
+
+interface GraphSceneNode {
+  id: string
+  label: string
+  kind: CanvasNodeKind
+  description?: string
+  badge?: string
+  lane?: string
+  tone?: 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info' | 'accent'
+}
+
+function buildGraphScene(
+  sceneType: 'sequence' | 'state' | 'mindmap' | 'er',
+  summary: string,
+  title: string,
+  description: string,
+  nodes: GraphSceneNode[],
+  edges: Array<{ from: string; to: string; label?: string }>,
+): CanvasProgram {
+  const operations: CanvasProgram['operations'] = [
+    ...nodes.map((node) => ({
+      op: 'create_node' as const,
+      id: node.id,
+      label: node.label,
+      kind: node.kind,
+      ...(node.description ? { description: node.description } : {}),
+      ...(node.badge ? { badge: node.badge } : {}),
+      ...(node.lane ? { lane: node.lane } : {}),
+      ...(node.tone ? { tone: node.tone } : {}),
+    })),
+    ...edges.map((edge, index) => ({
+      op: 'connect' as const,
+      id: `edge-${index}-${edge.from}-${edge.to}`,
+      fromId: edge.from,
+      toId: edge.to,
+      ...(edge.label ? { label: edge.label } : {}),
+    })),
+  ]
+  return canvasProgramSchema.parse({ schemaVersion: 1, mode: 'operations', summary, operations, script: null, sceneType, title, description })
+}
+
+// Deterministic showcase scenes for the extended diagram vocabulary. Each is a
+// node/edge graph the layout engine arranges per sceneType (sequence columns,
+// state/ER dagre, mind-map tree).
+export function sequenceDiagramScene(): CanvasProgram {
+  return buildGraphScene('sequence', 'Sequence: đặt suất ăn qua OA', 'SEQUENCE · ĐẶT SUẤT ĂN', 'Luồng tin nhắn giữa Người dùng, OA/Bot và Backend.', [
+    { id: 'seq-open', label: 'Mở Mini App từ OA', kind: 'process', lane: 'Người dùng', tone: 'brand', badge: '01' },
+    { id: 'seq-request', label: 'Gửi yêu cầu đặt món', kind: 'process', lane: 'OA / Bot', tone: 'info', badge: '02' },
+    { id: 'seq-auth', label: 'Xác thực phiên', kind: 'process', lane: 'Backend', tone: 'neutral', badge: '03' },
+    { id: 'seq-order', label: 'Tạo đơn nhóm', kind: 'process', lane: 'Backend', tone: 'success', badge: '04' },
+    { id: 'seq-push', label: 'Đẩy xác nhận qua OA', kind: 'process', lane: 'OA / Bot', tone: 'info', badge: '05' },
+    { id: 'seq-track', label: 'Nhận mã & theo dõi', kind: 'screen', lane: 'Người dùng', tone: 'brand', badge: '06' },
+  ], [
+    { from: 'seq-open', to: 'seq-request', label: 'chọn món' },
+    { from: 'seq-request', to: 'seq-auth', label: 'token' },
+    { from: 'seq-auth', to: 'seq-order', label: 'hợp lệ' },
+    { from: 'seq-order', to: 'seq-push', label: 'orderId' },
+    { from: 'seq-push', to: 'seq-track', label: 'push OA' },
+  ])
+}
+
+export function stateMachineScene(): CanvasProgram {
+  return buildGraphScene('state', 'State: vòng đời đơn nhóm', 'STATE · VÒNG ĐỜI ĐƠN', 'Trạng thái đơn và transition có điều kiện.', [
+    { id: 'st-draft', label: 'Nháp', kind: 'process', tone: 'neutral', badge: 'START' },
+    { id: 'st-pending', label: 'Chờ xác nhận', kind: 'process', tone: 'warning' },
+    { id: 'st-confirmed', label: 'Đã xác nhận', kind: 'process', tone: 'info' },
+    { id: 'st-preparing', label: 'Đang chuẩn bị', kind: 'process', tone: 'brand' },
+    { id: 'st-ready', label: 'Sẵn sàng nhận', kind: 'process', tone: 'success' },
+    { id: 'st-done', label: 'Hoàn tất', kind: 'screen', tone: 'success', badge: 'END' },
+    { id: 'st-cancelled', label: 'Đã hủy', kind: 'note', tone: 'danger', badge: 'END' },
+  ], [
+    { from: 'st-draft', to: 'st-pending', label: 'gửi' },
+    { from: 'st-pending', to: 'st-confirmed', label: 'duyệt' },
+    { from: 'st-pending', to: 'st-cancelled', label: 'quá giờ' },
+    { from: 'st-confirmed', to: 'st-preparing', label: 'bếp nhận' },
+    { from: 'st-preparing', to: 'st-ready', label: 'xong' },
+    { from: 'st-ready', to: 'st-done', label: 'đã nhận' },
+    { from: 'st-confirmed', to: 'st-cancelled', label: 'hủy' },
+  ])
+}
+
+export function mindMapScene(): CanvasProgram {
+  return buildGraphScene('mindmap', 'Mind map: scope Mini App', 'MIND MAP · SCOPE', 'Phân rã tính năng từ ý tưởng trung tâm.', [
+    { id: 'mm-root', label: 'Mini App đặt suất ăn', kind: 'decision', tone: 'brand', badge: 'CORE' },
+    { id: 'mm-order', label: 'Đặt món', kind: 'process', tone: 'info' },
+    { id: 'mm-group', label: 'Đặt nhóm', kind: 'process', tone: 'accent' },
+    { id: 'mm-pickup', label: 'Nhận tại pantry', kind: 'process', tone: 'success' },
+    { id: 'mm-notify', label: 'Nhắc qua OA', kind: 'process', tone: 'warning' },
+    { id: 'mm-menu', label: 'Thực đơn theo giờ', kind: 'note', tone: 'neutral' },
+    { id: 'mm-split', label: 'Chia người nhận', kind: 'note', tone: 'neutral' },
+    { id: 'mm-remind', label: 'Nhắc đến hạn', kind: 'note', tone: 'neutral' },
+  ], [
+    { from: 'mm-root', to: 'mm-order' },
+    { from: 'mm-root', to: 'mm-group' },
+    { from: 'mm-root', to: 'mm-pickup' },
+    { from: 'mm-root', to: 'mm-notify' },
+    { from: 'mm-order', to: 'mm-menu' },
+    { from: 'mm-group', to: 'mm-split' },
+    { from: 'mm-notify', to: 'mm-remind' },
+  ])
+}
+
+export function erDiagramScene(): CanvasProgram {
+  return buildGraphScene('er', 'ER: data model Mini App', 'ER · DATA MODEL', 'Entity và quan hệ chính của Mini App.', [
+    { id: 'er-user', label: 'User\nid · zaloId · name', kind: 'screen', tone: 'brand', badge: 'ENTITY' },
+    { id: 'er-order', label: 'Order\nid · userId · status', kind: 'screen', tone: 'info', badge: 'ENTITY' },
+    { id: 'er-item', label: 'OrderItem\nid · orderId · menuId · qty', kind: 'screen', tone: 'accent', badge: 'ENTITY' },
+    { id: 'er-menu', label: 'MenuItem\nid · name · price · slot', kind: 'screen', tone: 'success', badge: 'ENTITY' },
+    { id: 'er-pickup', label: 'Pickup\nid · orderId · location · time', kind: 'screen', tone: 'warning', badge: 'ENTITY' },
+  ], [
+    { from: 'er-user', to: 'er-order', label: '1 — n' },
+    { from: 'er-order', to: 'er-item', label: '1 — n' },
+    { from: 'er-item', to: 'er-menu', label: 'n — 1' },
+    { from: 'er-order', to: 'er-pickup', label: '1 — 1' },
+  ])
+}
+
+export function planDiagramScene(kind: 'sequence' | 'state' | 'mindmap' | 'er'): CanvasProgram {
+  if (kind === 'sequence') return sequenceDiagramScene()
+  if (kind === 'state') return stateMachineScene()
+  if (kind === 'mindmap') return mindMapScene()
+  return erDiagramScene()
 }
 
 export function planExplicitCanvasRequest(message: string, selection?: CanvasSelectionContext, context: CanvasPlanningContext = {}): CanvasProgram | undefined {

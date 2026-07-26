@@ -7,6 +7,7 @@ export type SlashCommand =
   | { kind: 'figma_retry' }
   | { kind: 'canvas_flow'; prompt: string }
   | { kind: 'canvas_prototype'; prompt: string }
+  | { kind: 'canvas_diagram'; diagram: 'sequence' | 'state' | 'mindmap' | 'er'; prompt: string }
   | { kind: 'studio_explore'; prompt: string }
   | { kind: 'studio_critique'; prompt: string }
   | { kind: 'studio_sketch'; prompt: string }
@@ -31,6 +32,10 @@ export function parseSlashCommand(input: string): SlashCommand | null {
   if (namespace === '/canvas') {
     if (action === 'flow') return { kind: 'canvas_flow', prompt }
     if (action === 'prototype') return { kind: 'canvas_prototype', prompt }
+    if (action === 'sequence') return { kind: 'canvas_diagram', diagram: 'sequence', prompt }
+    if (action === 'state') return { kind: 'canvas_diagram', diagram: 'state', prompt }
+    if (action === 'mindmap') return { kind: 'canvas_diagram', diagram: 'mindmap', prompt }
+    if (action === 'er') return { kind: 'canvas_diagram', diagram: 'er', prompt }
   }
   if (namespace === '/studio') {
     if (action === 'explore') return { kind: 'studio_explore', prompt }
@@ -51,6 +56,10 @@ export function slashHelpMessage(): string {
     '/figma retry — retry riêng Figma sau lỗi',
     '/canvas flow [mô tả] — ép tạo user flow trên canvas',
     '/canvas prototype [mô tả] — ép tạo prototype trên canvas',
+    '/canvas sequence — sequence diagram (actor: Người dùng / OA-Bot / Backend)',
+    '/canvas state — state machine (vòng đời + transition)',
+    '/canvas mindmap — mind map phân rã tính năng',
+    '/canvas er — ER data model của Mini App',
     '/studio explore [chủ đề] — cùng mở rộng ý tưởng, không tự vẽ',
     '/studio critique [chủ đề] — phản biện ý tưởng hoặc vùng chọn, không tự sửa',
     '/studio sketch [mô tả] — phác trực quan khi bạn yêu cầu',

@@ -120,6 +120,30 @@ describe('scene-aware canvas layout', () => {
     expect(distinctBands.size).toBeGreaterThan(1)
   })
 
+  it('arranges a sequence diagram into actor columns flowing downward', () => {
+    const program: CanvasProgram = {
+      schemaVersion: 1,
+      mode: 'operations',
+      sceneType: 'sequence',
+      summary: 'Sequence',
+      operations: [
+        { op: 'create_node', id: 'a', label: 'A', kind: 'process', lane: 'Người dùng' },
+        { op: 'create_node', id: 'b', label: 'B', kind: 'process', lane: 'Backend' },
+        { op: 'create_node', id: 'c', label: 'C', kind: 'process', lane: 'Người dùng' },
+        { op: 'connect', id: 'e1', fromId: 'a', toId: 'b' },
+        { op: 'connect', id: 'e2', fromId: 'b', toId: 'c' },
+      ],
+      script: null,
+    }
+    const result = layoutCanvasProgram(program, emptyContext)
+    const nodes = result.operations.filter((operation) => operation.op === 'create_node')
+    const byId = Object.fromEntries(nodes.map((node) => [node.id, node]))
+
+    expect(byId.a!.x).toBe(byId.c!.x) // same actor → same column
+    expect(byId.a!.x).not.toBe(byId.b!.x) // different actor → different column
+    expect(byId.c!.y!).toBeGreaterThan(byId.a!.y!) // time flows down
+  })
+
   it('reports overlapping nodes and dangling semantic edges', () => {
     const issues = lintCanvasDocument({
       ...emptyContext,

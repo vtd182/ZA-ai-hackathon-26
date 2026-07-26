@@ -64,7 +64,7 @@ export const canvasProgramSchema = z.object({
   summary: z.string().max(500),
   operations: z.array(canvasOperationSchema).max(200),
   script: z.string().max(20_000).nullable(),
-  sceneType: z.enum(['workflow', 'prototype', 'board']).optional(),
+  sceneType: z.enum(['workflow', 'prototype', 'board', 'sequence', 'state', 'mindmap', 'er']).optional(),
   title: z.string().max(120).optional(),
   description: z.string().max(300).optional(),
 }).superRefine((program, context) => {
@@ -198,7 +198,7 @@ export const canvasProgramJsonSchema = {
     mode: { type: 'string', enum: ['none', 'operations', 'script'] },
     summary: { type: 'string' },
     script: nullableString,
-    sceneType: { type: ['string', 'null'], enum: ['workflow', 'prototype', 'board', null] },
+    sceneType: { type: ['string', 'null'], enum: ['workflow', 'prototype', 'board', 'sequence', 'state', 'mindmap', 'er', null] },
     title: nullableString,
     description: nullableString,
     operations: {
@@ -329,7 +329,7 @@ export function normalizeCanvasProgram(value: unknown): CanvasProgram | undefine
       summary: stringValue(wire.summary) ?? '',
       operations,
       script: null,
-      ...(['workflow', 'prototype', 'board'].includes(String(wire.sceneType)) ? { sceneType: wire.sceneType } : {}),
+      ...(['workflow', 'prototype', 'board', 'sequence', 'state', 'mindmap', 'er'].includes(String(wire.sceneType)) ? { sceneType: wire.sceneType } : {}),
       ...(stringValue(wire.title) ? { title: stringValue(wire.title) } : {}),
       ...(stringValue(wire.description) ? { description: stringValue(wire.description) } : {}),
     })

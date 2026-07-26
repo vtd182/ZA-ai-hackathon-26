@@ -36,8 +36,16 @@ describe('slash commands', () => {
     })
   })
 
+  it('routes the extended diagram vocabulary', () => {
+    expect(parseSlashCommand('/canvas sequence')).toEqual({ kind: 'canvas_diagram', diagram: 'sequence', prompt: '' })
+    expect(parseSlashCommand('/canvas state')).toEqual({ kind: 'canvas_diagram', diagram: 'state', prompt: '' })
+    expect(parseSlashCommand('/canvas mindmap')).toEqual({ kind: 'canvas_diagram', diagram: 'mindmap', prompt: '' })
+    expect(parseSlashCommand('/canvas er data model')).toEqual({ kind: 'canvas_diagram', diagram: 'er', prompt: 'data model' })
+  })
+
   it('returns null for natural language and guards unknown slash commands', () => {
     expect(parseSlashCommand('Tạo thiết kế trên Figma')).toBeNull()
     expect(parseSlashCommand('/figma destroy')).toEqual({ kind: 'invalid', command: '/figma destroy' })
+    expect(parseSlashCommand('/canvas hologram')).toEqual({ kind: 'invalid', command: '/canvas hologram' })
   })
 })
