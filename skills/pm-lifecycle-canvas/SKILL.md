@@ -47,21 +47,51 @@ Allowed kinds are `note`, `process`, `decision`, and `screen`. Keep IDs stable s
 
 Omit coordinates for normal workflows. The app will arrange the semantic graph, avoid occupied user content and keep local edits near their referenced node. Use explicit coordinates only when spatial placement itself is intentional; developer-source positions are preserved.
 
-For generated layouts, use the virtual script API. It intentionally accepts only direct `canvas.node/connect/update/remove` calls, not loops, imports or arbitrary JavaScript:
+## Scripting with real JavaScript
+
+`POST /api/threads/THREAD_ID/scripts` now runs **real JavaScript** in a sandboxed
+main-process VM and compiles whatever your code builds into canvas operations — so generate
+scenes programmatically with loops, variables, functions and `Math`. The sandbox exposes only
+a `canvas` builder plus pure computation (`Math`, `JSON`, `Array`, `Object`, `Number`,
+`String`, …); there is no `require`, `process`, `fetch`, filesystem, network or Electron
+access, and the only effect is the operations it emits (≤ 200 per run, ~1.5s budget).
+
+The `canvas` builder:
 
 ```js
-canvas.node("register", "Đăng ký", "screen")
-canvas.node("verify", "Xác thực", "screen")
-canvas.connect("register-verify", "register", "verify")
-canvas.update("verify", {"color":"blue"})
+canvas.node(id, label, kind = "process", opts?)   // opts: { x, y, tone, color, badge, lane, icon, description }
+canvas.connect(id, fromId, toId, label?)
+canvas.update(id, opts)                            // { label?, color? }
+canvas.remove(id)
 ```
 
-The response is an apply/read-back receipt with visual lint evidence. Treat HTTP `202` as queued, not verified. Before reporting completion, inspect again and confirm there are no overlap or dangling-edge errors.
+Example — a generated grid of steps (this is exactly the creative freedom to use):
+
+```js
+const cols = 4
+for (let i = 0; i < 12; i++) {
+  const tone = i % 3 === 0 ? "brand" : i % 3 === 1 ? "success" : "warning"
+  canvas.node("step-" + i, "Bước " + (i + 1), "process", {
+    x: (i % cols) * 300,
+    y: Math.floor(i / cols) * 220,
+    tone,
+  })
+  if (i % cols !== 0) canvas.connect("edge-" + i, "step-" + (i - 1), "step-" + i)
+}
+```
+
+Allowed `kind`: `note`, `process`, `decision`, `screen`. Keep IDs stable so a rerun updates
+the same object. Prefer omitting `x`/`y` to let the app auto-arrange; set them only when
+spatial placement is intentional.
+
+The response is an apply/read-back receipt with visual lint evidence. Treat HTTP `202` as
+queued, not verified. Before reporting completion, inspect again and confirm there are no
+overlap or dangling-edge errors.
 
 ## Boundaries
 
 - This bridge controls free canvas presentation only. It does not mutate ProductSpec.
 - ProductSpec promotion and every external artifact write remain guarded in the app.
-- The script worker has no network, filesystem, Node, Electron IPC or connector capability.
+- Script JavaScript runs sandboxed: no network, filesystem, Node, Electron IPC or connector capability.
 - Do not edit SQLite or tldraw snapshots directly.
 - Read the target thread before drawing and verify by reading its canvas again after the app saves it.

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CanvasBridge } from './canvas-bridge'
+import { runCanvasScriptVm } from './canvas-script-vm'
 
 describe('CanvasBridge', () => {
   const homes: string[] = []
@@ -23,6 +24,7 @@ describe('CanvasBridge', () => {
       listThreads: () => [thread],
       getThread: () => thread,
       dispatch: (threadId, commands) => dispatched.push({ threadId, commands }),
+      runScript: runCanvasScriptVm,
       dispatchProgram: (threadId, batchId, program) => {
         dispatched.push({ threadId, program })
         queueMicrotask(() => bridge.acknowledge({
@@ -73,8 +75,29 @@ describe('CanvasBridge', () => {
       expect(programResponse.status).toBe(200)
       expect(await programResponse.json()).toMatchObject({ appliedOperationCount: 3, shapeCount: 2 })
       expect(dispatched).toHaveLength(2)
+
+      // Real JavaScript (a loop) runs in the main VM and is compiled to operations.
+      const scriptResponse = await fetch(`${base}/api/threads/THREAD-1/scripts`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${descriptor.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ script: "for (let i = 0; i < 5; i++) { canvas.node('n' + i, 'Bước ' + (i + 1), 'process', { x: i * 260, y: 0 }); if (i > 0) canvas.connect('e' + i, 'n' + (i - 1), 'n' + i); }" }),
+      })
+      expect(scriptResponse.status).toBe(200)
+      const scriptProgram = (dispatched[2] as { program: { operations: unknown[]; mode: string } }).program
+      expect(scriptProgram.mode).toBe('operations')
+      expect(scriptProgram.operations).toHaveLength(9) // 5 nodes + 4 connects
     } finally {
       bridge.stop()
     }
+  })
+
+  it('runs real JavaScript but blocks filesystem/network/process access', () => {
+    // Loops, variables and Math work.
+    const ops = runCanvasScriptVm("const n = 3; for (let i = 0; i < n; i++) canvas.node('s' + i, 'S' + Math.round(i * 1.5), 'note');")
+    expect(ops).toHaveLength(3)
+    // The sandbox exposes no require/process/fetch/global.
+    expect(() => runCanvasScriptVm("canvas.node(String(require('fs')), 'x')")).toThrow()
+    expect(() => runCanvasScriptVm("canvas.node(String(process.pid), 'x')")).toThrow()
+    expect(() => runCanvasScriptVm("fetch('http://evil')")).toThrow()
   })
 })

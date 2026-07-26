@@ -69,6 +69,7 @@ import { DEMO_FIXTURE_VERSION, DEMO_THREAD_ID, FigmaIntegrationStore, HistorySto
 import { createScaffoldFigmaBlueprint, ProviderRegistry } from '@pm-agent/reasoning'
 import { SecretStore } from './secret-store'
 import { CanvasBridge } from './canvas-bridge'
+import { runCanvasScriptVm } from './canvas-script-vm'
 import { assertProviderTurnAvailable } from './active-turns'
 import { parseSlashCommand, slashHelpMessage } from './slash-commands'
 import { mapFreeformDiscoveryAnswers } from './workflow-intent'
@@ -2956,6 +2957,7 @@ app.whenReady().then(() => {
     getThread: (threadId) => history.getThread(threadId),
     dispatch: (threadId, commands) => mainWindow?.webContents.send('canvas:external-commands', { threadId, batchId: Date.now(), commands }),
     dispatchProgram: (threadId, batchId, program) => mainWindow?.webContents.send('canvas:external-program', { threadId, batchId, program, source: 'developer' }),
+    runScript: (source) => runCanvasScriptVm(source),
   })
   void canvasBridge.start().catch((error) => console.error('[canvas-bridge] failed to start', error))
   try {

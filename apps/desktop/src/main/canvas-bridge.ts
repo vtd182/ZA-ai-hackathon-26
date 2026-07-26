@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
-import { canvasProgramSchema, providerCommandSchema, type CanvasExecutionReceipt, type CanvasProgram, type ProviderCommand, type ThreadDetail, type ThreadSummary } from '@pm-agent/domain'
+import { canvasProgramSchema, providerCommandSchema, type CanvasExecutionReceipt, type CanvasOperation, type CanvasProgram, type ProviderCommand, type ThreadDetail, type ThreadSummary } from '@pm-agent/domain'
 
 interface CanvasBridgeOptions {
   homePath: string
@@ -10,6 +10,7 @@ interface CanvasBridgeOptions {
   getThread(threadId: string): ThreadDetail
   dispatch(threadId: string, commands: ProviderCommand[]): void
   dispatchProgram(threadId: string, batchId: number, program: CanvasProgram): void
+  runScript(source: string): CanvasOperation[]
 }
 
 function sendJson(response: ServerResponse, status: number, value: unknown): void {
@@ -133,7 +134,10 @@ export class CanvasBridge {
         this.options.getThread(threadId)
         const payload = await readJson(request) as { program?: unknown; script?: unknown }
         const program = programMatch[2] === 'scripts'
-          ? canvasProgramSchema.parse({ schemaVersion: 1, mode: 'script', summary: 'Developer canvas script', operations: [], script: payload.script })
+          // Real developer JavaScript runs in a sandboxed main-process VM and is compiled to
+          // validated operations here, so the renderer only ever applies a plain operations
+          // program (no eval in the CSP-locked renderer).
+          ? canvasProgramSchema.parse({ schemaVersion: 1, mode: 'operations', summary: 'Developer canvas script', operations: this.options.runScript(String(payload.script ?? '')), script: null })
           : canvasProgramSchema.parse(payload.program)
         const batchId = Date.now()
         const receiptPromise = this.waitForReceipt(batchId)
