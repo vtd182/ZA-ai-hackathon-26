@@ -58,6 +58,12 @@ export class CanvasBridge {
     }), { mode: 0o600 })
   }
 
+  get status(): { running: boolean; port: number | null } {
+    const address = this.server?.address()
+    const port = address && typeof address !== 'string' ? address.port : null
+    return { running: Boolean(this.server) && port !== null, port }
+  }
+
   stop(): void {
     this.server?.close()
     this.server = null

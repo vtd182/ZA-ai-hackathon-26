@@ -124,6 +124,22 @@ describe('mock provider command inference', () => {
     expect(response.result.commands).toEqual([])
   })
 
+  it('never leaks canvas mutation commands on a route turn even when the text matches a command keyword', async () => {
+    const provider = new ProviderRegistry().get('mock')
+    const response = await provider.reason({
+      threadId: 'THREAD',
+      phase: 'change',
+      message: 'Mình nghĩ nên bỏ payment khỏi MVP, bạn thấy sao?',
+      recentMessages: [],
+      responseMode: 'route',
+      remoteRef: null,
+    }, { modelId: 'deterministic-v1' }, new AbortController().signal)
+
+    // Direct slash/creative turns own mutation; a lightweight route turn must not
+    // carry remove_card/switch_view even though the wording would infer one.
+    expect(response.result.commands).toEqual([])
+  })
+
   it('critiques a synced selection without pretending selection-only context is a canvas change', async () => {
     const provider = new ProviderRegistry().get('mock')
     const response = await provider.reason({

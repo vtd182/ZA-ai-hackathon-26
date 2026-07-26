@@ -346,6 +346,22 @@ export interface DesktopApi {
   demo: {
     reset(): Promise<DemoResetOutput>
   }
+  devBridge: {
+    status(): Promise<DevBridgeStatus>
+  }
+}
+
+export interface DevBridgeStatus {
+  schemaVersion: 1
+  running: boolean
+  port: number | null
+  skill: {
+    installed: boolean
+    id: string
+    version: string
+    dir: string
+    status: string
+  }
 }
 
 export const reasoningJsonSchema = {

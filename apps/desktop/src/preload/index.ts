@@ -68,6 +68,9 @@ const api: DesktopApi = {
   demo: {
     reset: () => ipcRenderer.invoke('demo:reset'),
   },
+  devBridge: {
+    status: () => ipcRenderer.invoke('dev-bridge:status'),
+  },
 }
 
 contextBridge.exposeInMainWorld('pmAgent', api)

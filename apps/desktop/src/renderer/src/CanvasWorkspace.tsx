@@ -184,6 +184,8 @@ export function CanvasWorkspace({
 
   const handleMount = useCallback((editor: Editor) => {
     editorRef.current = editor
+    // A subtle grid gives the workspace a design-tool feel without affecting shape state.
+    editor.updateInstanceState({ isGridMode: true })
     setEditorEpoch((value) => value + 1)
     syncedContext.current = emitContext(editor)
     const stopDocument = editor.store.listen(() => schedulePersistence(editor), { scope: 'document' })

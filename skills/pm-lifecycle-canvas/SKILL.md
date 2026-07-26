@@ -2,6 +2,7 @@
 name: pm-lifecycle-canvas
 description: Inspect PM Lifecycle Agent threads and draw semantic workflows or prototypes on the active tldraw canvas through the guarded local Canvas Bridge.
 ---
+<!-- installed-by:pm-lifecycle-agent -->
 
 # PM Lifecycle canvas collaborator
 
@@ -9,16 +10,18 @@ Use this skill when a developer or product owner asks Codex/Claude to inspect or
 
 ## Bridge
 
-The desktop app writes an ephemeral descriptor to `~/.pm-lifecycle-agent/canvas-bridge.json`. It contains a per-launch loopback port and bearer token and is removed on clean quit.
+The desktop app writes an ephemeral descriptor to `~/.pm-lifecycle-agent/canvas-bridge.json`. It contains a per-launch loopback port and bearer token and is removed on clean quit. If that file is absent, the app is not running — start it before drawing.
 
-Use the helper from this skill directory. It reloads the descriptor for every request:
+A ready-made helper ships with this skill and re-reads the descriptor (port + token) on every call, so you never handle the token yourself. **Each Bash call runs in a fresh shell, so always invoke the helper by its absolute path** — do not rely on the current working directory:
 
 ```bash
-./pm-canvas.sh GET /api/threads
-./pm-canvas.sh GET /api/threads/THREAD_ID/canvas
-./pm-canvas.sh POST /api/threads/THREAD_ID/programs '{"program":{...}}'
-./pm-canvas.sh POST /api/threads/THREAD_ID/scripts '{"script":"canvas.node(...)"}'
+sh "$HOME/.claude/skills/pm-lifecycle-canvas/pm-canvas.sh" GET  /api/threads
+sh "$HOME/.claude/skills/pm-lifecycle-canvas/pm-canvas.sh" GET  /api/threads/THREAD_ID/canvas
+sh "$HOME/.claude/skills/pm-lifecycle-canvas/pm-canvas.sh" POST /api/threads/THREAD_ID/programs '{"program":{...}}'
+sh "$HOME/.claude/skills/pm-lifecycle-canvas/pm-canvas.sh" POST /api/threads/THREAD_ID/scripts '{"script":"canvas.node(...)"}'
 ```
+
+When running from a checkout of the repository instead of the installed copy, call `./pm-canvas.sh` from this skill directory; both resolve the same descriptor.
 
 ## Canvas programs
 

@@ -40,6 +40,7 @@ import type {
   ChangePreview,
   ChatMessage,
   ConversationSuggestion,
+  DevBridgeStatus,
   FigmaSetupStatus,
   ExecutionSummary,
   LifecycleWorkspaceState,
@@ -109,6 +110,7 @@ export function App(): React.JSX.Element {
   const [resetOpen, setResetOpen] = useState(false)
   const [pendingPaidProvider, setPendingPaidProvider] = useState<ProviderProfile | null>(null)
   const [figmaStatus, setFigmaStatus] = useState<FigmaSetupStatus | null>(null)
+  const [devBridge, setDevBridge] = useState<DevBridgeStatus | null>(null)
   const [selection, setSelection] = useState<CanvasSelectionContext | undefined>()
   const [canvasContext, setCanvasContext] = useState<CanvasDocumentContext | undefined>()
   const [lifecycleWorkspace, setLifecycleWorkspace] = useState<LifecycleWorkspaceState | null>(null)
@@ -168,6 +170,8 @@ export function App(): React.JSX.Element {
         setLoading(false)
       })
   }, [openThread])
+
+  useEffect(() => { void window.pmAgent.devBridge.status().then(setDevBridge).catch(() => setDevBridge(null)) }, [])
 
   useEffect(() => window.pmAgent.canvas.onExternalCommands((batch) => {
     void (async () => {
@@ -603,6 +607,16 @@ export function App(): React.JSX.Element {
             >
               <Settings size={18} />
             </button>
+            {devBridge?.running && (
+              <span
+                className="integration-button connected dev-bridge-chip"
+                title={`Dev Canvas Bridge đang chạy tại 127.0.0.1:${devBridge.port}. Claude Code / Codex trên máy này có thể vẽ workflow lên canvas qua skill "${devBridge.skill.id}" (${devBridge.skill.status}).`}
+              >
+                <Bot size={16} />
+                <span>AI Canvas</span>
+                <i />
+              </span>
+            )}
             <button
               className={figmaStatus?.target && figmaStatus.designSystem?.mode === 'live' ? 'integration-button connected' : 'integration-button'}
               title="Figma integration"

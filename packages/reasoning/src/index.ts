@@ -662,6 +662,11 @@ class MockProvider implements ReasoningProvider {
       const collaboration = mockConversationReply(request)
       result.message = collaboration.message
       suggestions = collaboration.suggestions
+      // Route turns are lightweight conversation classification only; they must not
+      // carry canvas mutation commands. A live provider returns an empty command list
+      // in route mode, so the offline mock mirrors that to avoid conversation turns
+      // silently mutating canvas/phase (parity with BUG-035/036).
+      result.commands = []
     }
     if (request.responseMode === 'figma') {
       if (!request.productSpec) throw new Error('Mock Figma design requires ProductSpec')
@@ -676,6 +681,41 @@ class MockProvider implements ReasoningProvider {
   }
 }
 
+function providerTimeoutMs(request: ReasoningRequest): number {
+  if (request.responseMode === 'figma') return 300_000
+  if (request.responseMode === 'creative') return 180_000
+  return 120_000
+}
+
+/**
+ * Runs a provider call under a hard deadline while forwarding user cancellation.
+ * The race guarantees the turn settles even if an SDK ignores the AbortSignal, so a
+ * stalled provider can never hold the app's single active-turn slot open forever.
+ */
+async function withProviderDeadline<T>(
+  signal: AbortSignal,
+  timeoutMs: number,
+  run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController()
+  const forwardAbort = (): void => controller.abort()
+  if (signal.aborted) controller.abort()
+  else signal.addEventListener('abort', forwardAbort, { once: true })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      reject(new Error(`Provider không phản hồi trong ${Math.round(timeoutMs / 1000)}s`))
+    }, timeoutMs)
+  })
+  try {
+    return await Promise.race([run(controller.signal), deadline])
+  } finally {
+    if (timer) clearTimeout(timer)
+    signal.removeEventListener('abort', forwardAbort)
+  }
+}
+
 class OpenAIProvider implements ReasoningProvider {
   readonly id = 'openai'
   readonly capabilities = openAiCapabilities
@@ -687,7 +727,7 @@ class OpenAIProvider implements ReasoningProvider {
   async reason(request: ReasoningRequest, config: ProviderRuntimeConfig, signal: AbortSignal): Promise<ProviderResponse> {
     const apiKey = requiredCredential(config.apiKey, 'OPENAI_API_KEY')
     const client = new OpenAI({ apiKey })
-    const response = await client.responses.create({
+    const response = await withProviderDeadline(signal, providerTimeoutMs(request), (deadlineSignal) => client.responses.create({
       model: config.modelId,
       input: buildPrompt(request),
       store: false,
@@ -699,7 +739,7 @@ class OpenAIProvider implements ReasoningProvider {
           schema: outputSchemaFor(request),
         },
       },
-    }, { signal })
+    }, { signal: deadlineSignal }))
     return normalizedParsedResponse(parseProviderOutput(response.output_text, request), response.id, this.capabilities, response.usage
       ? { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens }
       : undefined)
@@ -718,14 +758,15 @@ class GeminiProvider implements ReasoningProvider {
     if (signal.aborted) throw new Error('Đã hủy yêu cầu')
     const apiKey = requiredCredential(config.apiKey, 'GEMINI_API_KEY')
     const client = new GoogleGenAI({ apiKey })
-    const response = await client.models.generateContent({
+    const response = await withProviderDeadline(signal, providerTimeoutMs(request), (deadlineSignal) => client.models.generateContent({
       model: config.modelId,
       contents: buildPrompt(request),
       config: {
+        abortSignal: deadlineSignal,
         responseMimeType: 'application/json',
         responseJsonSchema: outputSchemaFor(request),
       },
-    })
+    }))
     const usage = response.usageMetadata
     return normalizedParsedResponse(parseProviderOutput(response.text ?? '', request), null, this.capabilities, usage
       ? { inputTokens: usage.promptTokenCount ?? 0, outputTokens: usage.candidatesTokenCount ?? 0 }
@@ -744,15 +785,19 @@ class AnthropicProvider implements ReasoningProvider {
   async reason(request: ReasoningRequest, config: ProviderRuntimeConfig, signal: AbortSignal): Promise<ProviderResponse> {
     const apiKey = requiredCredential(config.apiKey, 'ANTHROPIC_API_KEY')
     const client = new Anthropic({ apiKey })
-    const response = await client.messages.create({
+    const response = await withProviderDeadline(signal, providerTimeoutMs(request), (deadlineSignal) => client.messages.create({
       model: config.modelId,
-      max_tokens: request.responseMode === 'figma' ? 16_000 : 1_400,
+      max_tokens: request.responseMode === 'figma'
+        ? 16_000
+        : request.responseMode === 'creative'
+          ? 8_000
+          : 1_400,
       system: systemPolicy,
       messages: [{ role: 'user', content: buildPrompt(request) }],
       output_config: {
         format: { type: 'json_schema', schema: outputSchemaFor(request) },
       },
-    }, { signal })
+    }, { signal: deadlineSignal }))
     const text = response.content
       .filter((block): block is Anthropic.TextBlock => block.type === 'text')
       .map((block) => block.text)

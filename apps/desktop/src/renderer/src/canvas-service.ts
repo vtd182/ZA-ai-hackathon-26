@@ -701,6 +701,18 @@ function upsertRichNodeFrame(
       align: 'start',
     },
     {
+      role: 'accent',
+      label: '',
+      x: 0,
+      y: 0,
+      width: 7,
+      height: dimensions.height,
+      color: presentation.color,
+      fill: 'solid',
+      size: 's',
+      align: 'start',
+    },
+    {
       role: 'badge',
       label: [operation.icon?.toUpperCase(), operation.badge].filter(Boolean).join('  ·  ') || operation.kind.toUpperCase(),
       x: 16,
@@ -752,7 +764,7 @@ function upsertRichNodeFrame(
 
   for (const child of children) {
     const childId = richNodeChildId(operation.id, child.role)
-    if (child.role !== 'background') {
+    if (child.role !== 'background' && child.role !== 'accent') {
       const textShape = {
         id: childId,
         type: 'text',

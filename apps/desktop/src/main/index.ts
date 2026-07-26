@@ -75,6 +75,7 @@ import { mapFreeformDiscoveryAnswers } from './workflow-intent'
 import { isManagedFigmaArtifactPage, missingFigmaRoles } from './figma-source-policy'
 import { CodexFigmaDesignWorker, type FigmaDesignWorkerStage, type FigmaDesignWorkerTask } from './figma-design-worker'
 import { loadFigmaCraftSkillPack } from './skill-packs'
+import { CANVAS_SKILL_ID, CANVAS_SKILL_VERSION, installCanvasSkill } from './skill-installer'
 
 const { app, BrowserWindow, ipcMain, shell } = electron
 if (process.env.PM_AGENT_REMOTE_DEBUG_PORT) {
@@ -93,6 +94,7 @@ let mockJira: MockJiraConnector
 let mockZdoc: MockZdocConnector
 let secrets: SecretStore
 let canvasBridge: CanvasBridge
+let canvasSkillInstall: ReturnType<typeof installCanvasSkill> | null = null
 const providers = new ProviderRegistry()
 const figmaDesignWorker = new CodexFigmaDesignWorker()
 const activeRuns = new Map<string, AbortController>()
@@ -1891,6 +1893,22 @@ function registerIpc(): void {
   })
   ipcMain.handle('chat:cancel', (_event, threadId: string) => activeRuns.get(threadId)?.abort())
   ipcMain.handle('demo:reset', () => resetDemoWorkspace())
+  ipcMain.handle('dev-bridge:status', (): import('@pm-agent/domain').DevBridgeStatus => {
+    const bridge = canvasBridge?.status ?? { running: false, port: null }
+    const install = canvasSkillInstall
+    return {
+      schemaVersion: 1,
+      running: bridge.running,
+      port: bridge.port,
+      skill: {
+        installed: install ? install.status !== 'skipped' : false,
+        id: CANVAS_SKILL_ID,
+        version: CANVAS_SKILL_VERSION,
+        dir: install?.skillDir ?? '',
+        status: install?.status ?? 'unknown',
+      },
+    }
+  })
 }
 
 function createWindow(): void {
@@ -2834,6 +2852,12 @@ app.whenReady().then(() => {
     dispatchProgram: (threadId, batchId, program) => mainWindow?.webContents.send('canvas:external-program', { threadId, batchId, program, source: 'developer' }),
   })
   void canvasBridge.start().catch((error) => console.error('[canvas-bridge] failed to start', error))
+  try {
+    canvasSkillInstall = installCanvasSkill(skillPackRuntimeRoots(), app.getPath('home'))
+    console.log(`[skill-installer] pm-lifecycle-canvas ${canvasSkillInstall.status} at ${canvasSkillInstall.skillDir}${canvasSkillInstall.reason ? ` (${canvasSkillInstall.reason})` : ''}`)
+  } catch (error) {
+    console.error('[skill-installer] failed to install canvas skill', error)
+  }
   void figmaRuntime.start()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
