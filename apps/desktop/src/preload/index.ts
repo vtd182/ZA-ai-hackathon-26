@@ -39,6 +39,7 @@ const api: DesktopApi = {
     previewPromotion: (threadId, canvas) => ipcRenderer.invoke('lifecycle:preview-promotion', threadId, canvas),
     commitPromotion: (threadId, payloadHash) => ipcRenderer.invoke('lifecycle:commit-promotion', threadId, payloadHash),
     prepareArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:prepare-artifacts', threadId),
+    regenerateArtifacts: (threadId, feedback) => ipcRenderer.invoke('lifecycle:regenerate-artifacts', threadId, feedback),
     approveArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:approve-artifacts', threadId),
     rejectArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:reject-artifacts', threadId),
     showDocument: (threadId) => ipcRenderer.invoke('lifecycle:show-document', threadId),

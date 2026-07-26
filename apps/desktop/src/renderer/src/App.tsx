@@ -57,6 +57,8 @@ const slashCommands = [
   { command: '/figma prepare', label: 'Prepare Figma', detail: 'Preflight, chưa write' },
   { command: '/figma approve', label: 'Approve Figma', detail: 'Duyệt plan đang chờ' },
   { command: '/figma create', label: 'Create Figma', detail: 'Prepare hoặc chạy plan sẵn có' },
+  { command: '/figma regenerate', label: 'Regenerate Figma', detail: 'Tạo lại bản thiết kế mới, giữ bản cũ', acceptsPrompt: false },
+  { command: '/figma refine', label: 'Refine Figma', detail: 'Agent sửa bản Figma hiện tại theo feedback', acceptsPrompt: true },
   { command: '/figma status', label: 'Figma status', detail: 'Plugin, target và guard' },
   { command: '/figma retry', label: 'Retry Figma', detail: 'Giữ nguyên target đã thành công' },
   { command: '/canvas flow', label: 'Canvas flow', detail: 'Ép tạo user flow', acceptsPrompt: true },
@@ -470,6 +472,28 @@ export function App(): React.JSX.Element {
     }
   }
 
+  const regenerateArtifacts = async (feedback?: string): Promise<void> => {
+    if (!activeThread || approving) return
+    const requestThreadId = activeThread.id
+    setApproving(true)
+    setRunningThreadId(requestThreadId)
+    setArtifactProgress({})
+    setError(null)
+    try {
+      const workspace = await window.pmAgent.lifecycle.regenerateArtifacts(requestThreadId, feedback)
+      if (activeThreadIdRef.current === requestThreadId) {
+        setLifecycleWorkspace(workspace)
+        setActiveThread(await window.pmAgent.threads.get(requestThreadId))
+      }
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setApproving(false)
+      setRunningThreadId((current) => current === requestThreadId ? null : current)
+    }
+  }
+
   const decideArtifacts = async (decision: 'approve' | 'reject'): Promise<void> => {
     if (!activeThread || approving) return
     setApproving(true)
@@ -746,6 +770,7 @@ export function App(): React.JSX.Element {
         onCommitPromotion={commitPromotion}
         onCancelPromotion={() => setPromotionPreview(null)}
         onPrepareArtifacts={prepareArtifacts}
+        onRegenerateArtifacts={regenerateArtifacts}
         onApproveArtifacts={() => decideArtifacts('approve')}
         onRejectArtifacts={() => decideArtifacts('reject')}
         onShowDocument={async () => {
@@ -1016,6 +1041,7 @@ function ChatPanel({
   onCommitPromotion,
   onCancelPromotion,
   onPrepareArtifacts,
+  onRegenerateArtifacts,
   onApproveArtifacts,
   onRejectArtifacts,
   onShowDocument,
@@ -1054,6 +1080,7 @@ function ChatPanel({
   onCommitPromotion(): Promise<void>
   onCancelPromotion(): void
   onPrepareArtifacts(): Promise<void>
+  onRegenerateArtifacts(feedback?: string): Promise<void>
   onApproveArtifacts(): Promise<void>
   onRejectArtifacts(): Promise<void>
   onShowDocument(): Promise<void>
@@ -1208,6 +1235,7 @@ function ChatPanel({
           busy={approving || artifactBusy}
           onRetry={onRetry}
           onShowDocument={onShowDocument}
+          onRegenerate={onRegenerateArtifacts}
         />
       )}
       {reasoning && (reasoning.phase === 'discover' || reasoning.phase === 'decide') && (
@@ -1524,6 +1552,7 @@ function ExecutionPanel({
   busy,
   onRetry,
   onShowDocument,
+  onRegenerate,
 }: {
   execution?: ExecutionSummary
   progress: Partial<Record<PlannedAction['target'], ArtifactProgressEvent>>
@@ -1531,6 +1560,7 @@ function ExecutionPanel({
   busy: boolean
   onRetry(target: PlannedAction['target']): Promise<void>
   onShowDocument(): Promise<void>
+  onRegenerate(feedback?: string): Promise<void>
 }): React.JSX.Element {
   const labels: Record<PlannedAction['target'], string> = { figma: 'Figma', jira: 'Backlog mock', zdoc: 'PRD Markdown' }
   const stageLabels: Record<ArtifactProgressEvent['stage'], string> = {
@@ -1593,9 +1623,19 @@ function ExecutionPanel({
         })}
       </div>
       {execution?.status === 'verified' && (
-        <button className="document-open-button" onClick={() => void onShowDocument()}>
-          <FolderOpen size={15} /> Mở PRD.md
-        </button>
+        <div className="execution-actions">
+          <button className="document-open-button" onClick={() => void onShowDocument()}>
+            <FolderOpen size={15} /> Mở PRD.md
+          </button>
+          <button
+            className="regenerate-button"
+            disabled={busy}
+            title="Tạo một bản Figma mới trên cùng scope; bản cũ vẫn được giữ. Muốn sửa có định hướng, gõ /figma refine [feedback]."
+            onClick={() => void onRegenerate()}
+          >
+            <RefreshCw size={14} /> Tạo bản Figma mới
+          </button>
+        </div>
       )}
     </section>
   )

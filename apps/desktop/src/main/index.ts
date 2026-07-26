@@ -545,7 +545,12 @@ async function createCreativeFigmaBlueprint(
   }
 }
 
-async function prepareExecutableActions(state: RunState, spec: ProductSpec): Promise<PlannedAction[]> {
+async function prepareExecutableActions(
+  state: RunState,
+  spec: ProductSpec,
+  refineNote?: string,
+  revisionLabel?: string,
+): Promise<PlannedAction[]> {
   const planningStartedAt = Date.now()
   emitArtifactProgress(state.threadId, {
     target: 'figma',
@@ -596,10 +601,10 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
             .map((component) => component.semanticRole))],
           { sparse: true },
         )
-      : await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest)
+      : await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest, refineNote)
     const metadata = {
       ...metadataBase,
-      idempotencyKey: `figma:${state.id}:spec-v${spec.version}:${useAgenticWorker ? 'craft' : 'creative'}-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}:${figmaContext.target.targetHash.slice(0, 12)}`,
+      idempotencyKey: `figma:${state.id}:spec-v${spec.version}${revisionLabel ? `:${revisionLabel}` : ''}:${useAgenticWorker ? 'craft' : 'creative'}-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}:${figmaContext.target.targetHash.slice(0, 12)}`,
     }
     try {
       figmaPlan = createFigmaArtifactPlan(
@@ -723,6 +728,7 @@ async function prepareExecutableActions(state: RunState, spec: ProductSpec): Pro
         skill: 'pm-lifecycle-figma-design',
         maxReviewPasses: 3,
         timeoutBudgetMs: craftTimeoutBudgetMs,
+        ...(refineNote ? { refinementNote: refineNote } : {}),
         productTruth: {
           idea: {
             id: spec.idea.id,
@@ -804,7 +810,10 @@ function withFigmaDesignWorker(
       const workerDeadline = workerStartedAt + timeoutMs
       let stageStartedAt = workerStartedAt
       let currentStage: FigmaDesignWorkerStage = 'starting'
-      let qaFeedback: string[] | undefined
+      // Seed the first craft pass with the user's refine feedback (if this is a /figma refine).
+      let qaFeedback: string[] | undefined = typeof workerConfig.refinementNote === 'string' && workerConfig.refinementNote.trim()
+        ? [`Yêu cầu chỉnh sửa của người dùng: ${workerConfig.refinementNote.trim()}`]
+        : undefined
       const expectedPrototypeLinks = preflight.plan.source.screens
         .reduce((count, screen) => count + screen.prototypeEdges.length, 0)
       const forbiddenTerms = typedProductTruth.removedRequirements.flatMap((requirement) => [
@@ -1011,6 +1020,46 @@ async function prepareArtifactsForThread(
   const figmaAction = executableActions.find((action) => action.target === 'figma')
   const mode = figmaAction?.payload.connectorMode === 'live' ? 'Figma live' : 'Mock Figma'
   const message = `Kickoff package đã preflight trong ${seconds(Date.now() - startedAt)}: ${mode}, PRD Markdown và backlog mock. Hãy kiểm tra immutable target rồi duyệt tạo.`
+  const assistantMessage = history.addMessage(threadId, 'assistant', message)
+  return { workspace: workspaceFor(threadId), message, assistantMessage }
+}
+
+// Prepare a fresh Figma artifact from the same ProductSpec — either a plain regenerate or a
+// refine guided by `feedback`. A revision label keeps the idempotency key unique, so this is a
+// new artifact under the version Page and the previous design is preserved as a sibling.
+async function regenerateArtifactsForThread(
+  threadId: string,
+  feedback?: string,
+): Promise<{ workspace: LifecycleWorkspaceState; message: string; assistantMessage: ChatMessage }> {
+  const state = workspaceFor(threadId).runState
+  if (state.phase !== 'DELIVERY') {
+    throw new Error('Chỉ có thể tạo lại Figma sau khi kickoff package đã tới Delivery.')
+  }
+  if (state.productSpec.requirements.length === 0) {
+    throw new Error('ProductSpec chưa có scope để tạo lại Figma.')
+  }
+  if (state.status === 'EXECUTING' || state.status === 'VERIFYING') {
+    throw new Error('Đang có một lần tạo Figma chạy dở; hãy đợi hoàn tất trước khi tạo bản mới.')
+  }
+  const startedAt = Date.now()
+  const at = timestamp()
+  const revisionLabel = `r${Date.now().toString(36)}`
+  const stagedActions = artifactActionsFor(state, state.productSpec).map((action) => (
+    action.target === 'figma' ? { ...action, id: `${action.id}:${revisionLabel}` } : action
+  ))
+  const staged = {
+    ...state,
+    status: 'WAITING_FOR_APPROVAL',
+    pendingIntent: null,
+    pendingActions: stagedActions,
+    lastCheckpointAt: at,
+  } satisfies RunState
+  const executableActions = await prepareExecutableActions(staged, staged.productSpec, feedback, revisionLabel)
+  lifecycle.savePreview({ ...staged, pendingActions: executableActions })
+  const figmaAction = executableActions.find((action) => action.target === 'figma')
+  const mode = figmaAction?.payload.connectorMode === 'live' ? 'Figma live' : 'Mock Figma'
+  const intent = feedback ? `refine theo feedback: “${feedback}”` : 'tạo một bản thiết kế mới'
+  const message = `Đã chuẩn bị ${mode} bản mới (${intent}) trong ${seconds(Date.now() - startedAt)} — một artifact riêng, bản Figma cũ vẫn được giữ. Kiểm tra immutable plan rồi duyệt để tạo.`
   const assistantMessage = history.addMessage(threadId, 'assistant', message)
   return { workspace: workspaceFor(threadId), message, assistantMessage }
 }
@@ -1273,6 +1322,9 @@ function registerIpc(): void {
   })
   ipcMain.handle('lifecycle:prepare-artifacts', async (_event, threadId: string) => {
     return (await prepareArtifactsForThread(threadId)).workspace
+  })
+  ipcMain.handle('lifecycle:regenerate-artifacts', async (_event, threadId: string, feedback?: string) => {
+    return (await regenerateArtifactsForThread(threadId, feedback?.trim() || undefined)).workspace
   })
   ipcMain.handle('lifecycle:approve-artifacts', async (_event, threadId: string) => {
     const result = await approveArtifactsForThread(threadId)
@@ -1590,6 +1642,24 @@ function registerIpc(): void {
           return appOwnedReply('Không có immutable Figma plan đang chờ. Chạy /figma prepare trước.')
         }
         const result = await approveArtifactsForThread(input.threadId)
+        history.completeTurn(turnId, 'completed', [])
+        turnFinished = true
+        return {
+          userMessage,
+          assistantMessage: result.assistantMessage,
+          commands: [],
+          suggestions: [],
+          canvasProgram: { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null },
+          canvasProgramSource: 'none',
+          canvasRequestId: null,
+        }
+      }
+      if (slashCommand?.kind === 'figma_regenerate' || slashCommand?.kind === 'figma_refine') {
+        const feedback = slashCommand.kind === 'figma_refine' ? slashCommand.prompt.trim() : ''
+        if (slashCommand.kind === 'figma_refine' && !feedback) {
+          return appOwnedReply('Hãy mô tả bạn muốn sửa gì, ví dụ: `/figma refine làm hero lớn hơn, thêm bản đồ ở màn theo dõi`.')
+        }
+        const result = await regenerateArtifactsForThread(input.threadId, feedback || undefined)
         history.completeTurn(turnId, 'completed', [])
         turnFinished = true
         return {

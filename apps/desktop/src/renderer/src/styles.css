@@ -1443,6 +1443,13 @@ button {
   padding: 3px 10px;
 }
 
+.execution-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 5px 10px 10px;
+}
+
 .document-open-button {
   display: flex;
   align-items: center;
@@ -1452,12 +1459,39 @@ button {
   gap: 6px;
   margin: 5px 10px 10px;
   border: 1px solid #8abbaa;
-  border-radius: 5px;
+  border-radius: 8px;
   color: #126b52;
   background: #f3fbf8;
   font-size: 10px;
   font-weight: 700;
 }
+
+.execution-actions .document-open-button {
+  width: 100%;
+  margin: 0;
+}
+
+.regenerate-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 1px solid var(--brand);
+  border-radius: 8px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.regenerate-button:hover:not(:disabled) {
+  background: #e2effd;
+  box-shadow: 0 0 0 3px var(--brand-ring);
+}
+
+.regenerate-button:disabled { opacity: 0.5; cursor: default; }
 
 .execution-row {
   min-height: 38px;

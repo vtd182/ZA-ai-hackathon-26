@@ -321,6 +321,7 @@ export interface DesktopApi {
     previewPromotion(threadId: string, canvas: CanvasDocumentContext): Promise<CanvasPromotionPreview>
     commitPromotion(threadId: string, payloadHash: string): Promise<LifecycleWorkspaceState>
     prepareArtifacts(threadId: string): Promise<LifecycleWorkspaceState>
+    regenerateArtifacts(threadId: string, feedback?: string): Promise<LifecycleWorkspaceState>
     approveArtifacts(threadId: string): Promise<ApproveChangeOutput>
     rejectArtifacts(threadId: string): Promise<ApproveChangeOutput>
     showDocument(threadId: string): Promise<void>

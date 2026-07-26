@@ -36,6 +36,13 @@ describe('slash commands', () => {
     })
   })
 
+  it('routes Figma regenerate and refine', () => {
+    expect(parseSlashCommand('/figma regenerate')).toEqual({ kind: 'figma_regenerate' })
+    expect(parseSlashCommand('/figma regen')).toEqual({ kind: 'figma_regenerate' })
+    expect(parseSlashCommand('/figma refine làm hero to hơn, thêm bản đồ')).toEqual({ kind: 'figma_refine', prompt: 'làm hero to hơn, thêm bản đồ' })
+    expect(parseSlashCommand('/figma refine')).toEqual({ kind: 'figma_refine', prompt: '' })
+  })
+
   it('routes the extended diagram vocabulary', () => {
     expect(parseSlashCommand('/canvas sequence')).toEqual({ kind: 'canvas_diagram', diagram: 'sequence', prompt: '' })
     expect(parseSlashCommand('/canvas state')).toEqual({ kind: 'canvas_diagram', diagram: 'state', prompt: '' })
