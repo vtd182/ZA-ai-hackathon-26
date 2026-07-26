@@ -84,6 +84,33 @@ Allowed `kind`: `note`, `process`, `decision`, `screen`. Keep IDs stable so a re
 the same object. Prefer omitting `x`/`y` to let the app auto-arrange; set them only when
 spatial placement is intentional.
 
+### Free-form primitives (unlimited composition)
+
+Beyond semantic nodes, draw arbitrary shapes at exact coordinates. These are
+presentation-only (they never promote into ProductSpec):
+
+```js
+canvas.rect(id, x, y, w, h, opts?)          // opts: { color, fill, dash, size, rotation, opacity, text }
+canvas.ellipse(id, x, y, w, h, opts?)
+canvas.text(id, x, y, "Nội dung", opts?)    // opts: { color, size, w, rotation, opacity }
+canvas.line(id, x, y, x2, y2, opts?)
+canvas.arrow(id, x, y, x2, y2, opts?)
+canvas.shape(kind, id, x, y, opts?)         // kind: rectangle|ellipse|triangle|diamond|star|hexagon|rhombus
+```
+
+- `color`: `black|grey|blue|green|yellow|red|violet|orange` (+ `light-*`). `fill`:
+  `none|solid|semi|pattern`. `size`: `s|m|l|xl`. `dash`: `draw|solid|dashed|dotted`.
+- Combine with real JS for generative art, custom layouts, charts, dashboards — anything.
+
+```js
+// Bar chart from data, drawn with primitives
+const data = [40, 90, 60, 120, 75]
+data.forEach((v, i) => {
+  canvas.rect("bar-" + i, i * 70, 200 - v, 48, v, { color: "blue", fill: "solid" })
+  canvas.text("val-" + i, i * 70 + 8, 210 - v - 22, String(v), { size: "s", color: "black" })
+})
+```
+
 The response is an apply/read-back receipt with visual lint evidence. Treat HTTP `202` as
 queued, not verified. Before reporting completion, inspect again and confirm there are no
 overlap or dangling-edge errors.

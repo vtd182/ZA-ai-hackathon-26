@@ -39,6 +39,25 @@ export function runCanvasScriptVm(source: string): CanvasOperation[] {
     remove(id: unknown): void {
       push({ op: 'delete', id: String(id) })
     },
+    // Free-form primitives. opts: { color, fill, dash, size, rotation, opacity, text }.
+    shape(kind: unknown, id: unknown, x: unknown, y: unknown, opts: unknown = {}): void {
+      push({ op: 'create_shape', shape: String(kind), id: String(id), x: Number(x), y: Number(y), ...clean(opts) })
+    },
+    rect(id: unknown, x: unknown, y: unknown, w: unknown, h: unknown, opts: unknown = {}): void {
+      push({ op: 'create_shape', shape: 'rectangle', id: String(id), x: Number(x), y: Number(y), w: Number(w), h: Number(h), ...clean(opts) })
+    },
+    ellipse(id: unknown, x: unknown, y: unknown, w: unknown, h: unknown, opts: unknown = {}): void {
+      push({ op: 'create_shape', shape: 'ellipse', id: String(id), x: Number(x), y: Number(y), w: Number(w), h: Number(h), ...clean(opts) })
+    },
+    text(id: unknown, x: unknown, y: unknown, value: unknown, opts: unknown = {}): void {
+      push({ op: 'create_shape', shape: 'text', id: String(id), x: Number(x), y: Number(y), text: String(value), ...clean(opts) })
+    },
+    line(id: unknown, x: unknown, y: unknown, x2: unknown, y2: unknown, opts: unknown = {}): void {
+      push({ op: 'create_shape', shape: 'line', id: String(id), x: Number(x), y: Number(y), x2: Number(x2), y2: Number(y2), ...clean(opts) })
+    },
+    arrow(id: unknown, x: unknown, y: unknown, x2: unknown, y2: unknown, opts: unknown = {}): void {
+      push({ op: 'create_shape', shape: 'arrow', id: String(id), x: Number(x), y: Number(y), x2: Number(x2), y2: Number(y2), ...clean(opts) })
+    },
   }
 
   // A frozen context: the script sees only `canvas` + pure computation. No require/process/

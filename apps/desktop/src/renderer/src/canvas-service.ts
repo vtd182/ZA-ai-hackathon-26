@@ -1017,6 +1017,56 @@ function connect(editor: Editor, operation: Extract<CanvasOperation, { op: 'conn
   return id
 }
 
+function primitiveShapeId(id: string): TLShapeId {
+  return createShapeId(`canvas-shape-${id}`)
+}
+
+// Free-form primitive drawing: geo shapes, text, arrows and lines at arbitrary positions.
+// Presentation-only (no semanticId/nodeKind) so it never promotes into ProductSpec.
+function createPrimitiveShape(editor: Editor, op: Extract<CanvasOperation, { op: 'create_shape' }>): TLShapeId {
+  const id = primitiveShapeId(op.id)
+  if (editor.getShape(id)) editor.deleteShape(id)
+  const meta = { canvasOwner: 'agent', visualRole: 'primitive', primitiveId: op.id }
+  const color = op.color ?? 'black'
+  const opacity = op.opacity ?? 1
+  if (op.shape === 'text') {
+    editor.createShape({
+      id, type: 'text', x: op.x, y: op.y, rotation: op.rotation ?? 0, opacity,
+      props: {
+        color, size: op.size ?? 'm', font: 'sans', textAlign: 'start',
+        autoSize: !op.w, ...(op.w ? { w: op.w } : {}),
+        richText: toRichText(op.text ?? 'Text'),
+      },
+      meta,
+    } as never)
+  } else if (op.shape === 'arrow' || op.shape === 'line') {
+    const endX = op.x2 ?? op.x + (op.w ?? 200)
+    const endY = op.y2 ?? op.y
+    editor.createShape({
+      id, type: 'arrow', x: op.x, y: op.y, opacity,
+      props: {
+        start: { x: 0, y: 0 }, end: { x: endX - op.x, y: endY - op.y },
+        arrowheadStart: 'none', arrowheadEnd: op.shape === 'arrow' ? 'arrow' : 'none',
+        color, dash: op.dash ?? 'solid', size: op.size ?? 'm', font: 'sans',
+        ...(op.text ? { richText: toRichText(op.text) } : {}),
+      },
+      meta,
+    } as never)
+  } else {
+    editor.createShape({
+      id, type: 'geo', x: op.x, y: op.y, rotation: op.rotation ?? 0, opacity,
+      props: {
+        geo: op.shape, w: op.w ?? 160, h: op.h ?? 120,
+        color, fill: op.fill ?? 'none', dash: op.dash ?? 'solid', size: op.size ?? 'm',
+        font: 'sans', align: 'middle', verticalAlign: 'middle',
+        ...(op.text ? { richText: toRichText(op.text) } : {}),
+      },
+      meta,
+    } as never)
+  }
+  return id
+}
+
 function applyOperations(editor: Editor, operations: CanvasOperation[], program: CanvasProgram, renderSceneFurniture: boolean): TLShapeId[] {
   const created: TLShapeId[] = []
   const nodes = operations.filter((operation): operation is Extract<CanvasOperation, { op: 'create_node' }> => operation.op === 'create_node')
@@ -1025,6 +1075,8 @@ function applyOperations(editor: Editor, operations: CanvasOperation[], program:
       if (operation.op !== 'delete') continue
       const shape = findSemanticShape(editor, operation.id)
       if (shape) editor.deleteShape(shape.id)
+      const primitive = editor.getShape(primitiveShapeId(operation.id))
+      if (primitive) editor.deleteShape(primitive.id)
     }
     if (renderSceneFurniture) {
       upsertPrototypeSceneFurniture(editor, nodes, program)
@@ -1032,6 +1084,10 @@ function applyOperations(editor: Editor, operations: CanvasOperation[], program:
     }
     for (const [nodeIndex, operation] of nodes.entries()) {
       created.push(createNode(editor, operation, nodeIndex, nodes.length))
+    }
+    for (const operation of operations) {
+      if (operation.op !== 'create_shape') continue
+      created.push(createPrimitiveShape(editor, operation))
     }
     for (const operation of operations) {
       if (operation.op !== 'update') continue
@@ -1104,7 +1160,7 @@ export async function executeCanvasProgram(
     else editor.selectNone()
   }
   const affectedSemanticIds = operations.flatMap((operation) => {
-    if (operation.op === 'create_node' || operation.op === 'update' || operation.op === 'delete') return [operation.id]
+    if (operation.op === 'create_node' || operation.op === 'update' || operation.op === 'delete' || operation.op === 'create_shape') return [operation.id]
     return [operation.fromId, operation.toId]
   })
   const after = inspectCanvas(editor, before.revision + 1, 200, affectedSemanticIds)

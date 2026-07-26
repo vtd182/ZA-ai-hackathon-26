@@ -100,4 +100,18 @@ describe('CanvasBridge', () => {
     expect(() => runCanvasScriptVm("canvas.node(String(process.pid), 'x')")).toThrow()
     expect(() => runCanvasScriptVm("fetch('http://evil')")).toThrow()
   })
+
+  it('draws free-form primitive shapes for unlimited composition', () => {
+    const ops = runCanvasScriptVm(`
+      canvas.rect('bg', 0, 0, 400, 300, { color: 'blue', fill: 'semi' })
+      canvas.ellipse('sun', 320, 20, 60, 60, { color: 'yellow', fill: 'solid' })
+      canvas.text('title', 20, 20, 'Bình minh', { size: 'xl', color: 'black' })
+      canvas.arrow('ray', 350, 50, 200, 200, { color: 'orange' })
+      for (let i = 0; i < 3; i++) canvas.shape('star', 'star-' + i, 40 + i * 80, 240, { color: 'violet', w: 40, h: 40 })
+    `)
+    expect(ops).toHaveLength(7)
+    expect(ops.filter((op) => op.op === 'create_shape')).toHaveLength(7)
+    expect(ops[0]).toMatchObject({ op: 'create_shape', shape: 'rectangle', w: 400, h: 300, color: 'blue', fill: 'semi' })
+    expect(ops[3]).toMatchObject({ op: 'create_shape', shape: 'arrow', x2: 200, y2: 200 })
+  })
 })

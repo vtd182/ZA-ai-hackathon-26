@@ -55,6 +55,26 @@ export const canvasOperationSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('connect'), id: z.string().min(1), fromId: z.string().min(1), toId: z.string().min(1), label: z.string().min(1).optional() }),
   z.object({ op: z.literal('update'), id: z.string().min(1), label: z.string().min(1).optional(), color: z.enum(['black', 'grey', 'blue', 'green', 'yellow', 'red', 'violet', 'orange']).optional() }),
   z.object({ op: z.literal('delete'), id: z.string().min(1) }),
+  // Free-form primitive drawing for unlimited creative composition. These are presentation-only
+  // (no nodeKind/semanticId) so they never promote into ProductSpec.
+  z.object({
+    op: z.literal('create_shape'),
+    id: z.string().min(1),
+    shape: z.enum(['rectangle', 'ellipse', 'triangle', 'diamond', 'star', 'hexagon', 'rhombus', 'text', 'line', 'arrow']),
+    x: z.number(),
+    y: z.number(),
+    w: z.number().min(1).max(8000).optional(),
+    h: z.number().min(1).max(8000).optional(),
+    x2: z.number().optional(),
+    y2: z.number().optional(),
+    text: z.string().max(1000).optional(),
+    color: z.enum(['black', 'grey', 'blue', 'green', 'yellow', 'red', 'violet', 'orange', 'light-blue', 'light-green', 'light-red', 'light-violet']).optional(),
+    fill: z.enum(['none', 'solid', 'semi', 'pattern']).optional(),
+    dash: z.enum(['draw', 'solid', 'dashed', 'dotted']).optional(),
+    size: z.enum(['s', 'm', 'l', 'xl']).optional(),
+    rotation: z.number().optional(),
+    opacity: z.number().min(0).max(1).optional(),
+  }),
 ])
 export type CanvasOperation = z.infer<typeof canvasOperationSchema>
 
