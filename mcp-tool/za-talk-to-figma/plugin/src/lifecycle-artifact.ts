@@ -319,6 +319,20 @@ const createStack = (
   return frame;
 };
 
+// Soft elevation gives cards real depth instead of a flat wireframe look. Level 2 is a
+// stronger lift for focal/CTA surfaces; level 1 is a quiet resting shadow for content cards.
+const elevate = (node: FrameNode, level: 1 | 2 = 1): void => {
+  node.effects = [{
+    type: "DROP_SHADOW",
+    color: { r: 0.09, g: 0.13, b: 0.16, a: level === 2 ? 0.16 : 0.07 },
+    offset: { x: 0, y: level === 2 ? 8 : 3 },
+    radius: level === 2 ? 24 : 12,
+    spread: level === 2 ? -2 : -1,
+    visible: true,
+    blendMode: "NORMAL",
+  }] as Effect[];
+};
+
 const toneFill = (tone: unknown, palette: DesignPalette): SolidPaint => {
   if (tone === "success") return palette.successSoft;
   if (tone === "warning") return palette.warningSoft;
@@ -345,14 +359,16 @@ const appendPresentationSection = async (
   );
   card.strokes = kind === "info" ? [] : [palette.border];
   card.strokeWeight = kind === "info" ? 0 : 1;
+  // Content cards float above the surface; focal cards lift more. Info blocks stay flat.
+  if (kind !== "info") elevate(card, prominent ? 2 : 1);
   writeMetadata(card, {
     kind: "presentation_section",
     sectionKey: String(section.key),
     sectionKind: kind,
   });
-  await appendText(card, String(section.title ?? ""), prominent ? 20 : 15, palette.text, "Medium");
+  await appendText(card, String(section.title ?? ""), prominent ? 23 : 17, palette.text, prominent ? "Bold" : "Semi Bold");
   if (typeof section.body === "string" && section.body.trim()) {
-    await appendText(card, section.body, 12, palette.muted);
+    await appendText(card, section.body, 13, palette.muted);
   }
   const items = Array.isArray(section.items) ? section.items as JsonRecord[] : [];
 

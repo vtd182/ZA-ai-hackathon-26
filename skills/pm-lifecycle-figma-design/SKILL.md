@@ -12,10 +12,11 @@ Use this skill for an approved Figma design task. The goal is a believable produ
 Read these references before writing:
 
 1. `references/experience-direction.md` to turn ProductSpec into a designed journey.
-2. `references/zds-craft.md` before cloning or overriding ZDS instances.
-3. `references/product-fidelity.md` before composing browse, selection or object-focused screens.
-4. `../pm-lifecycle-figma-critic/SKILL.md` before the first screenshot and again before completion.
-5. `references/visual-qa.md` before the first screenshot and again before completion.
+2. `references/design-references.md` for the taste system and best-in-class per-domain patterns to adapt.
+3. `references/zds-craft.md` before cloning or overriding ZDS instances.
+4. `references/product-fidelity.md` before composing browse, selection or object-focused screens.
+5. `../pm-lifecycle-figma-critic/SKILL.md` before the first screenshot and again before completion.
+6. `references/visual-qa.md` before the first screenshot and again before completion.
 
 ## Boundaries
 

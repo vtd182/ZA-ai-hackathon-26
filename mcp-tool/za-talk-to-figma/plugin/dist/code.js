@@ -1589,6 +1589,17 @@ var __async = (__this, __arguments, generator) => {
     parent.appendChild(frame);
     return frame;
   };
+  const elevate = (node, level = 1) => {
+    node.effects = [{
+      type: "DROP_SHADOW",
+      color: { r: 0.09, g: 0.13, b: 0.16, a: level === 2 ? 0.16 : 0.07 },
+      offset: { x: 0, y: level === 2 ? 8 : 3 },
+      radius: level === 2 ? 24 : 12,
+      spread: level === 2 ? -2 : -1,
+      visible: true,
+      blendMode: "NORMAL"
+    }];
+  };
   const toneFill = (tone, palette) => {
     if (tone === "success") return palette.successSoft;
     if (tone === "warning") return palette.warningSoft;
@@ -1611,14 +1622,15 @@ var __async = (__this, __arguments, generator) => {
     );
     card.strokes = kind === "info" ? [] : [palette.border];
     card.strokeWeight = kind === "info" ? 0 : 1;
+    if (kind !== "info") elevate(card, prominent ? 2 : 1);
     writeMetadata(card, {
       kind: "presentation_section",
       sectionKey: String(section.key),
       sectionKind: kind
     });
-    yield appendText(card, String((_b = section.title) != null ? _b : ""), prominent ? 20 : 15, palette.text, "Medium");
+    yield appendText(card, String((_b = section.title) != null ? _b : ""), prominent ? 23 : 17, palette.text, prominent ? "Bold" : "Semi Bold");
     if (typeof section.body === "string" && section.body.trim()) {
-      yield appendText(card, section.body, 12, palette.muted);
+      yield appendText(card, section.body, 13, palette.muted);
     }
     const items = Array.isArray(section.items) ? section.items : [];
     if (kind === "progress") {
