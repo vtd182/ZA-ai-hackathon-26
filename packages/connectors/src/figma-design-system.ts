@@ -139,6 +139,28 @@ function rolesForCatalogInstance(instance: FigmaDesignSystemCapture['relevantIns
   if (name.includes('[zds] switch')) return ['switch']
   if (name.includes('[zds] slider')) return ['slider']
   if (name === 'calendar' || name.includes('[zds] calendar')) return ['calendar']
+  // Extended vocabulary so the richer ZDS surfaces (sheets, tabs, nav, cards, chips…) are
+  // captured as usable roles instead of falling through as "unmapped".
+  if (name.includes('bottom sheet') || name.includes('bottomsheet') || name.includes('action sheet') || name.includes('[zds] sheet')) {
+    return ['bottom-sheet', 'action-sheet', 'selection-sheet', 'confirm-sheet']
+  }
+  if (name.includes('bottom nav') || name.includes('navigation bar') || name.includes('nav bar') || name.includes('tabbar') || name.includes('tab bar')) {
+    return ['bottom-navigation', 'nav-bar']
+  }
+  if (name.includes('[zds] tab') || name.includes(' tabs') || name.includes('segmented')) {
+    return ['tabs', 'segmented-control']
+  }
+  if (name.includes('[zds] card') || name.includes('card /') || name.includes('product card') || name.includes('info card')) {
+    return ['card', 'content-card', 'product-card']
+  }
+  if (name.includes('chip')) return ['chip', 'filter-chip', 'tag']
+  if (name.includes('avatar')) return ['avatar']
+  if (name.includes('tooltip')) return ['tooltip']
+  if (name.includes('progress')) return ['progress', 'progress-bar']
+  if (name.includes('stepper') || name.includes('quantity')) return ['stepper', 'quantity-stepper']
+  if (name.includes('rating')) return ['rating']
+  if (name.includes('badge')) return ['badge']
+  if (name.includes('[zds] tag')) return ['tag']
   return []
 }
 

@@ -6,7 +6,10 @@ Use the source Page as a catalog and the output Page as the only writable surfac
 
 - Inspect nearby source labels and component properties before cloning.
 - Prefer the semantic role and state that match the ProductSpec moment.
-- Use app headers, inputs, checkbox/switch controls, snackbar/status and buttons where interaction familiarity matters.
+- The brief's `sourceComponents` is a starting palette, not a limit: browse the source ZDS
+  Page for the richer surfaces (bottom sheets, tabs, cards, chips, bottom navigation, avatars)
+  and clone the one that fits — see `references/component-catalog.md`. A screen of only
+  buttons + inputs + a plain list is a wireframe, not a shipped Mini App.
 - Avoid cloning a component only because its outer shape resembles the desired primitive.
 
 ## Override hygiene

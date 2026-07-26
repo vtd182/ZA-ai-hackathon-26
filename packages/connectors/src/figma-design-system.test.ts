@@ -122,6 +122,25 @@ describe('normalizeFigmaDesignSystemContext', () => {
     ]))
   })
 
+  it('captures the extended ZDS surfaces (sheet, card, tabs, chip, nav) as usable roles', () => {
+    const input = capture([])
+    const instance = (id: string, name: string): FigmaDesignSystemCapture['relevantInstances'][number] => ({
+      id, name, type: 'INSTANCE', pageId: '0:1', componentProperties: {}, contextLabels: [], ancestorNames: [],
+    })
+    input.relevantInstances = [
+      instance('1:1', '[ZDS] Bottom Sheet'),
+      instance('1:2', '[ZDS] Card / Product'),
+      instance('1:3', '[ZDS] Tabs'),
+      instance('1:4', '[ZDS] Chip / Filter'),
+      instance('1:5', 'Bottom Navigation'),
+      instance('1:6', '[ZDS] Avatar'),
+    ]
+
+    const context = normalizeFigmaDesignSystemContext(input, target, fallback, '2026-07-22T13:00:00.000Z')
+    const roles = context.manifest.components.map((component) => component.semanticRole)
+    expect(roles).toEqual(expect.arrayContaining(['bottom-sheet', 'card', 'tabs', 'chip', 'bottom-navigation', 'avatar']))
+  })
+
   it('prefers light default variants and classifies button levels from component properties', () => {
     const input = capture([])
     input.relevantInstances = [

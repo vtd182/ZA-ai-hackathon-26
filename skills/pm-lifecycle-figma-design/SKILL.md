@@ -13,10 +13,11 @@ Read these references before writing:
 
 1. `references/experience-direction.md` to turn ProductSpec into a designed journey.
 2. `references/design-references.md` for the taste system and best-in-class per-domain patterns to adapt.
-3. `references/zds-craft.md` before cloning or overriding ZDS instances.
-4. `references/product-fidelity.md` before composing browse, selection or object-focused screens.
-5. `../pm-lifecycle-figma-critic/SKILL.md` before the first screenshot and again before completion.
-6. `references/visual-qa.md` before the first screenshot and again before completion.
+3. `references/component-catalog.md` for the full ZDS component families and when to use each (sheets, tabs, cards, chips, nav — not just buttons/inputs).
+4. `references/zds-craft.md` before cloning or overriding ZDS instances.
+5. `references/product-fidelity.md` before composing browse, selection or object-focused screens.
+6. `../pm-lifecycle-figma-critic/SKILL.md` before the first screenshot and again before completion.
+7. `references/visual-qa.md` before the first screenshot and again before completion.
 
 ## Boundaries
 

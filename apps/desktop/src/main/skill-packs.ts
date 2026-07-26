@@ -30,6 +30,7 @@ const figmaCraftSkillFiles = [
   'pm-lifecycle-figma-design/SKILL.md',
   'pm-lifecycle-figma-design/references/experience-direction.md',
   'pm-lifecycle-figma-design/references/design-references.md',
+  'pm-lifecycle-figma-design/references/component-catalog.md',
   'pm-lifecycle-figma-design/references/zds-craft.md',
   'pm-lifecycle-figma-design/references/product-fidelity.md',
   'pm-lifecycle-figma-design/references/visual-qa.md',

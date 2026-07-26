@@ -23,6 +23,7 @@ function writeFigmaPack(root: string): void {
     'pm-lifecycle-figma-design/SKILL.md': '# Design skill\nUse ZDS controls.',
     'pm-lifecycle-figma-design/references/experience-direction.md': '# Experience\nCreate a real journey.',
     'pm-lifecycle-figma-design/references/design-references.md': '# References\nAdapt best-in-class patterns.',
+    'pm-lifecycle-figma-design/references/component-catalog.md': '# Catalog\nSheets, tabs, cards, chips.',
     'pm-lifecycle-figma-design/references/zds-craft.md': '# ZDS\nClone controls safely.',
     'pm-lifecycle-figma-design/references/product-fidelity.md': '# Product\nUse realistic data.',
     'pm-lifecycle-figma-design/references/visual-qa.md': '# QA\nNo overlap.',
