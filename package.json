@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "pnpm --filter @pm-agent/desktop dev",
     "build": "pnpm -r --if-present build",
+    "package:assets": "node scripts/prepare-package-assets.mjs",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "typecheck": "pnpm check:boundaries && pnpm -r --if-present typecheck",
     "test": "vitest run",

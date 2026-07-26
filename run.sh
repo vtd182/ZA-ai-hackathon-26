@@ -76,11 +76,13 @@ case "$MODE" in
     PM_AGENT_RESET_ON_START=1 exec "${PNPM[@]}" dev
     ;;
   build)
-    exec "${PNPM[@]}" build
+    "${PNPM[@]}" build
+    "${PNPM[@]}" package:assets
     ;;
   smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas|smoke-ambiguity|smoke-flow|smoke-canvas-agent|smoke-codex-canvas)
     unset ELECTRON_RUN_AS_NODE
     "${PNPM[@]}" build
+    "${PNPM[@]}" package:assets
     SMOKE_FAIL_TARGET="${PM_AGENT_SMOKE_FAIL_TARGET:-}"
     if [[ "$MODE" == "smoke-recovery" ]]; then
       SMOKE_FAIL_TARGET="jira"

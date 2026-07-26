@@ -74,6 +74,7 @@ import { parseSlashCommand, slashHelpMessage } from './slash-commands'
 import { mapFreeformDiscoveryAnswers } from './workflow-intent'
 import { isManagedFigmaArtifactPage, missingFigmaRoles } from './figma-source-policy'
 import { CodexFigmaDesignWorker, type FigmaDesignWorkerStage, type FigmaDesignWorkerTask } from './figma-design-worker'
+import { loadFigmaCraftSkillPack } from './skill-packs'
 
 const { app, BrowserWindow, ipcMain, shell } = electron
 if (process.env.PM_AGENT_REMOTE_DEBUG_PORT) {
@@ -178,8 +179,28 @@ function figmaRuntimePaths(): { binaryPath: string; manifestPath: string } {
   }
 }
 
-function repositoryRoot(): string {
-  return resolve(dirname(figmaRuntimePaths().binaryPath), '../../..')
+function developmentRepositoryRoot(): string {
+  if (app.isPackaged) return resolve(app.getAppPath(), '..')
+  const candidates = [
+    process.env.PM_AGENT_REPO_ROOT,
+    process.cwd(),
+    resolve(app.getAppPath(), '../..'),
+    resolve(moduleDirectory, '../../../..'),
+  ].filter((candidate): candidate is string => Boolean(candidate))
+  return candidates.find((candidate) => existsSync(join(candidate, 'skills', 'pm-lifecycle-figma-design', 'SKILL.md')))
+    ?? candidates[0]!
+}
+
+function skillPackRuntimeRoots(): Parameters<typeof loadFigmaCraftSkillPack>[0] {
+  return {
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    repositoryRoot: developmentRepositoryRoot(),
+  }
+}
+
+function figmaWorkerDirectory(): string {
+  return app.isPackaged ? app.getPath('userData') : developmentRepositoryRoot()
 }
 
 function workspaceFor(threadId: string): LifecycleWorkspaceState {
@@ -794,8 +815,9 @@ function withFigmaDesignWorker(
         if (remainingMs < 60_000) throw new Error('Figma craft budget đã hết trước independent QA repair pass')
         await figmaDesignWorker.run({
           modelId,
-          repositoryRoot: repositoryRoot(),
+          workingDirectory: figmaWorkerDirectory(),
           mcpBinaryPath: figmaRuntimePaths().binaryPath,
+          skillPack: loadFigmaCraftSkillPack(skillPackRuntimeRoots()),
           sessionId: preflight.plan.source.target.sessionId,
           sourcePageId: preflight.plan.source.target.pageId,
           sourcePageName: preflight.plan.source.target.pageName,

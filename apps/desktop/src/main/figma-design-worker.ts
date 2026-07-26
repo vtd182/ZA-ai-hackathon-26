@@ -1,8 +1,8 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { promisify } from 'node:util'
 import type { DesignSystemManifest, FigmaPreflightPlan } from '@pm-agent/domain'
+import type { SkillPackBundle } from './skill-packs'
+import { renderSkillPackForPrompt } from './skill-packs'
 
 const execFileAsync = promisify(execFile)
 
@@ -57,8 +57,9 @@ export interface FigmaProductTruth {
 
 export interface FigmaDesignWorkerTask {
   modelId: string
-  repositoryRoot: string
+  workingDirectory: string
   mcpBinaryPath: string
+  skillPack: SkillPackBundle
   sessionId: string
   sourcePageId: string
   sourcePageName: string
@@ -227,13 +228,18 @@ export function buildFigmaDesignWorkerPrompt(task: FigmaDesignWorkerTask): strin
     creativeStartingPoint: task.plan.source.creativeBlueprint ?? null,
     resolvedZdsSlots: task.plan.resolvedSlots,
     sourceComponents,
+    skillPack: {
+      id: task.skillPack.id,
+      version: task.skillPack.version,
+      hash: task.skillPack.hash,
+    },
   }
-  const skillPath = join(task.repositoryRoot, 'skills', 'pm-lifecycle-figma-design', 'SKILL.md')
-  const criticSkillPath = join(task.repositoryRoot, 'skills', 'pm-lifecycle-figma-critic', 'SKILL.md')
   const repairContext = task.qaFeedback?.length
     ? `\nIndependent Agent Core audit rejected the previous pass. Resume the existing artifact; do not rebuild it. Fix every issue below, then repeat screenshot/refine/audit:\n${task.qaFeedback.map((issue) => `- ${issue}`).join('\n')}\n`
     : ''
-  return `Read and follow the design skill at ${skillPath} and the independent critique skill at ${criticSkillPath}.
+  return `Use the embedded global skill pack below. It is already imported by PM Lifecycle Agent; do not rely on repository-relative skill files being present in production.
+
+${renderSkillPackForPrompt(task.skillPack)}
 
 You are the approved Figma craft worker for PM Lifecycle Agent. Use only the za-talk-to-figma MCP server.
 
@@ -283,7 +289,6 @@ export class CodexFigmaDesignWorker {
   }
 
   run(task: FigmaDesignWorkerTask, options: FigmaDesignWorkerOptions = {}): Promise<FigmaDesignWorkerReport> {
-    const schemaPath = join(task.repositoryRoot, 'skills', 'pm-lifecycle-figma-design', 'references', 'report.schema.json')
     const args = [
       'app-server',
       '-c', `mcp_servers.za-talk-to-figma.command=${JSON.stringify(task.mcpBinaryPath)}`,
@@ -294,7 +299,7 @@ export class CodexFigmaDesignWorker {
     return new Promise((resolve, reject) => {
       let child: ChildProcessWithoutNullStreams
       try {
-        child = spawn(this.codexCommand, args, { cwd: task.repositoryRoot, stdio: ['pipe', 'pipe', 'pipe'] })
+        child = spawn(this.codexCommand, args, { cwd: task.workingDirectory, stdio: ['pipe', 'pipe', 'pipe'] })
       } catch (error) {
         reject(error)
         return
@@ -463,7 +468,7 @@ export class CodexFigmaDesignWorker {
           send({ method: 'initialized', params: {} })
           const started = await request('thread/start', {
             model: task.modelId,
-            cwd: task.repositoryRoot,
+            cwd: task.workingDirectory,
             approvalPolicy: 'on-request',
             approvalsReviewer: 'user',
             sandbox: 'read-only',
@@ -474,7 +479,7 @@ export class CodexFigmaDesignWorker {
             threadId: started.thread.id,
             input: [{ type: 'text', text: buildFigmaDesignWorkerPrompt(task), text_elements: [] }],
             effort: 'high',
-            outputSchema: JSON.parse(readFileSync(schemaPath, 'utf8')),
+            outputSchema: task.skillPack.reportSchema,
           })
         } catch (error) {
           finish(error instanceof Error ? error : new Error(String(error)))

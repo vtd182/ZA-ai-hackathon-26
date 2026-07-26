@@ -154,6 +154,33 @@ const insideImmediateParent = (node: any, tolerance = 1): boolean => {
     && node.y + node.height <= parent.height + tolerance;
 };
 
+const intersectionArea = (first: Bounds, second: Bounds): number => {
+  const left = Math.max(first.x, second.x);
+  const top = Math.max(first.y, second.y);
+  const right = Math.min(first.x + first.width, second.x + second.width);
+  const bottom = Math.min(first.y + first.height, second.y + second.height);
+  return Math.max(0, right - left) * Math.max(0, bottom - top);
+};
+
+const overlapRatio = (first: Bounds, second: Bounds): number => {
+  const overlap = intersectionArea(first, second);
+  if (overlap <= 0) return 0;
+  const smaller = Math.min(first.width * first.height, second.width * second.height);
+  return smaller > 0 ? overlap / smaller : 0;
+};
+
+const isProbablyInteractiveInstance = (node: any): boolean => {
+  const name = normalize(String(node.name || ""));
+  const reactions = Array.isArray(node.reactions) ? node.reactions : [];
+  return reactions.length > 0
+    || /button|input|field|checkbox|radio|switch|tab|list|item|picker|select|otp|cta|search|chip|cell/.test(name);
+};
+
+const isDecorativeInstance = (node: any): boolean => {
+  const name = normalize(String(node.name || ""));
+  return /icon|avatar|badge|dot|divider|logo|illustration|image|thumbnail/.test(name);
+};
+
 const nearestScreen = (node: any, screens: any[]): any | null => {
   let current = node.parent;
   while (current) {
@@ -226,11 +253,60 @@ export const handleProductCraftAuditRequest = async (
   const forbiddenNodeIds = new Set<string>();
   const clippedNodeIds = new Set<string>();
   const lowVisibilityNodeIds = new Set<string>();
+  const componentDriftNodeIds = new Set<string>();
+  const componentOverlapPairs = new Set<string>();
+  const undersizedTouchTargetNodeIds = new Set<string>();
+  const visibleTopLevelInstances: Array<{ node: any; screen: any; bounds: Bounds }> = [];
 
   const visit = (node: any): void => {
     visitedNodes += 1;
     const visible = isVisible(node, root);
-    if (node.type === "INSTANCE" && !hasInstanceAncestor(node, root)) zdsInstanceCount += 1;
+    const topLevelInstance = node.type === "INSTANCE" && !hasInstanceAncestor(node, root);
+    if (topLevelInstance) {
+      zdsInstanceCount += 1;
+      if (visible) {
+        const screen = nearestScreen(node, screens);
+        const nodeBounds = boundsOf(node);
+        const screenBounds = screen ? boundsOf(screen) : null;
+        if (!screen || !nodeBounds || !screenBounds) {
+          componentDriftNodeIds.add(node.id);
+          issues.push({
+            code: "ZDS_INSTANCE_WITHOUT_SCREEN",
+            severity: "error",
+            nodeId: node.id,
+            message: `ZDS instance ${node.name} is not contained in a mobile screen frame.`,
+          });
+        } else {
+          visibleTopLevelInstances.push({ node, screen, bounds: nodeBounds });
+          if (!inside(nodeBounds, screenBounds, 2)) {
+            componentDriftNodeIds.add(node.id);
+            issues.push({
+              code: "ZDS_INSTANCE_OUTSIDE_SCREEN",
+              severity: "error",
+              nodeId: node.id,
+              message: `ZDS instance ${node.name} extends outside ${screen.name}.`,
+            });
+          } else if (!insideImmediateParent(node, 2)) {
+            componentDriftNodeIds.add(node.id);
+            issues.push({
+              code: "ZDS_INSTANCE_OUTSIDE_PARENT",
+              severity: "error",
+              nodeId: node.id,
+              message: `ZDS instance ${node.name} extends outside its immediate container ${node.parent.name}.`,
+            });
+          }
+          if (isProbablyInteractiveInstance(node) && !isDecorativeInstance(node) && (nodeBounds.width < 32 || nodeBounds.height < 32)) {
+            undersizedTouchTargetNodeIds.add(node.id);
+            issues.push({
+              code: "TOUCH_TARGET_TOO_SMALL",
+              severity: "error",
+              nodeId: node.id,
+              message: `Interactive ZDS instance ${node.name} is ${Math.round(nodeBounds.width)}x${Math.round(nodeBounds.height)}; expected at least 32x32.`,
+            });
+          }
+        }
+      }
+    }
     if (visible && "reactions" in node && Array.isArray(node.reactions)) {
       for (const reaction of node.reactions) {
         const actions = Array.isArray(reaction?.actions) ? reaction.actions : [];
@@ -327,6 +403,26 @@ export const handleProductCraftAuditRequest = async (
   };
   visit(root);
 
+  for (let firstIndex = 0; firstIndex < visibleTopLevelInstances.length; firstIndex += 1) {
+    const first = visibleTopLevelInstances[firstIndex];
+    if (isDecorativeInstance(first.node)) continue;
+    for (let secondIndex = firstIndex + 1; secondIndex < visibleTopLevelInstances.length; secondIndex += 1) {
+      const second = visibleTopLevelInstances[secondIndex];
+      if (first.screen !== second.screen || isDecorativeInstance(second.node)) continue;
+      const ratio = overlapRatio(first.bounds, second.bounds);
+      if (ratio < 0.2 || intersectionArea(first.bounds, second.bounds) < 96) continue;
+      const pair = [first.node.id, second.node.id].sort().join("::");
+      if (componentOverlapPairs.has(pair)) continue;
+      componentOverlapPairs.add(pair);
+      issues.push({
+        code: "ZDS_INSTANCE_OVERLAP",
+        severity: "error",
+        nodeId: first.node.id,
+        message: `ZDS instances ${first.node.name} and ${second.node.name} overlap on ${first.screen.name}.`,
+      });
+    }
+  }
+
   if (expectedScreenCount > 0 && screens.length !== expectedScreenCount) {
     issues.push({
       code: "SCREEN_COUNT_MISMATCH",
@@ -369,6 +465,9 @@ export const handleProductCraftAuditRequest = async (
         forbiddenCopyCount: forbiddenNodeIds.size,
         clippedTextCount: clippedNodeIds.size,
         lowVisibilityTextCount: lowVisibilityNodeIds.size,
+        componentDriftCount: componentDriftNodeIds.size,
+        componentOverlapCount: componentOverlapPairs.size,
+        undersizedTouchTargetCount: undersizedTouchTargetNodeIds.size,
         visitedNodes,
       },
       issues,

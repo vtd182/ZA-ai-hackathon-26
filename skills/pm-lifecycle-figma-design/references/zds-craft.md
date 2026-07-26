@@ -30,6 +30,8 @@ Use `apply_craft_patch` to clone, place and override related controls in one rou
 - Size controls to their intended width before composing surrounding text.
 - Do not stretch a component until internal labels clip or become visually sparse.
 - Keep controls aligned to a consistent content grid, but let signature compositions break the grid deliberately.
+- Treat every cloned ZDS control as a real app component, not decoration: it must stay fully inside its screen and parent, avoid overlapping other controls, and keep a readable touch target.
+- If a component is intentionally decorative, name it clearly with `icon`, `badge`, `avatar`, `logo`, `illustration`, `image` or `thumbnail` so automated craft audit can distinguish it from an interactive control.
 
 ## Prototype
 

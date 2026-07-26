@@ -200,6 +200,16 @@ Mỗi quyết định dùng trạng thái `Proposed`, `Accepted`, `Superseded` h
 - **Consequence:** Primitives and custom composition are first-class, while required interaction controls must resolve to live same-file ZDS instances. A failed live capture blocks strict preparation instead of silently writing fixture components. Prepared preflight is persisted with the approved payload; connector-native plan hash is validated by its own runtime. Blueprint-derived idempotency permits creative revisions, and only incomplete agent-owned pages may be recovered.
 - **Validation:** live capture produced 25 semantic bindings from 190 ZDS instances; Codex produced 4 screens/51 layers; Figma write/read-back verified in 5.2s with 16 instance-backed controls and 4 prototype edges. A 2248x1024 artifact export was visually reviewed.
 
+## ADR-022 - Importable PM Agent skill packs
+
+- **Status:** Accepted
+- **Date:** 2026-07-26
+- **Decision:** Follow the tldraw Desktop Agent Skills pattern for future PM Lifecycle extensibility: package canvas/Figma/domain guidance as importable skill packs containing prompt instructions, recipes, validators, helper scripts and optional MCP/app tool scopes.
+- **Reason:** Hard-coding taste rules and workflow recipes in Agent Core makes the product feel constrained. Importable skills let the demo switch between Zalo Mini App, OA, Bot, growth experiment or engineering review behavior without changing core policy.
+- **Alternatives:** bake every prompt into the desktop app; let providers use arbitrary external tools; keep skills only as local repo docs.
+- **Consequence:** Skills may shape reasoning and provide validators, but Agent Core still owns routing, permission, immutable approvals, target allowlists, execution and read-back verification. Imported skills cannot silently grant Figma/Jira/Zdoc write access.
+- **Validation needed:** add a Skill Pack registry UI/runtime that lists installed PM skills, records the selected pack per thread/provider segment and includes its version/hash in approvals and exported review bundles.
+
 ## Decision template
 
 ```md

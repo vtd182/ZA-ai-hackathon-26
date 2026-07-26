@@ -69,7 +69,9 @@ Signature moment:
 - **Completed task:** `P0-FIG-007` allowlisted same-file ZDS instance catalog, strict clone/apply and instance-backed read-back.
 - **Completed task:** `P0-FIG-008` provider-owned product-grade Figma synthesis with live ZDS capture, guarded creative execution and visual review.
 - **Completed task:** `P0-CRE-001` Creative Studio conversation and agentic Figma craft.
-- **Current slice:** conversation-first Studio, content-specific Mock rehearsal, bidirectional care-reminder canvas replay and a complete app-owned live Figma screenshot/refine/audit/read-back run are verified.
+- **Completed task:** `P0-FIG-010` Product-craft layout guard and skill import direction.
+- **Completed task:** `P0-PKG-001` Package-safe global skill packs.
+- **Current slice:** PM Lifecycle global skill packs are now embedded into Figma worker prompts from dev source or packaged resources; production builds prepare `skill-packs` assets without relying on repository paths.
 - **Last known repository state:** Runnable Electron app with Studio/lifecycle display separation, one blank-first infinite canvas per thread, typed Canvas Programs, Mock/Codex provider paths, thread-specific ProductSpec synthesis, editable consent-first prototypes, exact-selection Sync/refine, deterministic impact preview, Markdown PRD export and approved strict live Figma ZDS write/read-back verification.
 - **Known blockers:** cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key.
 - **Audit note:** `project-tracking/READINESS_AUDIT.md` is the 2026-07-22 code-versus-acceptance baseline. Tickets with useful partial code remain `TODO` until every acceptance criterion is evidenced.
@@ -672,6 +674,28 @@ Signature moment:
 - **Regression test:** workflow test covers `REPREPARE_ARTIFACT`; outbox test retains four historical rows while summarizing three latest targets. Live UI displayed `Rebind Figma`, approved only Figma, then reached all-target `Verified` with Figma 396 seconds and Jira/PRD attempt 1.
 - **Caveat:** reconnect is a new external-write approval by design; the app must never silently transplant an approval to another session.
 
+### BUG-050 - Creative Figma craft could pass with visibly drifted ZDS controls
+
+- **Status:** FIXED
+- **Found:** 2026-07-26, `P0-FIG-010` follow-up visual review.
+- **Symptom:** Figma output became more product-like, but cloned components could still look misaligned, overlap another control or drift outside the intended mobile frame.
+- **Trigger:** a creative worker freely resizes/moves cloned ZDS instances during a craft/refinement pass, then reports success after screenshots and the older audit checks only screen count, ZDS count, prototype links, copy, contrast and text clipping.
+- **Root cause:** independent `audit_product_craft` had no geometry rules for top-level ZDS instance containment, sibling overlap or minimum interactive touch target size. The worker prompt asked for visual QA, but Agent Core had no deterministic defect code to force a repair pass for component drift.
+- **Fix:** added post-worker audit gates for `ZDS_INSTANCE_WITHOUT_SCREEN`, `ZDS_INSTANCE_OUTSIDE_SCREEN`, `ZDS_INSTANCE_OUTSIDE_PARENT`, `ZDS_INSTANCE_OVERLAP` and `TOUCH_TARGET_TOO_SMALL`; exposed `componentDriftCount`, `componentOverlapCount` and `undersizedTouchTargetCount` in the typed audit schema. Updated Figma design/visual-QA skills with the new repair contract.
+- **Regression test:** `mcp-tool/za-talk-to-figma/plugin/src/product-craft-audit.test.ts` now blocks drifted, overlapping and undersized top-level ZDS instances; workspace schema test fixture includes the new metrics.
+- **Caveat:** this is a deterministic geometry guard, not an aesthetic judge. It stabilizes component placement while leaving product composition and visual taste to the design worker plus critic skill.
+
+### BUG-051 - Figma worker skill import depended on source repository paths
+
+- **Status:** FIXED
+- **Found:** 2026-07-26, `P0-PKG-001` packaging review.
+- **Symptom:** Dev runs could use `skills/pm-lifecycle-*`, but a packaged Electron app would not necessarily have `/repo/skills/...` or `report.schema.json` at the same path.
+- **Trigger:** Package the app so `app.isPackaged` is true and Figma runtime lives under `process.resourcesPath/figma-runtime`; the old `repositoryRoot()` derived from the runtime binary no longer points at the source checkout.
+- **Root cause:** `buildFigmaDesignWorkerPrompt` embedded repo-relative skill file paths and `CodexFigmaDesignWorker.run` loaded the output schema from `task.repositoryRoot`. In packaged mode, that root is not a stable contract.
+- **Fix:** added a global skill pack loader that resolves dev `skills/` or packaged `resources/skill-packs`, reads the skill/reference/schema content, computes a stable hash and injects the bundle directly into the worker prompt. The worker now uses the bundled schema and a neutral packaged `userData` cwd.
+- **Regression test:** `apps/desktop/src/main/skill-packs.test.ts` covers packaged resource precedence, dev fallback and actionable missing-pack errors. `figma-design-worker.test.ts` verifies prompts contain embedded skill content and no repo-path import instruction.
+- **Caveat:** the actual macOS packager must copy `apps/desktop/out/package-resources/*` into Electron resources. `./run.sh build` now prepares that folder, but final signed packaging remains a separate rehearsal gate.
+
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 
 ```md
@@ -731,9 +755,9 @@ App commands đã chạy thành công:
 ./run.sh setup       # verified 2026-07-22; installs/builds app, Go runtime and Figma plugin bundle
 ./run.sh reset       # verified by shared reset path 2026-07-22; resets then opens dev app
 ./run.sh typecheck   # verified 2026-07-26
-./run.sh test        # verified 2026-07-26; 158 tests pass, 1 optional live test skipped
-./run.sh build       # verified 2026-07-26
-./run.sh smoke       # verified 2026-07-26; Mock provider + canvas + Markdown artifact
+./run.sh test        # verified 2026-07-26; 168 tests pass, 2 optional tests skipped
+./run.sh build       # verified 2026-07-26; also prepares packaged skill-packs resources
+./run.sh smoke       # verified 2026-07-26; Mock provider + canvas + Markdown artifact; copies packaged skill-packs resources first
 ./run.sh smoke-recovery  # verified 2026-07-22; injected Jira failure + target-only UI retry
 ./run.sh smoke-reset # verified 2026-07-22; UI reset + three deterministic seeds + full flow
 ./run.sh smoke-canvas # verified 2026-07-22; drag/undo/delete boundary + invalid command + full flow
@@ -749,7 +773,10 @@ Command MCP đã chạy thành công:
 ```text
 cd mcp-tool/za-talk-to-figma && go test ./...  # verified 2026-07-26
 cd mcp-tool/za-talk-to-figma/plugin && bun run typecheck  # verified 2026-07-26
-cd mcp-tool/za-talk-to-figma/plugin && bun test  # verified 2026-07-26; 268 tests pass
+cd mcp-tool/za-talk-to-figma/plugin && bun test  # verified 2026-07-26; 271 tests pass
+cd mcp-tool/za-talk-to-figma/plugin && bun test src/product-craft-audit.test.ts  # verified 2026-07-26; 3 tests pass
+cd mcp-tool/za-talk-to-figma/plugin && bun run build  # verified 2026-07-26
+pnpm package:assets  # verified 2026-07-26; copies PM skill packs into apps/desktop/out/package-resources
 PM_AGENT_FIGMA_LIVE=1 pnpm exec vitest run packages/connectors/src/figma-mcp.live.test.ts  # verified 2026-07-23
 pnpm vitest run --exclude apps/desktop/src/main/canvas-bridge.test.ts --exclude packages/connectors/src/figma-runtime.test.ts  # verified 2026-07-23; 118 pass, 1 optional live skip
 ```
@@ -1098,6 +1125,25 @@ Ghi lại những thử nghiệm tốn thời gian hoặc dễ lặp lại, ví 
 - Added and validated `pm-lifecycle-figma-critic`; the design worker now reads both design and critic skills. The critic rejects abstract subject placeholders, thin browse states, repeated templates and non-actionable success/recovery screens.
 - Verification: 166 workspace tests pass with two optional skips; typecheck, production build and smoke pass. Plugin has 270 passing tests plus typecheck/build; full Go suite and both skill validators pass.
 - Next action: use the stricter dual-skill craft loop for the final hackathon product scenario, then rehearse and capture the pitch flow in a clean workspace.
+
+### 2026-07-26 - Figma component layout guard and skill-pack direction
+
+- Added deterministic product-craft audit checks for top-level ZDS instance containment, parent drift, visible control overlap and undersized interactive touch targets.
+- Audit failures now carry repairable codes and metrics: `componentDriftCount`, `componentOverlapCount` and `undersizedTouchTargetCount`.
+- Updated the Figma design skill references so workers treat cloned ZDS instances as real app controls and repair audit failures instead of claiming visual QA success.
+- Accepted ADR-022: PM Lifecycle should grow tldraw-style importable Skill Packs for domain recipes, visual validators and provider guidance, while Agent Core keeps approvals, allowlists and external writes.
+- Verification: `./run.sh typecheck`, `./run.sh test` (166 pass, 2 skip), plugin `bun run typecheck`, plugin `bun test` (271 pass), targeted product-craft audit test, plugin build and `go test ./...` all pass.
+- Next action: run the next live `/figma create` against the final demo idea and confirm the new guard forces repair rather than allowing drifted components through.
+
+### 2026-07-26 - Package-safe global skill packs
+
+- Replaced repo-path skill import in the Figma design worker with a global skill pack bundle loaded by Agent Core.
+- Dev mode resolves skills from `skills/`; packaged mode resolves from `process.resourcesPath/skill-packs` with fallback candidates for common asar layouts.
+- The Figma worker prompt now embeds the design and critic skill content plus references and carries `skillPack.id/version/hash` in the approved brief. The output schema is loaded from the bundle, not from `report.schema.json` on disk at worker time.
+- Packaged worker cwd is `app.getPath('userData')`, since the worker is read-only and may only call the allowlisted Figma MCP.
+- `./run.sh build` now invokes `pnpm package:assets`, copying `pm-lifecycle-canvas`, `pm-lifecycle-figma-design` and `pm-lifecycle-figma-critic` into `apps/desktop/out/package-resources/skill-packs` for production packaging.
+- Verification: targeted worker/skill tests pass, `./run.sh typecheck`, `./run.sh test` (168 pass, 2 skip), `./run.sh build` and `git diff --check` pass.
+- Next action: wire the final macOS packager to copy `apps/desktop/out/package-resources/*` into Electron resources together with the existing Figma runtime, then do a clean packaged-app rehearsal.
 
 ## 10. End-of-session checklist
 

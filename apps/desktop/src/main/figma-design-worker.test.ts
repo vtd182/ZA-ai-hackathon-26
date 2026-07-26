@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FigmaDesignWorkerTask } from './figma-design-worker'
+import type { SkillPackBundle } from './skill-packs'
 import {
   approveFigmaWorkerElicitation,
   buildFigmaDesignWorkerPrompt,
@@ -9,6 +10,23 @@ import {
 const taskScope = {
   artifactPageName: 'PM · Login · v1',
   rootNodeId: '490:1',
+}
+
+const skillPack: SkillPackBundle = {
+  schemaVersion: 1,
+  id: 'pm-lifecycle-figma-craft',
+  displayName: 'PM Lifecycle Figma Craft',
+  version: '2026.07.26',
+  rootPath: '/repo/skills',
+  hash: 'f'.repeat(64),
+  reportSchema: { type: 'object' },
+  files: [{
+    path: 'pm-lifecycle-figma-design/SKILL.md',
+    content: '# PM Lifecycle Figma design\n\nUse this skill for an approved Figma design task.',
+  }, {
+    path: 'pm-lifecycle-figma-critic/SKILL.md',
+    content: '# PM Lifecycle Figma critic\n\nCritique the rendered artifact.',
+  }],
 }
 
 describe('Figma design worker', () => {
@@ -95,8 +113,9 @@ describe('Figma design worker', () => {
   it('builds a prompt that names the exact writable and read-only Pages', () => {
     const prompt = buildFigmaDesignWorkerPrompt({
       modelId: 'gpt-5.5',
-      repositoryRoot: '/repo',
+      workingDirectory: '/tmp/pm-agent',
       mcpBinaryPath: '/repo/mcp-tool/za-talk-to-figma/bin/za-talk-to-figma',
+      skillPack,
       sessionId: 'figma:session',
       sourcePageId: '0:1',
       sourcePageName: 'Page 1',
@@ -232,6 +251,10 @@ describe('Figma design worker', () => {
 
     expect(prompt).toContain('The only writable Page is "PM · Login · v1"')
     expect(prompt).toContain('read-only ZDS source is "Page 1"')
+    expect(prompt).toContain('Use the embedded global skill pack')
+    expect(prompt).toContain('Skill pack ID: pm-lifecycle-figma-craft')
+    expect(prompt).toContain('pm-lifecycle-figma-design/SKILL.md')
+    expect(prompt).not.toContain('Read and follow the design skill at /repo')
     expect(prompt).toContain('at least one refinement')
     expect(prompt).toContain('intentionally sparse')
     expect(prompt).toContain('Password login')

@@ -61,6 +61,11 @@ describe("product craft audit", () => {
       type: "INSTANCE",
       visible: true,
       opacity: 1,
+      width: 342,
+      height: 48,
+      x: 24,
+      y: 720,
+      absoluteBoundingBox: bounds(24, 720, 342, 48),
       parent: screen,
       children: [],
       reactions: [{
@@ -137,6 +142,11 @@ describe("product craft audit", () => {
       type: "INSTANCE",
       visible: true,
       opacity: 1,
+      width: 342,
+      height: 48,
+      x: 24,
+      y: 720,
+      absoluteBoundingBox: bounds(24, 720, 342, 48),
       parent: screen,
       children: [],
       reactions: [],
@@ -195,6 +205,9 @@ describe("product craft audit", () => {
       forbiddenCopyCount: 1,
       clippedTextCount: 2,
       lowVisibilityTextCount: 2,
+      componentDriftCount: 0,
+      componentOverlapCount: 0,
+      undersizedTouchTargetCount: 0,
     });
     expect(result?.data.issues.map((issue: any) => issue.code)).toEqual(expect.arrayContaining([
       "STALE_COMPONENT_COPY",
@@ -204,6 +217,91 @@ describe("product craft audit", () => {
       "TEXT_OUTSIDE_SCREEN",
       "TEXT_OUTSIDE_PARENT",
       "PROTOTYPE_LINKS_MISSING",
+    ]));
+  });
+
+  it("blocks drifted and overlapping top-level ZDS instances", async () => {
+    const primaryButton = {
+      id: "1:3",
+      name: "[ZDS] Primary Button",
+      type: "INSTANCE",
+      visible: true,
+      opacity: 1,
+      width: 342,
+      height: 48,
+      x: 24,
+      y: 720,
+      absoluteBoundingBox: bounds(24, 720, 342, 48),
+      parent: screen,
+      children: [],
+      reactions: [{
+        trigger: { type: "ON_CLICK" },
+        actions: [{ type: "NODE", destinationId: "1:9" }],
+      }],
+    };
+    const overlappingButton = {
+      id: "1:4",
+      name: "[ZDS] Secondary Button",
+      type: "INSTANCE",
+      visible: true,
+      opacity: 1,
+      width: 180,
+      height: 44,
+      x: 40,
+      y: 724,
+      absoluteBoundingBox: bounds(40, 724, 180, 44),
+      parent: screen,
+      children: [],
+      reactions: [],
+    };
+    const driftedInput = {
+      id: "1:5",
+      name: "[ZDS] Text Input",
+      type: "INSTANCE",
+      visible: true,
+      opacity: 1,
+      width: 342,
+      height: 48,
+      x: 80,
+      y: 120,
+      absoluteBoundingBox: bounds(80, 120, 342, 48),
+      parent: screen,
+      children: [],
+      reactions: [],
+    };
+    const tinyChip = {
+      id: "1:6",
+      name: "[ZDS] Filter Chip",
+      type: "INSTANCE",
+      visible: true,
+      opacity: 1,
+      width: 24,
+      height: 24,
+      x: 24,
+      y: 220,
+      absoluteBoundingBox: bounds(24, 220, 24, 24),
+      parent: screen,
+      children: [],
+      reactions: [],
+    };
+    screen.children = [primaryButton, overlappingButton, driftedInput, tinyChip];
+
+    const result = await handleProductCraftAuditRequest(request({
+      rootNodeId: root.id,
+      expectedScreenCount: 1,
+      expectedPrototypeLinks: 1,
+    }) as any);
+
+    expect(result?.data.passed).toBe(false);
+    expect(result?.data.metrics).toMatchObject({
+      componentDriftCount: 1,
+      componentOverlapCount: 1,
+      undersizedTouchTargetCount: 1,
+    });
+    expect(result?.data.issues.map((issue: any) => issue.code)).toEqual(expect.arrayContaining([
+      "ZDS_INSTANCE_OUTSIDE_SCREEN",
+      "ZDS_INSTANCE_OVERLAP",
+      "TOUCH_TARGET_TOO_SMALL",
     ]));
   });
 });
