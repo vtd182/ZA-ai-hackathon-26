@@ -29,8 +29,6 @@ interface LayoutOptions {
 const GRID = 8
 const NODE_GAP = 56
 const LARGE_SCENE_NODE_COUNT = 10
-const WRAPPED_RANKS_PER_BAND = 6
-const WRAPPED_RANK_SPACING = 376
 const PROTOTYPE_COLUMN_GAP = 100
 const PROTOTYPE_ROW_GAP = 180
 
@@ -71,78 +69,6 @@ function boundsOf(rectangles: Rectangle[]): Rectangle | undefined {
 
 function semanticNodes(context: CanvasDocumentContext): CanvasShapeContext[] {
   return context.shapes.filter((shape) => Boolean(shape.semanticId && shape.nodeKind))
-}
-
-function wrapLargeScene(
-  raw: Map<string, Rectangle>,
-  nodes: Array<Extract<CanvasOperation, { op: 'create_node' }>>,
-  connections: Array<Extract<CanvasOperation, { op: 'connect' }>>,
-): Map<string, Rectangle> {
-  const nodeKind = new Map(nodes.map((node) => [node.id, node.kind]))
-  const outgoing = new Map<string, string[]>()
-  const incoming = new Map<string, string[]>()
-  for (const connection of connections) {
-    outgoing.set(connection.fromId, [...(outgoing.get(connection.fromId) ?? []), connection.toId])
-    incoming.set(connection.toId, [...(incoming.get(connection.toId) ?? []), connection.fromId])
-  }
-
-  const root = nodes.find((node) => (incoming.get(node.id) ?? []).length === 0)?.id ?? nodes[0]!.id
-  const visited = new Set<string>()
-  const mainJourney: string[] = []
-  let current: string | undefined = root
-  while (current && !visited.has(current)) {
-    visited.add(current)
-    mainJourney.push(current)
-    const candidates: string[] = (outgoing.get(current) ?? []).filter((id: string) => !visited.has(id))
-    current = candidates.find((id) => nodeKind.get(id) !== 'note') ?? candidates[0]
-  }
-  if (mainJourney.length < Math.ceil(nodes.length / 2)) {
-    mainJourney.splice(0, mainJourney.length, ...nodes.map((node) => node.id))
-  }
-
-  const wrapped = new Map<string, Rectangle>()
-  const mainCenters = new Map<string, { x: number; y: number; band: number }>()
-  for (const [index, id] of mainJourney.entries()) {
-    const band = Math.floor(index / WRAPPED_RANKS_PER_BAND)
-    const positionInBand = index % WRAPPED_RANKS_PER_BAND
-    const column = band % 2 === 0
-      ? positionInBand
-      : WRAPPED_RANKS_PER_BAND - positionInBand - 1
-    const rectangle = raw.get(id)!
-    const center = {
-      x: column * WRAPPED_RANK_SPACING + rectangle.width / 2,
-      y: band * 480 + 264,
-      band,
-    }
-    mainCenters.set(id, center)
-    wrapped.set(id, { ...rectangle, x: center.x - rectangle.width / 2, y: center.y - rectangle.height / 2 })
-  }
-
-  const branchCounts = new Map<string, number>()
-  const branchNodes = nodes.filter((node) => !mainCenters.has(node.id))
-  for (const [fallbackIndex, node] of branchNodes.entries()) {
-    const rectangle = raw.get(node.id)!
-    const parentId = (incoming.get(node.id) ?? []).find((id) => mainCenters.has(id))
-    const parent = parentId ? mainCenters.get(parentId) : undefined
-    const siblingIndex = parentId ? branchCounts.get(parentId) ?? 0 : fallbackIndex
-    if (parentId) branchCounts.set(parentId, siblingIndex + 1)
-    const preferred = parent
-      ? {
-          x: parent.x - rectangle.width / 2 + siblingIndex * (rectangle.width + NODE_GAP),
-          y: (parent.band === 0 ? 48 : parent.y + 240) - rectangle.height / 2,
-        }
-      : {
-          x: (fallbackIndex % WRAPPED_RANKS_PER_BAND) * WRAPPED_RANK_SPACING,
-          y: (Math.ceil(mainJourney.length / WRAPPED_RANKS_PER_BAND) * 480) + 96,
-        }
-    const position = availableTranslation(
-      new Map([[node.id, { ...rectangle, x: 0, y: 0 }]]),
-      [...wrapped.values()],
-      preferred,
-    )
-    wrapped.set(node.id, { ...rectangle, x: position.x, y: position.y })
-  }
-  return wrapped
 }
 
 function arrangePrototypeDeck(
@@ -221,13 +147,24 @@ export function layoutCanvasProgram(
     }
   }
 
+  const hasExistingParticipant = [...nodeById.keys()].some((id) => existing.has(id))
+  const isPrototypeDeck = nodeOperations.length >= 3
+    && nodeOperations.length <= 5
+    && nodeOperations.every((node) => node.kind === 'screen' && node.id.startsWith('prototype-'))
+  // A fresh large flow reads far better as a clean top-to-bottom layered graph
+  // (narrow, minimal edge crossings) than as a wide strip or a hand-rolled snake.
+  // Small flows stay left-to-right; prototype decks use their own grid.
+  const useVertical = !hasExistingParticipant
+    && !isPrototypeDeck
+    && nodeOperations.length > LARGE_SCENE_NODE_COUNT
+
   const graph = new dagre.graphlib.Graph({ multigraph: true })
   graph.setGraph({
-    rankdir: 'LR',
+    rankdir: useVertical ? 'TB' : 'LR',
     align: 'UL',
-    nodesep: 88,
-    edgesep: 48,
-    ranksep: 156,
+    nodesep: useVertical ? 72 : 88,
+    edgesep: useVertical ? 28 : 48,
+    ranksep: useVertical ? 120 : 156,
     marginx: 24,
     marginy: 24,
     acyclicer: 'greedy',
@@ -257,15 +194,11 @@ export function layoutCanvasProgram(
       height: value.height,
     })
   }
-  const hasExistingParticipant = [...nodeById.keys()].some((id) => existing.has(id))
-  const isPrototypeDeck = nodeOperations.length >= 3
-    && nodeOperations.length <= 5
-    && nodeOperations.every((node) => node.kind === 'screen' && node.id.startsWith('prototype-'))
   if (!hasExistingParticipant && isPrototypeDeck) {
     raw = arrangePrototypeDeck(raw, nodeOperations)
-  } else if (!hasExistingParticipant && nodeOperations.length > LARGE_SCENE_NODE_COUNT) {
-    raw = wrapLargeScene(raw, nodeOperations, connections)
   }
+  // Large fresh flows already used the vertical (TB) dagre pass above, which lays them
+  // out as clean crossing-minimized layers instead of the old hand-rolled snake wrap.
 
   const movable = nodeOperations.filter((node) => options.force || !existing.has(node.id))
   const occupied = context.shapes

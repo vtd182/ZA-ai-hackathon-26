@@ -129,7 +129,7 @@ function resequenceProviderEvents(...groups: ProviderEvent[][]): ProviderEvent[]
 function deliveryStatusMessage(productSpec: ProductSpec, selectedOption?: string): string {
   const requirements = productSpec.requirements.filter((item) => item.status !== 'removed').length
   const prefix = selectedOption ? `Đã khóa phương án “${selectedOption}”. ` : ''
-  return `${prefix}Đã tổng hợp ProductSpec v${productSpec.version} từ chính cuộc hội thoại: ${requirements} requirement, ${productSpec.screens.length} screen, ${productSpec.stories.length} story. Bước tiếp theo: review flow/prototype trên canvas hoặc tạo kickoff package gồm Figma, PRD.md và backlog mock.`
+  return `${prefix}Mình đã tự tổng hợp ProductSpec v${productSpec.version} từ chính cuộc hội thoại: ${requirements} requirement, ${productSpec.screens.length} screen, ${productSpec.stories.length} story.\n\nĐề xuất của mình cho bước tiếp: (1) vẽ user flow ngay để bạn review — gõ “vẽ user flow” hoặc bấm **User flow**; (2) sau đó mình chuẩn bị kickoff package (Figma + PRD.md + backlog mock) và chờ bạn duyệt. Bạn muốn bắt đầu từ đâu?`
 }
 
 function canvasReceiptMessage(program: CanvasProgram, receipt: CanvasExecutionReceipt, kind: 'draw' | 'edit'): string {
@@ -968,6 +968,18 @@ function artifactPlanPending(state: RunState): boolean {
     && state.pendingActions.every((action) => action.status === 'pending_approval')
 }
 
+// Explain *why* a Figma kickoff cannot be prepared yet, with the concrete next step,
+// instead of a single opaque "cần ProductSpec có scope tại Delivery checkpoint".
+function figmaPrepareBlockReason(state: RunState): string {
+  if (state.phase !== 'DELIVERY' || state.status !== 'ACTIVE') {
+    return 'Chưa tới bước tạo Figma. Hãy hoàn tất Discovery rồi chọn một option ở Decision để agent tổng hợp ProductSpec — sau đó mới tạo kickoff package.'
+  }
+  if (state.productSpec.requirements.length === 0) {
+    return 'ProductSpec đang có 0 requirement nên chưa đủ scope cho Figma. Nếu bạn đã vẽ user flow / prototype trên canvas, hãy “Promote” nó thành ProductSpec trước; hoặc hoàn tất Decision để sinh scope, rồi tạo lại.'
+  }
+  return 'Chưa thể chuẩn bị Figma từ trạng thái hiện tại của thread này.'
+}
+
 async function prepareArtifactsForThread(
   threadId: string,
 ): Promise<{ workspace: LifecycleWorkspaceState; message: string; assistantMessage: ChatMessage }> {
@@ -1572,7 +1584,7 @@ function registerIpc(): void {
           && state.status === 'ACTIVE'
           && state.productSpec.requirements.length > 0
         if (!artifactPlanPending(state) && !canPrepare) {
-          return appOwnedReply('Chưa thể chuẩn bị Figma: cần ProductSpec có scope tại Delivery checkpoint.')
+          return appOwnedReply(figmaPrepareBlockReason(state))
         }
         const result = slashCommand.kind === 'figma_create' && artifactPlanPending(state)
           ? await approveArtifactsForThread(input.threadId)
@@ -1751,7 +1763,7 @@ function registerIpc(): void {
         }
         if (artifactAction !== 'approve' && !artifactPlanPending(artifactWorkspace.runState) && !canPrepareArtifacts) {
           return appOwnedReply(
-            'Chưa thể chuẩn bị Figma: cần ProductSpec có scope tại Delivery checkpoint.',
+            figmaPrepareBlockReason(artifactWorkspace.runState),
             providerEvents,
             response.remoteRef,
           )
@@ -2146,7 +2158,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
         return {
           guide: Boolean(document.querySelector('[aria-label="Delivery next steps"]')),
           transparent: detail.messages.some((message) => message.role === 'user' && message.content.includes('MVP nhắc backup'))
-            && detail.messages.some((message) => message.role === 'assistant' && message.content.includes('Bước tiếp theo'))
+            && detail.messages.some((message) => message.role === 'assistant' && message.content.includes('tổng hợp ProductSpec'))
         };
       })()`) as { guide: boolean; transparent: boolean }
       lifecycleFlow.deliveryGuideReady = deliveryState.guide

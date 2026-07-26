@@ -34,6 +34,22 @@ describe('deterministic demo reset', () => {
     history.close()
   })
 
+  it('reuses an untouched empty thread instead of spamming duplicates', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pm-agent-empty-'))
+    cleanup.push(directory)
+    const history = new HistoryStore(join(directory, 'app.db'))
+
+    const first = history.createThread()
+    // A second "new conversation" while the first is still blank must not create a duplicate.
+    expect(history.createThread().id).toBe(first.id)
+
+    // Once the thread has real content, a new conversation gets its own fresh thread.
+    history.addMessage(first.id, 'user', 'ý tưởng đầu tiên')
+    expect(history.createThread().id).not.toBe(first.id)
+
+    history.close()
+  })
+
   it('switches provider segments without changing thread, canvas or ProductSpec handoff state', () => {
     const directory = mkdtempSync(join(tmpdir(), 'pm-agent-handoff-'))
     cleanup.push(directory)

@@ -15,8 +15,10 @@ describe('CanvasDocument ownership', () => {
     const filename = join(directory, 'app.db')
     let history = new HistoryStore(filename)
     const a = history.createThread()
-    const b = history.createThread()
+    // Give thread A content before opening B: createThread reuses an untouched empty
+    // thread, so B is only a distinct thread once A is no longer blank.
     history.saveCanvas(a.id, { entity: 'A-v1' })
+    const b = history.createThread()
     history.saveCanvas(a.id, { entity: 'A-v2' })
     history.saveCanvas(b.id, { entity: 'B-v1' })
     history.close()

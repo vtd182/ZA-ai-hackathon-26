@@ -429,9 +429,9 @@ button {
 }
 
 .model-label {
-  max-width: 132px;
+  max-width: 168px;
   overflow: hidden;
-  color: #68767c;
+  color: var(--ink-3);
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 10.5px;
   text-overflow: ellipsis;

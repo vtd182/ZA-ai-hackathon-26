@@ -167,6 +167,17 @@ export class HistoryStore {
   }
 
   createThread(): ThreadDetail {
+    // Reuse an untouched thread instead of spamming empty ones: if an active thread
+    // already has no messages and a blank canvas, "new conversation" just focuses it.
+    const reusable = this.db.prepare(`
+      SELECT t.id FROM conversation_threads t
+      WHERE t.status = 'active'
+        AND t.canvas_snapshot IS NULL
+        AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = t.id)
+      ORDER BY t.created_at DESC LIMIT 1
+    `).get() as { id: string } | undefined
+    if (reusable) return this.getThread(reusable.id)
+
     const id = randomUUID()
     const createdAt = now()
     const profile = this.getProfile('mock-local')
