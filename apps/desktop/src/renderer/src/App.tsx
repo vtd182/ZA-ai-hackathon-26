@@ -353,6 +353,16 @@ export function App(): React.JSX.Element {
     await window.pmAgent.chat.cancel(runningThreadId)
   }
 
+  const startPromotion = async (): Promise<void> => {
+    if (!activeThread || !canvasContext || canvasContext.shapes.length === 0) return
+    try {
+      const preview = await window.pmAgent.lifecycle.previewPromotion(activeThread.id, canvasContext)
+      setPromotionPreview(preview)
+    } catch (nextError) {
+      setError(errorText(nextError))
+    }
+  }
+
   const loadEarlierMessages = async (): Promise<void> => {
     if (!activeThread?.messageNextCursor) return
     const page = await window.pmAgent.threads.messages(activeThread.id, activeThread.messageNextCursor, 50)
@@ -717,8 +727,11 @@ export function App(): React.JSX.Element {
         execution={lifecycleWorkspace?.execution ?? undefined}
         reasoning={lifecycleWorkspace?.reasoning ?? undefined}
         productSpec={lifecycleWorkspace?.runState.productSpec}
+        phase={lifecycleWorkspace?.runState.phase}
+        collaborationMode={activeThread?.collaborationMode}
         deliveryActive={lifecycleWorkspace?.runState.phase === 'DELIVERY' && lifecycleWorkspace.runState.status === 'ACTIVE'}
         canvasItemCount={canvasContext?.shapes.filter((shape) => shape.semanticId && shape.nodeKind).length ?? 0}
+        onStartPromotion={startPromotion}
         promotionPreview={promotionPreview ?? undefined}
         artifactActions={lifecycleWorkspace?.runState.pendingIntent ? [] : lifecycleWorkspace?.runState.pendingActions ?? []}
         disabled={!activeThread}
@@ -911,6 +924,64 @@ function FigmaSetupDialog({
   )
 }
 
+const LIFECYCLE_STEPS = ['Ý tưởng', 'Khám phá', 'Quyết định', 'Delivery', 'Kickoff Figma'] as const
+
+function LifecycleStepper({ phase, requirements, canvasItemCount, onStartPromotion, busy }: {
+  phase?: import('@pm-agent/domain').RunState['phase']
+  requirements: number
+  canvasItemCount: number
+  onStartPromotion(): Promise<void>
+  busy: boolean
+}): React.JSX.Element {
+  const phaseIndex: Record<string, number> = { IDEA_INTAKE: 0, DISCOVERY: 1, DECISION: 2, DELIVERY: 3, CHANGE_IMPACT: 3 }
+  const base = phase ? phaseIndex[phase] ?? 0 : 0
+  const readyForFigma = phase === 'DELIVERY' && requirements > 0
+  const activeIndex = readyForFigma ? 4 : base
+
+  let hint = ''
+  let action: { label: string; run(): Promise<void> } | null = null
+  if (!phase || phase === 'IDEA_INTAKE') {
+    if (canvasItemCount > 0) {
+      hint = `Bạn đang khám phá tự do và đã vẽ ${canvasItemCount} node. Bản vẽ này chưa phải ProductSpec — để tạo Figma, hãy “chốt” nó thành ProductSpec trước.`
+      action = { label: 'Chốt canvas → ProductSpec', run: onStartPromotion }
+    } else {
+      hint = 'Gửi ý tưởng của bạn — agent sẽ hỏi 3 câu Khám phá để làm rõ scope.'
+    }
+  } else if (phase === 'DISCOVERY') {
+    hint = 'Trả lời các câu hỏi Khám phá bên dưới để agent tạo phương án.'
+  } else if (phase === 'DECISION') {
+    hint = 'Chọn một phương án MVP để agent tổng hợp ProductSpec.'
+  } else if (phase === 'DELIVERY') {
+    hint = requirements > 0
+      ? 'Sẵn sàng tạo kickoff package: Figma + PRD.md + backlog. Bấm “Tạo kickoff package”.'
+      : 'ProductSpec chưa có scope. Chốt canvas thành ProductSpec hoặc hoàn tất Quyết định trước.'
+    if (requirements === 0 && canvasItemCount > 0) action = { label: 'Chốt canvas → ProductSpec', run: onStartPromotion }
+  } else if (phase === 'CHANGE_IMPACT') {
+    hint = 'Xem before/after và duyệt thay đổi.'
+  }
+
+  return (
+    <section className="lifecycle-stepper" aria-label="Tiến trình lifecycle">
+      <ol className="stepper-track">
+        {LIFECYCLE_STEPS.map((label, index) => (
+          <li key={label} className={index === activeIndex ? 'current' : index < activeIndex ? 'done' : 'todo'}>
+            <span className="stepper-dot">{index < activeIndex ? '✓' : index + 1}</span>
+            <span className="stepper-label">{label}</span>
+          </li>
+        ))}
+      </ol>
+      {hint && (
+        <div className="stepper-hint">
+          <span>{hint}</span>
+          {action && (
+            <button className="stepper-action" disabled={busy} onClick={() => void action!.run()}>{action.label}</button>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function ChatPanel({
   messages,
   suggestions,
@@ -926,12 +997,15 @@ function ChatPanel({
   execution,
   reasoning,
   productSpec,
+  phase,
+  collaborationMode,
   deliveryActive,
   canvasItemCount,
   promotionPreview,
   artifactActions,
   disabled,
   onSend,
+  onStartPromotion,
   onStop,
   onLoadEarlier,
   onApprove,
@@ -961,12 +1035,15 @@ function ChatPanel({
   execution?: ExecutionSummary
   reasoning?: PhaseReasoningResult
   productSpec?: import('@pm-agent/domain').ProductSpec
+  phase?: import('@pm-agent/domain').RunState['phase']
+  collaborationMode?: 'studio' | 'lifecycle'
   deliveryActive: boolean
   canvasItemCount: number
   promotionPreview?: CanvasPromotionPreview
   artifactActions: PlannedAction[]
   disabled: boolean
   onSend(content: string): Promise<void>
+  onStartPromotion(): Promise<void>
   onStop(): Promise<void>
   onLoadEarlier(): Promise<void>
   onApprove(): Promise<void>
@@ -1040,6 +1117,13 @@ function ChatPanel({
           </div>
         )}
       </div>
+      <LifecycleStepper
+        phase={phase}
+        requirements={productSpec?.requirements.filter((item) => item.status !== 'removed').length ?? 0}
+        canvasItemCount={canvasItemCount}
+        onStartPromotion={onStartPromotion}
+        busy={sending || approving}
+      />
       {productSpec && (productSpec.requirements.length > 0 || productSpec.screens.length > 0 || productSpec.stories.length > 0) && (
         <ProductSpecInspector productSpec={productSpec} selection={selection} />
       )}
