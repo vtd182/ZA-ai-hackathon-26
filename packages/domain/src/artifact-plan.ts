@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { figmaTargetBindingSchema } from './figma-integration'
 import { designSystemComponentBindingSchema } from './design-system'
-import { figmaCreativeBlueprintSchema } from './figma-creative'
+import { figmaCreativeBlueprintSchema, prototypeTransitionSchema } from './figma-creative'
 
 export const artifactPlanModeSchema = z.enum(['strict', 'free'])
 export type ArtifactPlanMode = z.infer<typeof artifactPlanModeSchema>
@@ -28,12 +28,18 @@ export interface DesignSlot {
   children: DesignSlot[]
 }
 
+// Backward compatible: existing edges (trigger on_tap / action navigate) still parse; the
+// richer trigger/action/transition fields are optional and drive real Figma reactions.
+// navigate / open_overlay / scroll_to all resolve to a NODE action with a destinationId, so
+// read-back edge derivation stays intact.
 export const prototypeEdgeIntentSchema = z.object({
   key: z.string().min(1),
   fromScreenId: z.string().min(1),
   toScreenId: z.string().min(1),
-  trigger: z.literal('on_tap'),
-  action: z.literal('navigate'),
+  trigger: z.enum(['on_tap', 'on_hover', 'after_delay']).default('on_tap'),
+  action: z.enum(['navigate', 'open_overlay', 'scroll_to']).default('navigate'),
+  delayMs: z.number().int().min(0).max(10000).optional(),
+  transition: prototypeTransitionSchema.optional(),
 })
 export type PrototypeEdgeIntent = z.infer<typeof prototypeEdgeIntentSchema>
 

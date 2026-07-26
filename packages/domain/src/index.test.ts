@@ -1,5 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { extractJson, parsePhaseReasoningResult, parseReasoningResult, reasoningJsonSchemaForPhase } from './index'
+import { extractJson, parsePhaseReasoningResult, parseReasoningResult, prototypeEdgeIntentSchema, reasoningJsonSchemaForPhase } from './index'
+
+describe('prototype edge effects contract', () => {
+  it('keeps a legacy tap-navigate edge valid and defaults trigger/action', () => {
+    const edge = prototypeEdgeIntentSchema.parse({ key: 'e1', fromScreenId: 'A', toScreenId: 'B', trigger: 'on_tap', action: 'navigate' })
+    expect(edge).toMatchObject({ trigger: 'on_tap', action: 'navigate' })
+  })
+
+  it('parses rich effects (after-delay overlay with a push transition)', () => {
+    const edge = prototypeEdgeIntentSchema.parse({
+      key: 'e2', fromScreenId: 'A', toScreenId: 'B',
+      trigger: 'after_delay', action: 'open_overlay', delayMs: 800,
+      transition: { type: 'push', direction: 'left', durationMs: 300, easing: 'ease_in_out' },
+    })
+    expect(edge.transition).toMatchObject({ type: 'push', direction: 'left', durationMs: 300, easing: 'ease_in_out' })
+    expect(edge).toMatchObject({ trigger: 'after_delay', action: 'open_overlay', delayMs: 800 })
+  })
+
+  it('rejects an unsupported action', () => {
+    expect(() => prototypeEdgeIntentSchema.parse({ key: 'e3', fromScreenId: 'A', toScreenId: 'B', trigger: 'on_tap', action: 'teleport' })).toThrow()
+  })
+})
 
 describe('reasoning result contract', () => {
   it('can omit the creative canvas contract for conversation-only turns', () => {

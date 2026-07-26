@@ -56,13 +56,23 @@ export const figmaCreativeScreenSchema = z.object({
 })
 export type FigmaCreativeScreen = z.infer<typeof figmaCreativeScreenSchema>
 
+export const prototypeTransitionSchema = z.object({
+  type: z.enum(['instant', 'dissolve', 'smart_animate', 'move_in', 'slide_in', 'push']).default('smart_animate'),
+  direction: z.enum(['left', 'right', 'top', 'bottom']).default('left'),
+  durationMs: z.number().int().min(0).max(3000).default(240),
+  easing: z.enum(['linear', 'ease_in', 'ease_out', 'ease_in_out']).default('ease_out'),
+})
+export type PrototypeTransition = z.infer<typeof prototypeTransitionSchema>
+
 export const figmaCreativePrototypeEdgeSchema = z.object({
   key: z.string().min(1).max(160),
   fromElementId: z.string().min(1).max(100),
   fromScreenId: z.string().min(1).max(100),
   toScreenId: z.string().min(1).max(100),
-  trigger: z.literal('on_tap'),
-  action: z.literal('navigate'),
+  trigger: z.enum(['on_tap', 'on_hover', 'after_delay']).default('on_tap'),
+  action: z.enum(['navigate', 'open_overlay', 'scroll_to']).default('navigate'),
+  delayMs: z.number().int().min(0).max(10000).optional(),
+  transition: prototypeTransitionSchema.optional(),
 })
 export type FigmaCreativePrototypeEdge = z.infer<typeof figmaCreativePrototypeEdgeSchema>
 
@@ -159,8 +169,19 @@ export const figmaCreativeBlueprintJsonSchema = {
           fromElementId: { type: 'string' },
           fromScreenId: { type: 'string' },
           toScreenId: { type: 'string' },
-          trigger: { type: 'string', const: 'on_tap' },
-          action: { type: 'string', const: 'navigate' },
+          trigger: { type: 'string', enum: ['on_tap', 'on_hover', 'after_delay'] },
+          action: { type: 'string', enum: ['navigate', 'open_overlay', 'scroll_to'] },
+          delayMs: { type: 'number' },
+          transition: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              type: { type: 'string', enum: ['instant', 'dissolve', 'smart_animate', 'move_in', 'slide_in', 'push'] },
+              direction: { type: 'string', enum: ['left', 'right', 'top', 'bottom'] },
+              durationMs: { type: 'number' },
+              easing: { type: 'string', enum: ['linear', 'ease_in', 'ease_out', 'ease_in_out'] },
+            },
+          },
         },
       },
     },

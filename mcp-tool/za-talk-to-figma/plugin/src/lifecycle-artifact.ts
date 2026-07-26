@@ -492,20 +492,66 @@ const navigationCopy = (direction: JsonRecord, presentation: JsonRecord): string
   }
 };
 
+const EASING_MAP: Record<string, string> = {
+  linear: "LINEAR", ease_in: "EASE_IN", ease_out: "EASE_OUT", ease_in_out: "EASE_IN_AND_OUT",
+};
+const DIRECTION_MAP: Record<string, string> = {
+  left: "LEFT", right: "RIGHT", top: "TOP", bottom: "BOTTOM",
+};
+
+const buildTransition = (transition: unknown): JsonRecord | null => {
+  const record = (transition && typeof transition === "object") ? transition as JsonRecord : {};
+  const type = String(record.type ?? "smart_animate");
+  if (type === "instant") return null;
+  const duration = (typeof record.durationMs === "number" ? record.durationMs : 240) / 1000;
+  const easing = { type: EASING_MAP[String(record.easing ?? "ease_out")] ?? "EASE_OUT" };
+  const direction = DIRECTION_MAP[String(record.direction ?? "left")] ?? "LEFT";
+  if (type === "dissolve") return { type: "DISSOLVE", duration, easing };
+  if (type === "move_in") return { type: "MOVE_IN", direction, matchLayers: false, duration, easing };
+  if (type === "slide_in") return { type: "SLIDE_IN", direction, matchLayers: false, duration, easing };
+  if (type === "push") return { type: "PUSH", direction, matchLayers: false, duration, easing };
+  return { type: "SMART_ANIMATE", duration, easing };
+};
+
+const buildTrigger = (edge: JsonRecord): JsonRecord => {
+  const trigger = String(edge.trigger ?? "on_tap");
+  if (trigger === "on_hover") return { type: "ON_HOVER" };
+  if (trigger === "after_delay") {
+    return { type: "AFTER_TIMEOUT", timeout: (typeof edge.delayMs === "number" ? edge.delayMs : 1500) / 1000 };
+  }
+  return { type: "ON_CLICK" };
+};
+
 const setNavigationReactions = async (
   node: SceneNode,
   destinations: Array<{ edge: JsonRecord; frame: FrameNode }>,
 ): Promise<void> => {
-  const reactions = destinations.map(({ frame }) => ({
-    trigger: { type: "ON_CLICK" },
-    actions: [{
-      type: "NODE",
-      destinationId: frame.id,
-      navigation: "NAVIGATE",
-      transition: { type: "SMART_ANIMATE", duration: 0.24, easing: { type: "EASE_OUT" } },
-      resetScrollPosition: true,
-    }],
-  })) as Reaction[];
+  const reactions = destinations.map(({ edge, frame }) => {
+    const action = String(edge.action ?? "navigate");
+    const navigation = action === "open_overlay" ? "OVERLAY" : action === "scroll_to" ? "SCROLL_TO" : "NAVIGATE";
+    // An overlay destination needs overlay presentation settings to open as a sheet.
+    if (navigation === "OVERLAY" && "overlayPositionType" in frame) {
+      const overlayFrame = frame as FrameNode & {
+        overlayPositionType: string;
+        overlayBackground: unknown;
+        overlayBackgroundInteraction: string;
+      };
+      overlayFrame.overlayPositionType = "BOTTOM_CENTER";
+      overlayFrame.overlayBackground = { type: "SOLID_COLOR", color: { r: 0, g: 0, b: 0, a: 0.28 } };
+      overlayFrame.overlayBackgroundInteraction = "CLOSE_ON_CLICK_OUTSIDE";
+    }
+    const transition = buildTransition(edge.transition);
+    return {
+      trigger: buildTrigger(edge),
+      actions: [{
+        type: "NODE",
+        destinationId: frame.id,
+        navigation,
+        ...(transition ? { transition } : {}),
+        ...(navigation === "NAVIGATE" ? { resetScrollPosition: true } : {}),
+      }],
+    };
+  }) as Reaction[];
   const prototypeNode = node as SceneNode & Partial<ReactionMixin>;
   if (typeof prototypeNode.setReactionsAsync === "function") {
     await prototypeNode.setReactionsAsync(reactions);
@@ -812,6 +858,8 @@ const renderCreativeBlueprint = async (input: {
       toScreenId: edge.toScreenId,
       trigger: edge.trigger,
       action: edge.action,
+      ...(edge.delayMs !== undefined ? { delayMs: edge.delayMs } : {}),
+      ...(edge.transition ? { transition: edge.transition } : {}),
     }, frame: destination }]);
   }
   return { width: Math.max(900, cursorX + 24), height: Math.max(1_020, maxHeight + 180), edges };

@@ -1740,17 +1740,62 @@ var __async = (__this, __arguments, generator) => {
         return `${active}      Hoạt động      Cá nhân`;
     }
   };
+  const EASING_MAP = {
+    linear: "LINEAR",
+    ease_in: "EASE_IN",
+    ease_out: "EASE_OUT",
+    ease_in_out: "EASE_IN_AND_OUT"
+  };
+  const DIRECTION_MAP = {
+    left: "LEFT",
+    right: "RIGHT",
+    top: "TOP",
+    bottom: "BOTTOM"
+  };
+  const buildTransition = (transition) => {
+    var _a, _b, _c, _d, _e;
+    const record = transition && typeof transition === "object" ? transition : {};
+    const type = String((_a = record.type) != null ? _a : "smart_animate");
+    if (type === "instant") return null;
+    const duration = (typeof record.durationMs === "number" ? record.durationMs : 240) / 1e3;
+    const easing = { type: (_c = EASING_MAP[String((_b = record.easing) != null ? _b : "ease_out")]) != null ? _c : "EASE_OUT" };
+    const direction = (_e = DIRECTION_MAP[String((_d = record.direction) != null ? _d : "left")]) != null ? _e : "LEFT";
+    if (type === "dissolve") return { type: "DISSOLVE", duration, easing };
+    if (type === "move_in") return { type: "MOVE_IN", direction, matchLayers: false, duration, easing };
+    if (type === "slide_in") return { type: "SLIDE_IN", direction, matchLayers: false, duration, easing };
+    if (type === "push") return { type: "PUSH", direction, matchLayers: false, duration, easing };
+    return { type: "SMART_ANIMATE", duration, easing };
+  };
+  const buildTrigger = (edge) => {
+    var _a;
+    const trigger = String((_a = edge.trigger) != null ? _a : "on_tap");
+    if (trigger === "on_hover") return { type: "ON_HOVER" };
+    if (trigger === "after_delay") {
+      return { type: "AFTER_TIMEOUT", timeout: (typeof edge.delayMs === "number" ? edge.delayMs : 1500) / 1e3 };
+    }
+    return { type: "ON_CLICK" };
+  };
   const setNavigationReactions = (node, destinations) => __async(null, null, function* () {
-    const reactions = destinations.map(({ frame }) => ({
-      trigger: { type: "ON_CLICK" },
-      actions: [{
-        type: "NODE",
-        destinationId: frame.id,
-        navigation: "NAVIGATE",
-        transition: { type: "SMART_ANIMATE", duration: 0.24, easing: { type: "EASE_OUT" } },
-        resetScrollPosition: true
-      }]
-    }));
+    const reactions = destinations.map(({ edge, frame }) => {
+      var _a;
+      const action = String((_a = edge.action) != null ? _a : "navigate");
+      const navigation = action === "open_overlay" ? "OVERLAY" : action === "scroll_to" ? "SCROLL_TO" : "NAVIGATE";
+      if (navigation === "OVERLAY" && "overlayPositionType" in frame) {
+        const overlayFrame = frame;
+        overlayFrame.overlayPositionType = "BOTTOM_CENTER";
+        overlayFrame.overlayBackground = { type: "SOLID_COLOR", color: { r: 0, g: 0, b: 0, a: 0.28 } };
+        overlayFrame.overlayBackgroundInteraction = "CLOSE_ON_CLICK_OUTSIDE";
+      }
+      const transition = buildTransition(edge.transition);
+      return {
+        trigger: buildTrigger(edge),
+        actions: [__spreadValues(__spreadValues({
+          type: "NODE",
+          destinationId: frame.id,
+          navigation
+        }, transition ? { transition } : {}), navigation === "NAVIGATE" ? { resetScrollPosition: true } : {})]
+      };
+    });
     const prototypeNode = node;
     if (typeof prototypeNode.setReactionsAsync === "function") {
       yield prototypeNode.setReactionsAsync(reactions);
@@ -2012,13 +2057,13 @@ var __async = (__this, __arguments, generator) => {
       const sourceNode = elementNodes.get(String(edge.fromElementId));
       const destination = screenFrames.get(String(edge.toScreenId));
       if (!sourceNode || !destination) throw new Error(`CREATIVE_EDGE_INVALID: ${String(edge.key)}`);
-      yield setNavigationReactions(sourceNode, [{ edge: {
+      yield setNavigationReactions(sourceNode, [{ edge: __spreadValues(__spreadValues({
         key: edge.key,
         fromScreenId: edge.fromScreenId,
         toScreenId: edge.toScreenId,
         trigger: edge.trigger,
         action: edge.action
-      }, frame: destination }]);
+      }, edge.delayMs !== void 0 ? { delayMs: edge.delayMs } : {}), edge.transition ? { transition: edge.transition } : {}), frame: destination }]);
     }
     return { width: Math.max(900, cursorX + 24), height: Math.max(1020, maxHeight + 180), edges };
   });

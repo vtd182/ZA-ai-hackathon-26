@@ -512,6 +512,48 @@ describe("lifecycle artifact plugin handlers", () => {
     expect(tampered?.data.prototypeEdges).toEqual([]);
   });
 
+  it("maps rich prototype effects (trigger, action, transition) to real Figma reactions", async () => {
+    const flowPreflight = preflight();
+    flowPreflight.source.screens[0].prototypeEdges = [{
+      key: "edge:SCREEN-MENU:SCREEN-DETAIL",
+      fromScreenId: "SCREEN-MENU",
+      toScreenId: "SCREEN-DETAIL",
+      trigger: "after_delay",
+      action: "open_overlay",
+      delayMs: 800,
+      transition: { type: "push", direction: "left", durationMs: 300, easing: "ease_in_out" },
+    }];
+    flowPreflight.source.screens.push({
+      ...structuredClone(flowPreflight.source.screens[0]),
+      screenId: "SCREEN-DETAIL",
+      name: "Detail",
+      prototypeEdges: [],
+    });
+    flowPreflight.resolvedSlots.push({
+      ...structuredClone(flowPreflight.resolvedSlots[0]),
+      screenId: "SCREEN-DETAIL",
+      slotKey: "detail",
+    });
+
+    const applied = await handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {
+      preflightPlan: flowPreflight,
+      planHash: "d".repeat(64),
+      targetPageId: "0:1",
+    }) as any);
+    expect(applied?.error).toBeFalsy();
+    const artifactRoot = documentRoot.children[1].children[0];
+    const sourceFrame = artifactRoot.children.find((node: any) =>
+      node.getPluginData("za-pm-lifecycle").includes('"screenId":"SCREEN-MENU"'),
+    );
+    const reaction = sourceFrame.reactions[0];
+    expect(reaction.trigger).toMatchObject({ type: "AFTER_TIMEOUT", timeout: 0.8 });
+    expect(reaction.actions[0]).toMatchObject({
+      type: "NODE",
+      navigation: "OVERLAY",
+      transition: { type: "PUSH", direction: "LEFT" },
+    });
+  });
+
   it("rolls back the artifact root when a strict component is unavailable", async () => {
     page.findAllWithCriteria = () => [];
     await expect(handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {

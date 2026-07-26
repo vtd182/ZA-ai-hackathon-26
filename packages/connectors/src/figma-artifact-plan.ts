@@ -303,13 +303,15 @@ function recipesFor(spec: ProductSpec, creativeBlueprint?: FigmaCreativeBlueprin
             toScreenId: edge.toScreenId,
             trigger: edge.trigger,
             action: edge.action,
+            ...(edge.delayMs !== undefined ? { delayMs: edge.delayMs } : {}),
+            ...(edge.transition ? { transition: edge.transition } : {}),
           }))
         : next ? [{
         key: `edge:${screen.id}:${next.id}`,
         fromScreenId: screen.id,
         toScreenId: next.id,
-        trigger: 'on_tap',
-        action: 'navigate',
+        trigger: 'on_tap' as const,
+        action: 'navigate' as const,
       }] : [],
     }
   })

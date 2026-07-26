@@ -40,6 +40,23 @@ unmistakable; a compact summary (service, time, price) before confirm.
 line), a **meter/gauge** (storage, progress, balance), a schedule/next-run row, and a
 single primary action. Recovery states explain cause + a safe next step.
 
+## Interaction & motion (prototype edges)
+
+The prototype is judged in Present mode, so choose the interaction, not just the link. Each
+`prototypeEdges` entry supports `trigger`, `action` and `transition`:
+
+- **trigger:** `on_tap` for user-driven steps; `after_delay` (+`delayMs`) for auto-advancing
+  a progress/success screen; `on_hover` sparingly.
+- **action:** `navigate` for a full screen change; `open_overlay` for a modal / bottom sheet
+  (confirmations, filters, driver-found) so the parent stays behind a dim; `scroll_to` to jump
+  within a long screen.
+- **transition:** match motion to meaning — `push`/`slide_in` (direction `left`) for forward
+  navigation, `slide_in` from `bottom` for a sheet, `dissolve` for a state flip, `smart_animate`
+  when layers persist between screens (the most polished). Keep `durationMs` 200–320.
+
+Prefer `open_overlay` + `slide_in` from `bottom` for confirmations and selections — it reads as
+a real mobile app, not a slide deck.
+
 ## Anti-patterns that read as "cheap"
 
 - Repeated header + three tinted cards + bottom button on every screen.
