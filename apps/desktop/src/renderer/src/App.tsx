@@ -5,6 +5,7 @@ import {
   Bot,
   Cable,
   CheckCircle2,
+  Maximize2,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
@@ -53,25 +54,20 @@ import type {
 } from '@pm-agent/domain'
 
 const noCanvasProgram: CanvasProgram = { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null }
+// Curated set surfaced in the "/" menu — draw first, then the Figma artifact.
+// Legacy aliases (/figma prepare|approve|retry, /studio *) still parse for back-compat.
 const slashCommands = [
-  { command: '/figma prepare', label: 'Prepare Figma', detail: 'Preflight, chưa write' },
-  { command: '/figma approve', label: 'Approve Figma', detail: 'Duyệt plan đang chờ' },
-  { command: '/figma create', label: 'Create Figma', detail: 'Prepare hoặc chạy plan sẵn có' },
-  { command: '/figma regenerate', label: 'Regenerate Figma', detail: 'Tạo lại bản thiết kế mới, giữ bản cũ', acceptsPrompt: false },
-  { command: '/figma refine', label: 'Refine Figma', detail: 'Agent sửa bản Figma hiện tại theo feedback', acceptsPrompt: true },
+  { command: '/canvas flow', label: 'Vẽ user flow', detail: 'Luồng và nhánh chính', acceptsPrompt: true },
+  { command: '/canvas prototype', label: 'Vẽ prototype', detail: '3–5 màn hình chính', acceptsPrompt: true },
+  { command: '/canvas sequence', label: 'Sequence diagram', detail: 'Người dùng · OA/Bot · Backend', acceptsPrompt: true },
+  { command: '/canvas state', label: 'State machine', detail: 'Trạng thái + transition', acceptsPrompt: true },
+  { command: '/canvas mindmap', label: 'Mind map', detail: 'Phân rã tính năng', acceptsPrompt: true },
+  { command: '/canvas er', label: 'ER data model', detail: 'Entity + quan hệ', acceptsPrompt: true },
+  { command: '/figma create', label: 'Tạo Figma', detail: 'Kickoff: Figma + PRD + backlog' },
+  { command: '/figma refine', label: 'Sửa Figma', detail: 'Agent sửa bản hiện tại theo feedback', acceptsPrompt: true },
+  { command: '/figma regenerate', label: 'Figma bản mới', detail: 'Tạo lại thiết kế, giữ bản cũ' },
   { command: '/figma status', label: 'Figma status', detail: 'Plugin, target và guard' },
-  { command: '/figma retry', label: 'Retry Figma', detail: 'Giữ nguyên target đã thành công' },
-  { command: '/canvas flow', label: 'Canvas flow', detail: 'Ép tạo user flow', acceptsPrompt: true },
-  { command: '/canvas prototype', label: 'Canvas prototype', detail: 'Ép tạo prototype', acceptsPrompt: true },
-  { command: '/canvas sequence', label: 'Sequence diagram', detail: 'Luồng tin nhắn theo actor (OA/Bot/Backend)', acceptsPrompt: true },
-  { command: '/canvas state', label: 'State machine', detail: 'Trạng thái + transition có điều kiện', acceptsPrompt: true },
-  { command: '/canvas mindmap', label: 'Mind map', detail: 'Phân rã tính năng từ ý tưởng trung tâm', acceptsPrompt: true },
-  { command: '/canvas er', label: 'ER data model', detail: 'Entity và quan hệ của Mini App', acceptsPrompt: true },
-  { command: '/studio explore', label: 'Explore', detail: 'Mở rộng ý tưởng, không tự vẽ', acceptsPrompt: true },
-  { command: '/studio critique', label: 'Critique', detail: 'Phản biện, không tự sửa', acceptsPrompt: true },
-  { command: '/studio sketch', label: 'Sketch', detail: 'Phác khi được yêu cầu', acceptsPrompt: true },
-  { command: '/studio refine', label: 'Refine selection', detail: 'Sửa vùng canvas đang chọn', acceptsPrompt: true },
-  { command: '/help', label: 'Slash help', detail: 'Danh sách lệnh' },
+  { command: '/help', label: 'Trợ giúp', detail: 'Toàn bộ lệnh (gồm nâng cao)' },
 ]
 
 const CanvasWorkspace = lazy(async () => {
@@ -1088,6 +1084,7 @@ function ChatPanel({
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const [slashIndex, setSlashIndex] = useState(0)
+  const [specOverviewOpen, setSpecOverviewOpen] = useState(false)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const artifactBusy = Object.values(artifactProgress).some((progress) => progress?.status === 'running')
   const canSend = !disabled && !sending && !approving && !artifactBusy && !blockedByOtherThread && draft.trim().length > 0
@@ -1152,7 +1149,10 @@ function ChatPanel({
         busy={sending || approving}
       />
       {productSpec && (productSpec.requirements.length > 0 || productSpec.screens.length > 0 || productSpec.stories.length > 0) && (
-        <ProductSpecInspector productSpec={productSpec} selection={selection} />
+        <ProductSpecInspector productSpec={productSpec} selection={selection} onOpen={() => setSpecOverviewOpen(true)} />
+      )}
+      {specOverviewOpen && productSpec && (
+        <ProductSpecOverview productSpec={productSpec} onClose={() => setSpecOverviewOpen(false)} />
       )}
       <div className="message-list">
         {hasEarlierMessages && (
@@ -1367,27 +1367,124 @@ function DeliveryGuide({
   )
 }
 
+const PRIORITY_LABEL: Record<string, string> = { must: 'Must', should: 'Should', could: 'Could', wont: "Won't" }
+
+function ProductSpecOverview({
+  productSpec,
+  onClose,
+}: {
+  productSpec: import('@pm-agent/domain').ProductSpec
+  onClose(): void
+}): React.JSX.Element {
+  const activeRequirements = productSpec.requirements.filter((item) => item.status !== 'removed')
+  const removedRequirements = productSpec.requirements.filter((item) => item.status === 'removed')
+  const reqTitle = (id: string): string => productSpec.requirements.find((item) => item.id === id)?.title ?? id
+  return (
+    <div className="spec-overview-backdrop" role="dialog" aria-label="ProductSpec overview" onClick={onClose}>
+      <div className="spec-overview" onClick={(event) => event.stopPropagation()}>
+        <header className="spec-overview-head">
+          <div>
+            <strong>{productSpec.title}</strong>
+            <span>ProductSpec v{productSpec.version} · {productSpec.status} · {productSpec.idea.productType.toUpperCase()}</span>
+          </div>
+          <button className="icon-button" title="Đóng" onClick={onClose}><X size={18} /></button>
+        </header>
+        <div className="spec-overview-body">
+          <section className="spec-block">
+            <h4>Ý tưởng</h4>
+            <p>{productSpec.idea.summary}</p>
+            <div className="spec-chips">{productSpec.idea.targetUsers.map((user) => <span key={user} className="spec-chip">{user}</span>)}</div>
+          </section>
+          {productSpec.goals.length > 0 && (
+            <section className="spec-block">
+              <h4>Mục tiêu ({productSpec.goals.length})</h4>
+              <ul className="spec-list">{productSpec.goals.map((goal) => <li key={goal.id}>{goal.title}</li>)}</ul>
+            </section>
+          )}
+          <section className="spec-block">
+            <h4>Requirements ({activeRequirements.length})</h4>
+            {activeRequirements.map((req) => (
+              <div className="spec-entity" key={req.id}>
+                <div className="spec-entity-head">
+                  <span className="spec-id">{req.id}</span>
+                  <span className={`spec-badge prio-${req.priority}`}>{PRIORITY_LABEL[req.priority]}</span>
+                  <strong>{req.title}</strong>
+                </div>
+                <p>{req.description}</p>
+                <ul className="spec-ac">{req.acceptanceCriteria.map((ac, index) => <li key={index}>{ac}</li>)}</ul>
+              </div>
+            ))}
+            {removedRequirements.length > 0 && (
+              <div className="spec-removed">Đã loại: {removedRequirements.map((req) => req.title).join(', ')}</div>
+            )}
+          </section>
+          {productSpec.screens.length > 0 && (
+            <section className="spec-block">
+              <h4>Screens ({productSpec.screens.length})</h4>
+              {productSpec.screens.map((screen) => (
+                <div className="spec-entity" key={screen.id}>
+                  <div className="spec-entity-head"><span className="spec-id">{screen.id}</span><strong>{screen.title}</strong></div>
+                  <p>{screen.purpose}</p>
+                  <div className="spec-chips">{screen.requirementIds.map((id) => <span key={id} className="spec-chip link" title={reqTitle(id)}>{id}</span>)}</div>
+                </div>
+              ))}
+            </section>
+          )}
+          {productSpec.stories.length > 0 && (
+            <section className="spec-block">
+              <h4>User stories ({productSpec.stories.length})</h4>
+              {productSpec.stories.map((story) => (
+                <div className="spec-entity" key={story.id}>
+                  <div className="spec-entity-head"><span className="spec-id">{story.id}</span><strong>{story.title}</strong></div>
+                  <div className="spec-chips">{story.requirementIds.map((id) => <span key={id} className="spec-chip link" title={reqTitle(id)}>{id}</span>)}</div>
+                </div>
+              ))}
+            </section>
+          )}
+          {productSpec.artifactMappings.length > 0 && (
+            <section className="spec-block">
+              <h4>Traceability → artifacts</h4>
+              {productSpec.artifactMappings.map((mapping) => (
+                <div className="spec-map" key={mapping.id}>
+                  <span className={`spec-badge map-${mapping.status}`}>{mapping.target} · {mapping.status}</span>
+                  <span className="spec-map-ids">{mapping.entityIds.join(', ')}</span>
+                  {mapping.externalId && <span className="spec-map-ext">{mapping.externalId}</span>}
+                </div>
+              ))}
+            </section>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ProductSpecInspector({
   productSpec,
   selection,
+  onOpen,
 }: {
   productSpec: import('@pm-agent/domain').ProductSpec
   selection?: CanvasSelectionContext
+  onOpen(): void
 }): React.JSX.Element {
   const selected = selection?.entityId
     ? [productSpec.idea, ...productSpec.goals, ...productSpec.findings, ...productSpec.requirements, ...productSpec.screens, ...productSpec.stories, ...productSpec.dependencies, ...productSpec.decisions]
       .find((entity) => entity.id === selection.entityId)
     : undefined
   return (
-    <section className="spec-inspector" aria-label="ProductSpec inspector">
-      <header><strong>ProductSpec v{productSpec.version}</strong><span>{productSpec.status}</span></header>
+    <button className="spec-inspector" aria-label="Mở tổng quan ProductSpec" onClick={onOpen} title="Xem toàn bộ ProductSpec">
+      <header>
+        <strong>ProductSpec v{productSpec.version}</strong>
+        <span className="spec-open-hint">{productSpec.status} · Xem chi tiết <Maximize2 size={11} /></span>
+      </header>
       <div className="spec-metrics">
         <span><b>{productSpec.requirements.filter((item) => item.status !== 'removed').length}</b> Req</span>
         <span><b>{productSpec.screens.length}</b> Screen</span>
         <span><b>{productSpec.stories.length}</b> Story</span>
       </div>
       {selected && <p><strong>{selected.id}</strong><span>{selected.title}</span></p>}
-    </section>
+    </button>
   )
 }
 
