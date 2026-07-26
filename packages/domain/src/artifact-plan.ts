@@ -3,7 +3,11 @@ import { figmaTargetBindingSchema } from './figma-integration'
 import { designSystemComponentBindingSchema } from './design-system'
 import { figmaCreativeBlueprintSchema, prototypeTransitionSchema } from './figma-creative'
 
-export const artifactPlanModeSchema = z.enum(['strict', 'free'])
+// strict     — hard-block if any required ZDS role is missing (guarded compliance).
+// reference  — prefer the configured ZDS ref; fall back to a labeled creative primitive for
+//              anything the ref lacks, and never block the flow.
+// free       — no ref: full creative composition, no binding requirement.
+export const artifactPlanModeSchema = z.enum(['strict', 'reference', 'free'])
 export type ArtifactPlanMode = z.infer<typeof artifactPlanModeSchema>
 
 export const designSlotSchema: z.ZodType<DesignSlot> = z.lazy(() => z.object({

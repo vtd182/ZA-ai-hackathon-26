@@ -191,6 +191,23 @@ describe('semantic Figma artifact planner', () => {
     expect(result.planHash).toMatch(/^[a-f0-9]{64}$/)
   })
 
+  it('reference mode degrades a missing component to a labeled primitive instead of blocking', () => {
+    const thinManifest = { ...syntheticZaloDesignSystem, components: syntheticZaloDesignSystem.components.slice(0, 1) }
+    const plan = createFigmaArtifactPlan(mealOrderingProductSpec, target, thinManifest, metadata, 'reference')
+    const result = preflightFigmaArtifactPlan(plan, thinManifest, target)
+
+    expect(result.issues.filter((issue) => issue.severity === 'error')).toEqual([])
+    expect(result.plan.resolvedSlots.some((slot) => slot.resolution === 'primitive_fallback')).toBe(true)
+  })
+
+  it('strict mode still hard-blocks when the ref lacks a required component', () => {
+    const thinManifest = { ...syntheticZaloDesignSystem, components: syntheticZaloDesignSystem.components.slice(0, 1) }
+    const plan = createFigmaArtifactPlan(mealOrderingProductSpec, target, thinManifest, metadata, 'strict')
+    const result = preflightFigmaArtifactPlan(plan, thinManifest, target)
+
+    expect(result.issues.some((issue) => issue.severity === 'error')).toBe(true)
+  })
+
   it('preflights a creative blueprint without constraining primitive composition', () => {
     const plan = createFigmaArtifactPlan(
       mealOrderingProductSpec,

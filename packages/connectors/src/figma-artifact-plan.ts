@@ -497,7 +497,9 @@ export function preflightFigmaArtifactPlan(
         ? component.binding ?? { kind: 'component_key' as const, key: component.key }
         : null,
       semanticRole: component?.semanticRole ?? null,
-      resolution: component ? 'component' as const : plan.mode === 'free' ? 'primitive_fallback' as const : 'missing' as const,
+      // strict alone treats a missing role as an unresolved gap; reference and free let the
+      // agent creatively fill it with a labeled primitive instead of blocking.
+      resolution: component ? 'component' as const : plan.mode !== 'strict' ? 'primitive_fallback' as const : 'missing' as const,
     }
   }))
 

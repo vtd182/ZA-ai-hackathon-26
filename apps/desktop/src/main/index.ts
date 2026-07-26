@@ -317,21 +317,23 @@ interface FigmaExecutionContext {
   target: FigmaTargetBinding
   manifest: DesignSystemManifest
   connectorMode: 'live' | 'mock'
-  planMode: 'strict' | 'free'
+  planMode: import('@pm-agent/domain').ArtifactPlanMode
 }
 
 function figmaExecutionContext(): FigmaExecutionContext {
   const target = figmaIntegration.getActiveTarget()
   const context = target ? figmaIntegration.getContext(target.targetHash) : null
   if (target && context) {
-    if (context.mode !== 'live') {
-      throw new Error(
-        `Figma strict guard chưa có component binding thật: ${context.fallbackReason ?? 'live Design System capture failed'}. `
-        + 'Mở đúng ZDS page và chọn refresh Design System trước khi prepare.',
-      )
+    // A configured ZDS ref that captured live → reference mode: prefer its components and
+    // icons, creatively fill anything it lacks, and never block the flow.
+    if (context.mode === 'live') {
+      return { target, manifest: context.manifest, connectorMode: 'live', planMode: 'reference' }
     }
-    return { target, manifest: context.manifest, connectorMode: 'live', planMode: 'strict' }
+    // Ref configured but the live capture failed → degrade to free creative on the live
+    // target instead of blocking. The design is still produced (labeled as free).
+    return { target, manifest: context.manifest, connectorMode: 'live', planMode: 'free' }
   }
+  // No ref configured → free creative composition offline against the synthetic palette.
   return {
     target: {
       schemaVersion: 1,
@@ -344,12 +346,26 @@ function figmaExecutionContext(): FigmaExecutionContext {
     },
     manifest: syntheticZaloDesignSystem,
     connectorMode: 'mock',
-    planMode: 'strict',
+    planMode: 'free',
   }
 }
 
+// Honest human label combining where it writes (live/mock) and how it composes (reference
+// ZDS / free creative / strict ZDS).
+function figmaModeLabel(action: PlannedAction | undefined): string {
+  const connector = action?.payload.connectorMode === 'live' ? 'Figma live' : 'Mock Figma'
+  const guard = action?.payload.guardMode
+  const composition = guard === 'reference' ? 'reference ZDS'
+    : guard === 'free' ? 'free creative'
+    : guard === 'strict' ? 'strict ZDS'
+    : ''
+  return composition ? `${connector} · ${composition}` : connector
+}
+
 function assertFigmaRoleCoverage(spec: ProductSpec, context: FigmaExecutionContext): void {
-  if (context.connectorMode !== 'live') return
+  // Only the opt-in strict mode hard-blocks on missing roles. reference/free degrade to a
+  // labeled creative fallback so the flow never breaks when the ref lacks a component.
+  if (context.planMode !== 'strict' || context.connectorMode !== 'live') return
   const missingRoles = missingFigmaRoles(spec, context.manifest)
   if (missingRoles.length === 0) return
   throw new Error(
@@ -1019,7 +1035,7 @@ async function prepareArtifactsForThread(
   const executableActions = await prepareExecutableActions(staged, staged.productSpec)
   lifecycle.savePreview({ ...staged, pendingActions: executableActions })
   const figmaAction = executableActions.find((action) => action.target === 'figma')
-  const mode = figmaAction?.payload.connectorMode === 'live' ? 'Figma live' : 'Mock Figma'
+  const mode = figmaModeLabel(figmaAction)
   const message = `Kickoff package đã preflight trong ${seconds(Date.now() - startedAt)}: ${mode}, PRD Markdown và backlog mock. Hãy kiểm tra immutable target rồi duyệt tạo.`
   const assistantMessage = history.addMessage(threadId, 'assistant', message)
   return { workspace: workspaceFor(threadId), message, assistantMessage }
@@ -1058,7 +1074,7 @@ async function regenerateArtifactsForThread(
   const executableActions = await prepareExecutableActions(staged, staged.productSpec, feedback, revisionLabel)
   lifecycle.savePreview({ ...staged, pendingActions: executableActions })
   const figmaAction = executableActions.find((action) => action.target === 'figma')
-  const mode = figmaAction?.payload.connectorMode === 'live' ? 'Figma live' : 'Mock Figma'
+  const mode = figmaModeLabel(figmaAction)
   const intent = feedback ? `refine theo feedback: “${feedback}”` : 'tạo một bản thiết kế mới'
   const message = `Đã chuẩn bị ${mode} bản mới (${intent}) trong ${seconds(Date.now() - startedAt)} — một artifact riêng, bản Figma cũ vẫn được giữ. Kiểm tra immutable plan rồi duyệt để tạo.`
   const assistantMessage = history.addMessage(threadId, 'assistant', message)
