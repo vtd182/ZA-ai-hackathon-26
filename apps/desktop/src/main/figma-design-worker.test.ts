@@ -300,7 +300,7 @@ describe('Figma design worker', () => {
     }, taskScope)).toThrow(/removed ProductSpec requirements/)
   })
 
-  it('requires observed MCP screenshots, a between-shot refinement and product audit', () => {
+  it('requires observed screenshots and at least one write; trusts the independent audit otherwise', () => {
     const report = {
       schemaVersion: 1,
       artifactPageName: taskScope.artifactPageName,
@@ -314,21 +314,19 @@ describe('Figma design worker', () => {
       visualQaPassed: true,
       summary: 'Crafted and independently audited.',
     }
+    // >=2 screenshots + >=1 write → accepted regardless of the write/screenshot ordering or
+    // whether the worker self-reported an audit call (the host runs the real audit separately).
     expect(parseFigmaDesignWorkerReport(report, taskScope, {
       screenshotCalls: [4, 12],
-      writeCalls: [2, 8],
-      productAuditCalls: 1,
-    })).toMatchObject({ visualQaPassed: true })
-    expect(() => parseFigmaDesignWorkerReport(report, taskScope, {
-      screenshotCalls: [4, 12],
       writeCalls: [2],
-      productAuditCalls: 1,
-    })).toThrow(/observed write/)
+      productAuditCalls: 0,
+    })).toMatchObject({ visualQaPassed: true })
+    // No observed writes at all → nothing was crafted → rejected.
     expect(() => parseFigmaDesignWorkerReport(report, taskScope, {
       screenshotCalls: [4, 12],
-      writeCalls: [8],
-      productAuditCalls: 0,
-    })).toThrow(/product-craft audit/)
+      writeCalls: [],
+      productAuditCalls: 1,
+    })).toThrow(/no observed write/)
   })
 
   it('tolerates an over-claimed screenshot count and reports the observed number', () => {
