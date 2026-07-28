@@ -875,7 +875,7 @@ const artifactPageName = (metadata: JsonRecord): string => {
     return metadata.artifactPageName.trim().slice(0, 80);
   }
   const spec = String(metadata.specId ?? "Product").trim() || "Product";
-  return `PM · ${spec.slice(0, 48)} · v${String(metadata.specVersion ?? "1")}`;
+  return `ZSpector · ${spec.slice(0, 48)} · v${String(metadata.specVersion ?? "1")}`;
 };
 
 const artifactPageStem = (name: string): string => name
@@ -898,7 +898,8 @@ const managedArtifactPageAtCapacity = async (
     && metadata.pageStrategy !== "create_or_reuse_managed"
   ) return null;
   const expectedStem = artifactPageStem(artifactPageName(metadata));
-  if (!expectedStem.startsWith("pm · ")) return null;
+  // Accept the current ZSpector tag and the legacy PM tag (backward-compat).
+  if (!expectedStem.startsWith("zspector · ") && !expectedStem.startsWith("pm · ")) return null;
   const candidates: PageNode[] = [];
   for (const page of figma.root.children) {
     if (page.id === sourcePageId || artifactPageStem(page.name) !== expectedStem) continue;
@@ -1043,7 +1044,7 @@ const applyArtifact = async (params: JsonRecord, requestId: string): Promise<Jso
   const previousOutputPageName = outputPage.name;
   const expectedOutputPageName = artifactPageName(metadata);
   const root = figma.createSection();
-  root.name = `PM Lifecycle · ${String(metadata.specId ?? "Artifact")} · v${String(metadata.specVersion ?? "")}`;
+  root.name = `ZSpector · ${String(metadata.specId ?? "Artifact")} · v${String(metadata.specVersion ?? "")}`;
   root.x = reusedAtPageCapacity ? nextArtifactRootX(outputPage) : 0;
   root.y = 0;
   outputPage.appendChild(root);

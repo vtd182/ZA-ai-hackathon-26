@@ -1,7 +1,9 @@
 import type { DesignSystemManifest, ProductSpec } from '@pm-agent/domain'
 
 export function isManagedFigmaArtifactPage(pageName: string): boolean {
-  return /^PM(?:\s+Lifecycle)?\s*[·•]/i.test(pageName.trim())
+  // ZSpector is the current tag; PM / PM Lifecycle stay recognised for artifacts created before
+  // the rebrand so old output Pages are still rejected as ZDS sources.
+  return /^(ZSpector|PM(?:\s+Lifecycle)?)\s*[·•]/i.test(pageName.trim())
 }
 
 export function requiredFigmaRoles(spec: ProductSpec): string[] {

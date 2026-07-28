@@ -2077,7 +2077,7 @@ var __async = (__this, __arguments, generator) => {
       return metadata.artifactPageName.trim().slice(0, 80);
     }
     const spec = String((_a = metadata.specId) != null ? _a : "Product").trim() || "Product";
-    return `PM · ${spec.slice(0, 48)} · v${String((_b = metadata.specVersion) != null ? _b : "1")}`;
+    return `ZSpector · ${spec.slice(0, 48)} · v${String((_b = metadata.specVersion) != null ? _b : "1")}`;
   };
   const artifactPageStem = (name) => name.replace(/\s*·\s*v[^·]+\s*$/i, "").trim().toLocaleLowerCase();
   const isPageLimitError = (error) => {
@@ -2087,7 +2087,7 @@ var __async = (__this, __arguments, generator) => {
   const managedArtifactPageAtCapacity = (metadata, sourcePageId) => __async(null, null, function* () {
     if (metadata.pageStrategy !== "create_or_recover_incomplete" && metadata.pageStrategy !== "create_or_reuse_managed") return null;
     const expectedStem = artifactPageStem(artifactPageName(metadata));
-    if (!expectedStem.startsWith("pm · ")) return null;
+    if (!expectedStem.startsWith("zspector · ") && !expectedStem.startsWith("pm · ")) return null;
     const candidates = [];
     for (const page of figma.root.children) {
       if (page.id === sourcePageId || artifactPageStem(page.name) !== expectedStem) continue;
@@ -2213,7 +2213,7 @@ var __async = (__this, __arguments, generator) => {
     const previousOutputPageName = outputPage.name;
     const expectedOutputPageName = artifactPageName(metadata);
     const root = figma.createSection();
-    root.name = `PM Lifecycle · ${String((_c = metadata.specId) != null ? _c : "Artifact")} · v${String((_d = metadata.specVersion) != null ? _d : "")}`;
+    root.name = `ZSpector · ${String((_c = metadata.specId) != null ? _c : "Artifact")} · v${String((_d = metadata.specVersion) != null ? _d : "")}`;
     root.x = reusedAtPageCapacity ? nextArtifactRootX(outputPage) : 0;
     root.y = 0;
     outputPage.appendChild(root);

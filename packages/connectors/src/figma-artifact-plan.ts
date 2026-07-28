@@ -387,7 +387,7 @@ export function createFigmaArtifactPlan(
       ...metadata,
       specId: spec.id,
       specVersion: spec.version,
-      artifactPageName: `PM · ${spec.title.slice(0, 54)} · v${spec.version}`,
+      artifactPageName: `ZSpector · ${spec.title.slice(0, 54)} · v${spec.version}`,
     },
     screens: recipesFor(spec, creativeBlueprint),
   })
