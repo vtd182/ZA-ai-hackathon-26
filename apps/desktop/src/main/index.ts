@@ -362,7 +362,7 @@ function mockFigmaExecutionContext(): FigmaExecutionContext {
       sessionId: 'mock:figma:offline',
       fileName: 'Mock Figma sandbox',
       pageId: '0:1',
-      pageName: 'PM Lifecycle Demo',
+      pageName: 'ZSpector Demo',
       allowedAt: mealOrderingProductSpec.createdAt,
     },
     manifest: syntheticZaloDesignSystem,

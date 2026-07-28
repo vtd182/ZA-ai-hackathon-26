@@ -73,7 +73,7 @@ body,
 
 .fatal-state span {
   max-width: 680px;
-  color: #9d3037;
+  color: var(--danger);
   font-family: var(--font-mono);
   font-size: 12px;
 }
@@ -81,10 +81,10 @@ body,
 .fatal-state button {
   height: 34px;
   padding: 0 14px;
-  border: 1px solid #0868df;
+  border: 1px solid var(--brand);
   border-radius: 6px;
   color: #ffffff;
-  background: #0868df;
+  background: var(--brand);
   cursor: pointer;
 }
 
@@ -135,7 +135,7 @@ a:focus-visible,
   flex-direction: column;
   overflow: hidden;
   background: #ffffff;
-  border-right: 1px solid #dce3e5;
+  border-right: 1px solid var(--line);
   opacity: 1;
   transition: opacity 120ms ease;
 }
@@ -376,7 +376,7 @@ a:focus-visible,
 }
 
 .thread-archive:hover {
-  color: #b13d43;
+  color: var(--danger);
   background: #fff0f1;
 }
 
@@ -395,7 +395,7 @@ a:focus-visible,
   height: 72px;
   flex: 0 0 72px;
   padding: 20px 14px 8px 18px;
-  border-bottom: 1px solid #dce3e5;
+  border-bottom: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.96);
   -webkit-app-region: drag;
 }
@@ -436,7 +436,7 @@ a:focus-visible,
 }
 
 .status-dot.ready {
-  background: #15926f;
+  background: var(--ok);
   box-shadow: 0 0 0 3px #dff5ed;
 }
 
@@ -487,7 +487,7 @@ a:focus-visible,
 }
 
 .integration-button.connected i {
-  background: #15926f;
+  background: var(--ok);
   box-shadow: 0 0 0 3px var(--ok-soft);
 }
 
@@ -586,7 +586,7 @@ a:focus-visible,
 }
 
 .scene-health.clean {
-  color: #13775e;
+  color: var(--ok);
 }
 
 .scene-health.warning {
@@ -594,7 +594,7 @@ a:focus-visible,
 }
 
 .scene-health.error {
-  color: #b23a42;
+  color: var(--danger);
 }
 
 .scene-selection {
@@ -618,7 +618,7 @@ a:focus-visible,
   width: 20px;
   height: 1px;
   margin: 3px 0;
-  background: #dce3e5;
+  background: var(--line);
 }
 
 .scene-icon-button {
@@ -637,7 +637,7 @@ a:focus-visible,
 
 .scene-icon-button:hover {
   background: #edf4fb;
-  color: #0868df;
+  color: var(--brand);
 }
 
 .scene-icon-button:disabled {
@@ -700,7 +700,7 @@ a:focus-visible,
 
 .canvas-activity.verified {
   border-color: #acd5c8;
-  color: #14785d;
+  color: var(--ok);
   background: rgb(244 252 248 / 96%);
 }
 
@@ -806,14 +806,14 @@ a:focus-visible,
 .tl-container {
   --color-background: #f4f7f8;
   --color-low: #eaeff0;
-  --color-primary: #0868df;
+  --color-primary: var(--brand);
 }
 
 .chat-panel {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-left: 1px solid #dce3e5;
+  border-left: 1px solid var(--line);
   background: #ffffff;
 }
 
@@ -828,7 +828,7 @@ a:focus-visible,
 }
 
 .verified-icon {
-  color: #15926f;
+  color: var(--ok);
 }
 
 .chat-export-button {
@@ -1107,7 +1107,7 @@ a:focus-visible,
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
-.spec-badge.prio-must { color: #b23a42; background: var(--danger-soft); }
+.spec-badge.prio-must { color: var(--danger); background: var(--danger-soft); }
 .spec-badge.prio-should { color: #075fbd; background: var(--brand-soft); }
 .spec-badge.prio-could { color: var(--ink-3); background: #eef2f4; }
 .spec-badge.prio-wont { color: var(--ink-4); background: #f2f4f5; }
@@ -1179,7 +1179,7 @@ a:focus-visible,
 
 .spec-inspector p strong {
   flex: 0 0 auto;
-  color: #0868df;
+  color: var(--brand);
 }
 
 .spec-inspector p span {
@@ -1390,7 +1390,7 @@ a:focus-visible,
   height: 25px;
   border-radius: 50%;
   color: #ffffff;
-  background: #be3d43;
+  background: var(--danger);
   font-size: 11px;
   font-weight: 700;
 }
@@ -1422,7 +1422,7 @@ a:focus-visible,
 
 .impact-row small {
   flex: 0 0 auto;
-  color: #a33f43;
+  color: var(--danger);
   font-size: 9.5px;
 }
 
@@ -1452,7 +1452,7 @@ a:focus-visible,
   border: 1px solid transparent;
   border-radius: 9px;
   color: #ffffff;
-  background: linear-gradient(145deg, #1a9070 0%, #14785d 100%);
+  background: linear-gradient(145deg, #1a9070 0%, var(--ok) 100%);
   box-shadow: 0 4px 14px rgb(20 120 93 / 30%), inset 0 1px 0 rgb(255 255 255 / 20%);
   font-size: 11px;
   font-weight: 720;
@@ -1583,7 +1583,7 @@ a:focus-visible,
 }
 
 .execution-panel.partial_failure > header {
-  color: #a33f43;
+  color: var(--danger);
   background: #fff3f3;
 }
 
@@ -1664,12 +1664,12 @@ a:focus-visible,
 }
 
 .execution-state.verified {
-  background: #15926f;
+  background: var(--ok);
 }
 
 .execution-state.failed,
 .execution-state.verification_failed {
-  background: #c23f46;
+  background: var(--danger);
 }
 
 .execution-state.executing,
@@ -1860,7 +1860,7 @@ a:focus-visible,
 }
 
 .decision-options span {
-  color: #14785d;
+  color: var(--ok);
   font-size: 8.5px;
   font-weight: 800;
   text-transform: uppercase;
@@ -1894,7 +1894,7 @@ a:focus-visible,
   justify-content: space-between;
   padding: 8px 10px;
   border-bottom: 1px solid #e5eaec;
-  color: #14785d;
+  color: var(--ok);
   background: #f3faf7;
 }
 
@@ -1966,7 +1966,7 @@ a:focus-visible,
 
 .delivery-actions .delivery-package-action {
   border-color: #78af9b;
-  color: #14785d;
+  color: var(--ok);
   background: #f1faf7;
 }
 
@@ -2115,7 +2115,7 @@ a:focus-visible,
   padding: 4px 6px 4px 10px;
   border: 1px solid #f1b5b9;
   border-radius: 6px;
-  color: #9d3037;
+  color: var(--danger);
   background: #fff3f3;
   box-shadow: 0 5px 18px rgba(54, 68, 74, 0.12);
   font-size: 12px;
@@ -2206,7 +2206,7 @@ a:focus-visible,
 }
 
 .ds-context-status.live {
-  border-left-color: #15926f;
+  border-left-color: var(--ok);
   background: #edf8f4;
 }
 
@@ -2239,7 +2239,7 @@ a:focus-visible,
   align-items: center;
   gap: 6px;
   margin-top: 10px;
-  color: #a53b41;
+  color: var(--danger);
   font-size: 10.5px;
 }
 
@@ -2298,14 +2298,14 @@ a:focus-visible,
 }
 
 .setup-step.complete .step-index {
-  border-color: #15926f;
+  border-color: var(--ok);
   color: #ffffff;
-  background: #15926f;
+  background: var(--ok);
 }
 
 .setup-step.current .step-index {
-  border-color: #0868df;
-  color: #0868df;
+  border-color: var(--brand);
+  color: var(--brand);
   box-shadow: 0 0 0 3px #e2efff;
 }
 
@@ -2344,7 +2344,7 @@ a:focus-visible,
 .manifest-path {
   margin-top: 14px;
   padding: 9px 10px;
-  border-left: 3px solid #0868df;
+  border-left: 3px solid var(--brand);
   background: #f2f6f8;
 }
 
@@ -2380,7 +2380,7 @@ a:focus-visible,
 }
 
 .figma-ready-label.ready {
-  color: #157458;
+  color: var(--ok);
 }
 
 .figma-setup-dialog .secondary-button {
@@ -2450,7 +2450,7 @@ a:focus-visible,
 }
 
 .probe-result.ready {
-  color: #157458;
+  color: var(--ok);
   background: #e7f6f0;
 }
 
@@ -2467,9 +2467,15 @@ a:focus-visible,
 }
 
 .primary-button {
-  border: 1px solid #0868df;
+  border: 1px solid transparent;
   color: #ffffff;
-  background: #0868df;
+  background: var(--brand-gradient);
+  box-shadow: 0 4px 14px rgb(8 104 223 / 24%), inset 0 1px 0 rgb(255 255 255 / 20%);
+}
+
+.primary-button:hover:not(:disabled) {
+  box-shadow: 0 6px 18px rgb(8 104 223 / 34%), inset 0 1px 0 rgb(255 255 255 / 20%);
+  transform: translateY(-1px);
 }
 
 .secondary-button {
