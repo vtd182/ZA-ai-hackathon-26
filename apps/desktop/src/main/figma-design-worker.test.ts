@@ -330,4 +330,33 @@ describe('Figma design worker', () => {
       productAuditCalls: 0,
     })).toThrow(/product-craft audit/)
   })
+
+  it('tolerates an over-claimed screenshot count and reports the observed number', () => {
+    const report = {
+      schemaVersion: 1,
+      artifactPageName: taskScope.artifactPageName,
+      rootNodeId: taskScope.rootNodeId,
+      screenCount: 4,
+      zdsInstanceCount: 8,
+      prototypeLinkCount: 3,
+      screenshotsReviewed: 6, // worker over-claims
+      refinementPasses: 1,
+      removedRequirementMentions: 0,
+      visualQaPassed: true,
+      summary: 'Long genuine craft pass.',
+    }
+    // 5 observed shots with a write between → must pass (not discarded on the 6≠5 mismatch),
+    // and the returned count reflects the observed truth (5), not the claim (6).
+    expect(parseFigmaDesignWorkerReport(report, taskScope, {
+      screenshotCalls: [2, 6, 10, 14, 18],
+      writeCalls: [4, 8, 12],
+      productAuditCalls: 1,
+    })).toMatchObject({ visualQaPassed: true, screenshotsReviewed: 5 })
+    // Fewer than two real screenshots is still rejected.
+    expect(() => parseFigmaDesignWorkerReport(report, taskScope, {
+      screenshotCalls: [4],
+      writeCalls: [8],
+      productAuditCalls: 1,
+    })).toThrow(/initial and a final/)
+  })
 })

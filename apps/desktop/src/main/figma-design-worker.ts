@@ -171,12 +171,18 @@ export function parseFigmaDesignWorkerReport(
   if (report.removedRequirementMentions !== 0) {
     throw new Error('Design worker found removed ProductSpec requirements in the final artifact')
   }
-  const screenshotsReviewed = number('screenshotsReviewed', 2)
+  const claimedScreenshots = number('screenshotsReviewed', 2)
   const refinementPasses = number('refinementPasses', 1)
+  // The MCP-observed count is authoritative — trust it over the worker's self-report. The real
+  // integrity bar is: a genuine initial + final capture (>=2), a write between them (refinement
+  // happened), and an independent product audit. Do NOT discard a long, real craft pass over an
+  // off-by-one over-claim (e.g. the worker counted a save_screenshots as an extra shot).
+  let screenshotsReviewed = claimedScreenshots
   if (observed) {
-    if (observed.screenshotCalls.length < screenshotsReviewed) {
-      throw new Error(`Design worker claimed ${screenshotsReviewed} screenshots but MCP observed ${observed.screenshotCalls.length}`)
+    if (observed.screenshotCalls.length < 2) {
+      throw new Error(`Design worker produced only ${observed.screenshotCalls.length} observed screenshot(s); need an initial and a final capture.`)
     }
+    screenshotsReviewed = observed.screenshotCalls.length
     const firstScreenshot = observed.screenshotCalls[0]
     const finalScreenshot = observed.screenshotCalls.at(-1)
     const refinedBetweenScreenshots = firstScreenshot !== undefined
@@ -265,7 +271,7 @@ This must be a real craft loop, not a fast tool-success pass:
 - capture an initial screenshot;
 - establish an original art direction and make substantial product-specific improvements;
 - avoid repeated card stacks, generic rectangle layouts and one-template-per-screen composition;
-- connect the real CTA controls;
+- wire the interactive prototype: for every prototypeEdge in the brief, call set_reactions on the real CTA instance in fromScreenId to NAVIGATE to the destination screen frame (ON_CLICK, with a SMART_ANIMATE or PUSH transition where it reads naturally). Connect the actual visible CTA node, never the whole frame or an invisible overlay. The final read-back must expose ${task.plan.source.screens.flatMap((screen) => screen.prototypeEdges).length} real NODE-destination reactions;
 - capture screenshots, critique visible defects and perform at least one refinement;
 - capture a final screenshot, scan for removed-requirement content and read back the Page;
 - call audit_product_craft on root ${task.rootNodeId} with ${task.plan.source.screens.length} expected screens and ${task.plan.source.screens.flatMap((screen) => screen.prototypeEdges).length} expected prototype links; do not report success while it has error issues.
