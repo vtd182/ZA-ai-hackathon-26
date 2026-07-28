@@ -142,7 +142,19 @@ export interface CanvasBoundsContext {
 }
 
 export interface CanvasLintIssue {
-  code: 'invalid_bounds' | 'node_overlap' | 'dangling_edge' | 'disconnected_node'
+  code:
+    | 'invalid_bounds'
+    | 'node_overlap'
+    | 'dangling_edge'
+    | 'disconnected_node'
+    // Logical flow-quality issues (warnings): the app self-critiques the diagram's completeness,
+    // catching the gaps a human/AI reviewer would flag — missing decision branches, dead-ends,
+    // unlabeled branches, loops with no exit, and a flow with no terminal state.
+    | 'decision_missing_branch'
+    | 'unlabeled_branch'
+    | 'flow_dead_end'
+    | 'unbounded_loop'
+    | 'no_exit_point'
   severity: 'warning' | 'error'
   message: string
   shapeIds: string[]

@@ -157,3 +157,58 @@ describe('scene-aware canvas layout', () => {
     expect(issues.map((issue) => issue.code)).toEqual(expect.arrayContaining(['node_overlap', 'dangling_edge']))
   })
 })
+
+describe('logical flow lint', () => {
+  const node = (id: string, kind: 'process' | 'decision' | 'screen' | 'note', label: string, x: number) => ({
+    id: `shape:${id}`, semanticId: id, nodeKind: kind, type: 'geo' as const, label, x, y: 0, width: 220, height: 110,
+  })
+  const edge = (fromId: string, toId: string, label = '') => ({ id: `e-${fromId}-${toId}`, shapeId: `s-${fromId}-${toId}`, fromId, toId, label })
+
+  it('flags a decision with fewer than two branches and an unlabeled branch', () => {
+    const codes = lintCanvasDocument({
+      ...emptyContext,
+      shapes: [node('start', 'process', 'Bắt đầu', 0), node('dec', 'decision', 'Hợp lệ?', 400), node('end', 'screen', 'Hoàn tất', 800)],
+      bindings: [edge('start', 'dec', 'đi'), edge('dec', 'end')],
+    }).map((issue) => issue.code)
+    expect(codes).toContain('decision_missing_branch')
+    expect(codes).toContain('unlabeled_branch')
+  })
+
+  it('flags a non-terminal dead-end', () => {
+    const codes = lintCanvasDocument({
+      ...emptyContext,
+      shapes: [node('start', 'process', 'Gửi OTP', 0), node('block', 'process', 'Chặn gửi OTP tạm thời', 400)],
+      bindings: [edge('start', 'block', 'quá nhiều lần')],
+    }).map((issue) => issue.code)
+    expect(codes).toContain('flow_dead_end')
+  })
+
+  it('flags a loop with no exit', () => {
+    const codes = lintCanvasDocument({
+      ...emptyContext,
+      shapes: [node('otp', 'process', 'Nhập OTP', 0), node('err', 'process', 'Lỗi OTP', 400)],
+      bindings: [edge('otp', 'err', 'sai'), edge('err', 'otp', 'nhập lại')],
+    }).map((issue) => issue.code)
+    expect(codes).toContain('unbounded_loop')
+  })
+
+  it('stays silent on a complete flow: two labeled branches, a bounded loop with exit, a terminal', () => {
+    const codes = lintCanvasDocument({
+      ...emptyContext,
+      shapes: [
+        node('start', 'process', 'Bắt đầu', 0),
+        node('dec', 'decision', 'OTP hợp lệ?', 400),
+        node('retry', 'process', 'Nhập lại', 400),
+        node('home', 'screen', 'Vào Zalo Home', 800),
+      ].map((shape, index) => ({ ...shape, y: index * 200 })),
+      bindings: [
+        edge('start', 'dec', 'gửi'),
+        edge('dec', 'home', 'Hợp lệ'),
+        edge('dec', 'retry', 'Sai'),
+        edge('retry', 'dec', 'thử lại'),
+      ],
+    }).filter((issue) => issue.severity === 'warning'
+      && ['decision_missing_branch', 'unlabeled_branch', 'flow_dead_end', 'unbounded_loop', 'no_exit_point'].includes(issue.code))
+    expect(codes).toEqual([])
+  })
+})

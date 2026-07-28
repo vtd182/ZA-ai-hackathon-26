@@ -8,6 +8,10 @@ description: Inspect PM Lifecycle Agent threads and draw semantic workflows or p
 
 Use this skill when a developer or product owner asks Codex/Claude to inspect or draw on the PM Lifecycle Agent canvas.
 
+**Before drawing any workflow/flow, read `references/flow-craft.md`.** It is the shared quality
+bar (completeness + legibility) enforced by both the app and the linter: every decision needs
+≥2 labeled branches, no dead-ends, loops need an exit + limit, and the flow needs a terminal.
+
 ## Bridge
 
 The desktop app writes an ephemeral descriptor to `~/.pm-lifecycle-agent/canvas-bridge.json`. It contains a per-launch loopback port and bearer token and is removed on clean quit. If that file is absent, the app is not running — start it before drawing.
@@ -111,9 +115,12 @@ data.forEach((v, i) => {
 })
 ```
 
-The response is an apply/read-back receipt with visual lint evidence. Treat HTTP `202` as
-queued, not verified. Before reporting completion, inspect again and confirm there are no
-overlap or dangling-edge errors.
+The response is an apply/read-back receipt with lint evidence. Treat HTTP `202` as queued, not
+verified. Before reporting completion, inspect again and confirm there are no `node_overlap` or
+`dangling_edge` errors **and no logical-flow warnings** — `decision_missing_branch`,
+`unlabeled_branch`, `flow_dead_end`, `unbounded_loop`, `no_exit_point`. Treat every logical
+warning as work to do (add the missing branch/label/exit and redraw), not a caveat. See
+`references/flow-craft.md`.
 
 ## Boundaries
 

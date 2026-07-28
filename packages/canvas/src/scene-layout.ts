@@ -1,6 +1,7 @@
 import dagre from '@dagrejs/dagre'
 import {
   canvasProgramSchema,
+  type CanvasBindingContext,
   type CanvasDocumentContext,
   type CanvasLintIssue,
   type CanvasNodeKind,
@@ -284,6 +285,98 @@ export function layoutCanvasProgram(
   })
 }
 
+// A node whose label reads as a terminal/exit state is allowed to have no outgoing edge.
+const TERMINAL_LABEL = /ho[àa]n\s*t[aấ]t|th[àa]nh\s*c[ôo]ng|k[eế]t\s*th[uú]c|trang\s*ch[uủ]|v[àa]o\s.*home|home|done|success|complete|finish|exit|tho[áa]t|h[uủ]y\b|cancel/i
+
+// Logical flow-quality lint: treat the semantic nodes + bindings as a directed graph and flag
+// the completeness gaps a reviewer would raise — decisions missing a branch, unlabeled branches,
+// dead-ends, loops with no exit, and a flow with no terminal state. All warnings (never block).
+function lintFlowLogic(nodes: CanvasShapeContext[], bindings: CanvasBindingContext[]): CanvasLintIssue[] {
+  const issues: CanvasLintIssue[] = []
+  const flowNodes = nodes.filter((node) => node.nodeKind !== 'note')
+  if (flowNodes.length < 2) return issues
+
+  const byId = new Map(nodes.map((node) => [node.semanticId!, node]))
+  const out = new Map<string, Array<{ toId: string; label: string }>>()
+  const inDegree = new Map<string, number>()
+  for (const node of nodes) {
+    out.set(node.semanticId!, [])
+    inDegree.set(node.semanticId!, 0)
+  }
+  for (const binding of bindings) {
+    if (!byId.has(binding.fromId) || !byId.has(binding.toId)) continue
+    out.get(binding.fromId)!.push({ toId: binding.toId, label: (binding.label ?? '').trim() })
+    inDegree.set(binding.toId, (inDegree.get(binding.toId) ?? 0) + 1)
+  }
+  const isTerminal = (node: CanvasShapeContext): boolean => TERMINAL_LABEL.test(node.label ?? '')
+
+  for (const node of flowNodes) {
+    const outs = out.get(node.semanticId!) ?? []
+    if (node.nodeKind === 'decision') {
+      if (outs.length < 2) {
+        issues.push({ code: 'decision_missing_branch', severity: 'warning', shapeIds: [node.id], message: `Điểm quyết định "${node.label || node.semanticId}" chỉ có ${outs.length} nhánh — cần tối thiểu 2 nhánh (ví dụ Có/Không).` })
+      }
+      if (outs.some((edge) => !edge.label)) {
+        issues.push({ code: 'unlabeled_branch', severity: 'warning', shapeIds: [node.id], message: `Có nhánh rời "${node.label || node.semanticId}" chưa gán nhãn điều kiện.` })
+      }
+    }
+    if (outs.length === 0 && (inDegree.get(node.semanticId!) ?? 0) > 0 && !isTerminal(node)) {
+      issues.push({ code: 'flow_dead_end', severity: 'warning', shapeIds: [node.id], message: `"${node.label || node.semanticId}" là ngõ cụt — không có bước tiếp theo và không phải điểm kết thúc.` })
+    }
+  }
+
+  if (flowNodes.length >= 3 && flowNodes.every((node) => (out.get(node.semanticId!) ?? []).length > 0) && !flowNodes.some(isTerminal)) {
+    issues.push({ code: 'no_exit_point', severity: 'warning', shapeIds: flowNodes.slice(0, 1).map((node) => node.id), message: 'Flow chưa có điểm kết thúc/thoát rõ ràng — mọi node đều dẫn tiếp, không có terminal state.' })
+  }
+
+  // Tarjan SCC to find loops; a loop with no edge leaving it is unbounded (no exit).
+  const index = new Map<string, number>()
+  const low = new Map<string, number>()
+  const onStack = new Set<string>()
+  const stack: string[] = []
+  const sccs: string[][] = []
+  let counter = 0
+  const strongconnect = (v: string): void => {
+    index.set(v, counter)
+    low.set(v, counter)
+    counter += 1
+    stack.push(v)
+    onStack.add(v)
+    for (const edge of out.get(v) ?? []) {
+      const w = edge.toId
+      if (!index.has(w)) {
+        strongconnect(w)
+        low.set(v, Math.min(low.get(v)!, low.get(w)!))
+      } else if (onStack.has(w)) {
+        low.set(v, Math.min(low.get(v)!, index.get(w)!))
+      }
+    }
+    if (low.get(v) === index.get(v)) {
+      const component: string[] = []
+      let w = ''
+      do {
+        w = stack.pop()!
+        onStack.delete(w)
+        component.push(w)
+      } while (w !== v)
+      sccs.push(component)
+    }
+  }
+  for (const node of nodes) {
+    if (!index.has(node.semanticId!)) strongconnect(node.semanticId!)
+  }
+  for (const component of sccs) {
+    const inComponent = new Set(component)
+    const selfLoop = component.length === 1 && (out.get(component[0]!) ?? []).some((edge) => edge.toId === component[0])
+    if (component.length < 2 && !selfLoop) continue
+    const hasExit = component.some((v) => (out.get(v) ?? []).some((edge) => !inComponent.has(edge.toId)))
+    if (hasExit) continue
+    const labels = component.map((id) => byId.get(id)?.label || id).slice(0, 4).join(' ↔ ')
+    issues.push({ code: 'unbounded_loop', severity: 'warning', shapeIds: component.map((id) => byId.get(id)?.id).filter((id): id is string => Boolean(id)), message: `Vòng lặp (${labels}) không có lối thoát — cần một nhánh rời khỏi vòng (giới hạn số lần thử hoặc hủy).` })
+  }
+  return issues
+}
+
 export function lintCanvasDocument(
   context: CanvasDocumentContext,
   affectedSemanticIds: string[] = [],
@@ -337,5 +430,8 @@ export function lintCanvasDocument(
       }
     }
   }
+  // Logical completeness runs on the whole graph (a dead-end/loop depends on global edges), so it
+  // is not gated by the incremental `affected` filter used for visual overlap.
+  issues.push(...lintFlowLogic(nodes, context.bindings ?? []))
   return issues
 }

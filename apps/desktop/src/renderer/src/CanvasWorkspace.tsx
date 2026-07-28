@@ -288,6 +288,9 @@ export function CanvasWorkspace({
 
   const lintErrors = sceneContext?.lints?.filter((issue) => issue.severity === 'error').length ?? 0
   const lintWarnings = sceneContext?.lints?.filter((issue) => issue.severity === 'warning').length ?? 0
+  // Hover detail: list the actual issues (incl. logical flow gaps) so the health badge doubles
+  // as an at-a-glance self-critique of the diagram.
+  const lintDetail = (sceneContext?.lints ?? []).map((issue) => `• ${issue.message}`).join('\n')
   const selectedCount = sceneContext?.selectedShapeIds.length ?? 0
   const semanticCount = sceneContext?.shapes.filter((shape) => shape.semanticId && shape.nodeKind).length ?? 0
   const activity = activityStage === 'idle' ? null : activityCopy[activityStage]
@@ -319,7 +322,7 @@ export function CanvasWorkspace({
       <div className="canvas-scene-bar" aria-label="Canvas scene controls">
         <span
           className={`scene-health ${lintErrors > 0 ? 'error' : lintWarnings > 0 ? 'warning' : 'clean'}`}
-          title={lintErrors > 0 ? 'Canvas có lỗi bố cục' : lintWarnings > 0 ? 'Canvas có cảnh báo' : 'Canvas không có lỗi bố cục'}
+          title={lintDetail || 'Canvas không có lỗi bố cục hay thiếu sót flow'}
         >
           {lintErrors > 0 ? <TriangleAlert size={15} /> : <CheckCircle2 size={15} />}
           <span>{lintErrors > 0 ? `${lintErrors} lỗi` : lintWarnings > 0 ? `${lintWarnings} lưu ý` : 'Scene sạch'}</span>

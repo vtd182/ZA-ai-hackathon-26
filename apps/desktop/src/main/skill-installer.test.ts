@@ -14,9 +14,10 @@ function tempRoot(prefix: string): string {
 
 function writeCanvasSkillSource(repositoryRoot: string, skillMarkdown = '---\nname: pm-lifecycle-canvas\n---\n<!-- installed-by:pm-lifecycle-agent -->\n\n# Canvas skill\nRun `sh "$HOME/.claude/skills/pm-lifecycle-canvas/pm-canvas.sh" GET /api/threads`.'): void {
   const dir = join(repositoryRoot, 'skills', CANVAS_SKILL_ID)
-  mkdirSync(dir, { recursive: true })
+  mkdirSync(join(dir, 'references'), { recursive: true })
   writeFileSync(join(dir, 'SKILL.md'), skillMarkdown)
   writeFileSync(join(dir, 'pm-canvas.sh'), '#!/usr/bin/env bash\necho bridge\n')
+  writeFileSync(join(dir, 'references', 'flow-craft.md'), '# Flow craft\nEvery decision needs >=2 labeled branches; no dead-ends.')
 }
 
 afterEach(() => {

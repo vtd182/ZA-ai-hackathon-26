@@ -135,6 +135,17 @@ function deliveryStatusMessage(productSpec: ProductSpec, selectedOption?: string
   return `${prefix}Mình đã tự tổng hợp ProductSpec v${productSpec.version} từ chính cuộc hội thoại: ${requirements} requirement, ${productSpec.screens.length} screen, ${productSpec.stories.length} story.\n\nĐề xuất của mình cho bước tiếp: (1) vẽ user flow ngay để bạn review — gõ “vẽ user flow” hoặc bấm **User flow**; (2) sau đó mình chuẩn bị kickoff package (Figma + PRD.md + backlog mock) và chờ bạn duyệt. Bạn muốn bắt đầu từ đâu?`
 }
 
+// Automatic flow self-critique: surface the logical completeness warnings the linter found so
+// the app flags the same gaps a reviewer would (dead-ends, missing branches, loops with no exit).
+function flowCritiqueSuffix(receipt: CanvasExecutionReceipt): string {
+  const flowCodes = new Set(['decision_missing_branch', 'unlabeled_branch', 'flow_dead_end', 'unbounded_loop', 'no_exit_point'])
+  const warnings = (receipt.lintIssues ?? []).filter((issue) => flowCodes.has(issue.code))
+  if (warnings.length === 0) return ''
+  const lines = warnings.slice(0, 6).map((issue) => `• ${issue.message}`)
+  const extra = warnings.length > 6 ? `\n• … và ${warnings.length - 6} điểm khác` : ''
+  return `\n\n⚠️ Rà soát flow tự động (${warnings.length}): flow còn điểm chưa hoàn chỉnh —\n${lines.join('\n')}${extra}\nNói mình biết để bổ sung nhánh/lối thoát cho đủ.`
+}
+
 function canvasReceiptMessage(program: CanvasProgram, receipt: CanvasExecutionReceipt, kind: 'draw' | 'edit'): string {
   const nodeOperations = program.operations.filter(
     (operation): operation is Extract<CanvasProgram['operations'][number], { op: 'create_node' }> =>
@@ -144,8 +155,9 @@ function canvasReceiptMessage(program: CanvasProgram, receipt: CanvasExecutionRe
   const connections = program.operations.filter((operation) => operation.op === 'connect').length
   const decisions = nodeOperations.filter((operation) => operation.kind === 'decision').length
   const updates = program.operations.filter((operation) => operation.op === 'update' || operation.op === 'delete').length
+  const critique = flowCritiqueSuffix(receipt)
   if (program.mode === 'script') {
-    return `Canvas đã thực thi ${receipt.appliedOperationCount} thao tác và đọc lại ${receipt.shapeCount} phần tử.`
+    return `Canvas đã thực thi ${receipt.appliedOperationCount} thao tác và đọc lại ${receipt.shapeCount} phần tử.${critique}`
   }
   if (kind === 'edit') {
     const detail = [
@@ -153,15 +165,15 @@ function canvasReceiptMessage(program: CanvasProgram, receipt: CanvasExecutionRe
       connections > 0 ? `${connections} kết nối` : '',
       updates > 0 ? `${updates} chỉnh sửa` : '',
     ].filter(Boolean).join(', ')
-    return `Đã cập nhật vùng canvas đã chọn${detail ? `: ${detail}` : ''}. Đọc lại thành công ${receipt.shapeCount} phần tử.`
+    return `Đã cập nhật vùng canvas đã chọn${detail ? `: ${detail}` : ''}. Đọc lại thành công ${receipt.shapeCount} phần tử.${critique}`
   }
   if (program.sceneType === 'prototype' || /prototype/i.test(program.summary)) {
     const journey = nodeOperations.map((operation) => operation.label).join(' → ')
-    return `Đã dựng ${nodes} màn hình có nội dung và trạng thái riêng: ${journey}. Chọn một màn hình hoặc thành phần trên canvas, rồi nói điều bạn muốn sửa; agent sẽ chỉ cập nhật vùng đó.`
+    return `Đã dựng ${nodes} màn hình có nội dung và trạng thái riêng: ${journey}. Chọn một màn hình hoặc thành phần trên canvas, rồi nói điều bạn muốn sửa; agent sẽ chỉ cập nhật vùng đó.${critique}`
   }
   const mainPath = nodeOperations.slice(0, 6).map((operation) => operation.label).join(' → ')
   const remaining = Math.max(0, nodes - 6)
-  return `Đã dựng flow ${nodes} bước${decisions > 0 ? ` với ${decisions} điểm quyết định` : ''}. Luồng chính: ${mainPath}${remaining > 0 ? ` → và ${remaining} bước/nhánh tiếp theo` : ''}. Chọn một node hoặc khoanh vùng cần feedback để mình sửa đúng phần đó.`
+  return `Đã dựng flow ${nodes} bước${decisions > 0 ? ` với ${decisions} điểm quyết định` : ''}. Luồng chính: ${mainPath}${remaining > 0 ? ` → và ${remaining} bước/nhánh tiếp theo` : ''}. Chọn một node hoặc khoanh vùng cần feedback để mình sửa đúng phần đó.${critique}`
 }
 
 function figmaRuntimePaths(): { binaryPath: string; manifestPath: string } {
@@ -2050,7 +2062,12 @@ function registerIpc(): void {
             ? 'Mình đang hiện thực hóa các màn hình trên canvas; sau checkpoint sẽ có read-back để bạn review.'
             : 'Mình đang dựng scene trên canvas; sau checkpoint sẽ có read-back để bạn review.'
           : 'Mình đang cập nhật đúng vùng canvas đã chọn và sẽ xác nhận sau read-back.'
-        responseMessage = `${proposal.result.message}\n\n${activity}`
+        // Be honest when the scene is a quick deterministic template (LLM didn't return a
+        // tailored program) so a generic scaffold is never mistaken for a bespoke flow.
+        const fallbackNote = canvasProgramSource === 'deterministic_fallback' && canvasIntent === 'draw'
+          ? '\n\n(Đây là bản dựng nhanh theo mẫu — mô tả rõ hơn các bước/nhánh để mình vẽ sát ý tưởng của bạn.)'
+          : ''
+        responseMessage = `${proposal.result.message}\n\n${activity}${fallbackNote}`
       } else {
         const workspace = workspaceFor(input.threadId)
         if (workspace.runState.phase === 'IDEA_INTAKE'

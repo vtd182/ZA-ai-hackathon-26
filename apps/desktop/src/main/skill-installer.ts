@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join, normalize } from 'node:path'
+import { dirname, join, normalize } from 'node:path'
 import { skillPackRootCandidates, type SkillPackRuntimeRoots } from './skill-packs'
 
 /**
@@ -14,13 +14,14 @@ import { skillPackRootCandidates, type SkillPackRuntimeRoots } from './skill-pac
  */
 
 export const CANVAS_SKILL_ID = 'pm-lifecycle-canvas'
-export const CANVAS_SKILL_VERSION = '2026.07.26'
+export const CANVAS_SKILL_VERSION = '2026.07.28'
 const INSTALL_MARKER = 'installed-by:pm-lifecycle-agent'
 const MARKER_FILE = '.pm-install.json'
 
 const canvasSkillFiles: ReadonlyArray<{ path: string; mode?: number }> = [
   { path: 'SKILL.md' },
   { path: 'pm-canvas.sh', mode: 0o755 },
+  { path: 'references/flow-craft.md' },
 ]
 
 export type CanvasSkillInstallStatus = 'installed' | 'updated' | 'unchanged' | 'skipped'
@@ -110,6 +111,7 @@ export function installCanvasSkill(roots: SkillPackRuntimeRoots, homePath: strin
   mkdirSync(skillDir, { recursive: true })
   for (const file of files) {
     const target = join(skillDir, file.path)
+    mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, file.content, file.mode ? { mode: file.mode } : undefined)
     if (file.mode) chmodSync(target, file.mode)
   }
