@@ -1,15 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#2a86f5"/>
-      <stop offset="0.55" stop-color="#0868df"/>
-      <stop offset="1" stop-color="#0a53c4"/>
+    <linearGradient id="bg" x1="0.12" y1="0.05" x2="0.9" y2="0.98">
+      <stop offset="0" stop-color="#3a90f7"/>
+      <stop offset="0.5" stop-color="#0d6ee0"/>
+      <stop offset="1" stop-color="#0a4fc0"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
   </defs>
-  <rect x="96" y="96" width="832" height="832" rx="196" fill="url(#bg)"/>
-  <!-- magnifier lens (inspector motif) -->
-  <circle cx="590" cy="430" r="188" fill="none" stroke="#ffffff" stroke-width="52" opacity="0.96"/>
-  <rect x="690" y="612" width="150" height="56" rx="28" fill="#ffffff" transform="rotate(45 690 612)" opacity="0.96"/>
-  <!-- Z inside the lens -->
-  <path d="M508 356 h168 v40 l-112 108 h112 v40 h-168 v-40 l112 -108 h-112 z" fill="#ffffff"/>
+  <rect x="112" y="112" width="800" height="800" rx="210" fill="url(#bg)"/>
+  <rect x="112" y="112" width="800" height="800" rx="210" fill="url(#sheen)"/>
+  <line x1="628" y1="628" x2="796" y2="796" stroke="#ffffff" stroke-width="90" stroke-linecap="round"/>
+  <circle cx="466" cy="466" r="214" fill="#0d63d6" stroke="#ffffff" stroke-width="72"/>
+  <path d="M366 384 h200 v54 l-120 134 h120 v54 h-200 v-54 l120 -134 h-120 z" fill="#ffffff"/>
 </svg>
