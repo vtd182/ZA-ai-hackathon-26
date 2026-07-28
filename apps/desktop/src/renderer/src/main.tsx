@@ -1,5 +1,6 @@
 import { Component, StrictMode, type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
+import '@fontsource-variable/inter/wght.css'
 import 'tldraw/tldraw.css'
 import './styles.css'
 import { App } from './App'
