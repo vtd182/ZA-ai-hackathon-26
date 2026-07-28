@@ -17,7 +17,11 @@ export function approveActions(actions: PlannedAction[], decidedAt: string): App
     actions: approved,
     approvals: approved.map((action) => ({
       schemaVersion: 1,
-      id: `approval:${action.id}`,
+      // Scope the immutable approval id to the decision instant so re-approving the same action
+      // (e.g. regenerating artifacts on an unchanged ProductSpec, where the action id is stable)
+      // appends a new audit row instead of colliding on the approvals primary key. Mirrors the
+      // rejection id below; a genuine duplicate approval id still fails the unique constraint.
+      id: `approval:${action.id}:${decidedAt}`,
       actionId: action.id,
       payloadHash: action.payloadHash,
       decision: 'approved',

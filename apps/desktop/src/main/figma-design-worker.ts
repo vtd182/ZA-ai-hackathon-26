@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { DesignSystemManifest, FigmaPreflightPlan } from '@pm-agent/domain'
+import type { DesignSystemManifest, FigmaIconCatalog, FigmaPreflightPlan } from '@pm-agent/domain'
 import type { SkillPackBundle } from './skill-packs'
 import { renderSkillPackForPrompt } from './skill-packs'
 
@@ -68,6 +68,7 @@ export interface FigmaDesignWorkerTask {
   idempotencyKey: string
   plan: FigmaPreflightPlan
   manifest: DesignSystemManifest
+  iconCatalog?: FigmaIconCatalog | null
   productTruth: FigmaProductTruth
   iteration?: number
   qaFeedback?: string[]
@@ -213,6 +214,17 @@ export function buildFigmaDesignWorkerPrompt(task: FigmaDesignWorkerTask): strin
       binding: component.binding,
       variants: component.variants,
     }))
+  const iconLibrary = task.iconCatalog && task.iconCatalog.icons.length > 0
+    ? {
+        pageName: task.iconCatalog.pageName,
+        namePrefixes: task.iconCatalog.namePrefixes,
+        count: task.iconCatalog.count,
+        // name -> COMPONENT_SET node id. Instantiate cross-page without navigating:
+        // instantiate_component({ componentSetId: <setId>, parentId: <frame on the output Page> }).
+        icons: task.iconCatalog.icons,
+        usage: 'These are real ZDS icon component sets. Place one with instantiate_component({ componentSetId: <setId>, parentId: <a frame on the output Page> }); it resolves a variant automatically. Match the icon name to the moment (e.g. zi_zds_ic_search for search, zi_zds_ic_chevron_right for navigation). Never draw a placeholder square or generic glyph where a named icon exists here. Do not navigate to the icon Page.',
+      }
+    : null
   const brief = {
     approvedTask: {
       sessionId: task.sessionId,
@@ -228,6 +240,7 @@ export function buildFigmaDesignWorkerPrompt(task: FigmaDesignWorkerTask): strin
     creativeStartingPoint: task.plan.source.creativeBlueprint ?? null,
     resolvedZdsSlots: task.plan.resolvedSlots,
     sourceComponents,
+    ...(iconLibrary ? { iconLibrary } : {}),
     skillPack: {
       id: task.skillPack.id,
       version: task.skillPack.version,
@@ -260,7 +273,9 @@ This must be a real craft loop, not a fast tool-success pass:
 This is craft pass ${task.iteration ?? 1}.${repairContext}
 
 All MCP calls must include sessionId ${task.sessionId}. The only writable Page is "${task.artifactPageName}". The read-only ZDS source is "${task.sourcePageName}" (${task.sourcePageId}).
-
+${iconLibrary ? `
+The brief's "iconLibrary" lists ${iconLibrary.count} real ZDS icon component sets (prefixes ${iconLibrary.namePrefixes.join(', ') || 'zi_zds_ic_'}) as name → componentSetId. Use them for every icon in the journey — headers, list items, tabs, empty states, statuses: instantiate_component({ componentSetId: <setId>, parentId: <a frame on the output Page> }), then position and recolor as needed. Do not draw placeholder squares or custom glyphs where a matching named icon exists, and do not navigate to the icon Page (instantiate cross-page by id).
+` : ''}
 Approved design brief:
 ${JSON.stringify(brief)}
 
@@ -270,7 +285,7 @@ Return only the required JSON report.`
 function stageFromOutput(line: string, screenshotSeen: boolean): FigmaDesignWorkerStage | null {
   if (/read_lifecycle_artifact|get_design_context|capture_design_system_context|get_nodes_info/.test(line)) return 'inspecting'
   if (/get_screenshot|save_screenshots/.test(line)) return 'reviewing'
-  if (/apply_craft_patch|create_|clone_node|set_|move_nodes|resize_nodes|reparent_nodes|reorder_nodes/.test(line)) {
+  if (/apply_craft_patch|create_|clone_node|instantiate_component|set_|move_nodes|resize_nodes|reparent_nodes|reorder_nodes/.test(line)) {
     return screenshotSeen ? 'refining' : 'crafting'
   }
   return null

@@ -123,11 +123,31 @@ export const figmaDesignSystemCaptureSchema = z.object({
 })
 export type FigmaDesignSystemCapture = z.infer<typeof figmaDesignSystemCaptureSchema>
 
+export const figmaIconCatalogEntrySchema = z.object({
+  name: z.string().min(1),
+  setId: z.string().min(1),
+})
+export type FigmaIconCatalogEntry = z.infer<typeof figmaIconCatalogEntrySchema>
+
+// Icons live on a separate ZDS Page (e.g. a "↳ Icon" page) as COMPONENT_SET nodes named
+// like `zi_zds_ic_*`. They are captured cross-page (by node id, without navigating) and kept
+// out of the approved/hashed component manifest — this is reference-only inventory the craft
+// worker uses to instantiate real ZDS icons via `instantiate_component({ componentSetId })`.
+export const figmaIconCatalogSchema = z.object({
+  pageId: z.string().min(1),
+  pageName: z.string().min(1),
+  namePrefixes: z.array(z.string()).default([]),
+  count: z.number().int().nonnegative(),
+  icons: z.array(figmaIconCatalogEntrySchema).default([]),
+})
+export type FigmaIconCatalog = z.infer<typeof figmaIconCatalogSchema>
+
 export const figmaDesignSystemContextSchema = z.object({
   schemaVersion: z.literal(1),
   target: figmaTargetBindingSchema,
   mode: z.enum(['live', 'fixture_fallback']),
   manifest: designSystemManifestSchema,
+  iconCatalog: figmaIconCatalogSchema.nullable().default(null),
   liveSummary: z.object({
     sourceRootId: z.string(),
     sourceRootName: z.string(),
@@ -152,6 +172,7 @@ export const figmaDesignSystemContextSummarySchema = z.object({
   fingerprint: z.string(),
   componentCount: z.number().int().nonnegative(),
   tokenCount: z.number().int().nonnegative(),
+  iconCount: z.number().int().nonnegative(),
   liveComponentCount: z.number().int().nonnegative(),
   fallbackReason: z.string().nullable(),
   capturedAt: z.string().datetime(),
@@ -168,6 +189,7 @@ export function summarizeFigmaDesignSystemContext(context: FigmaDesignSystemCont
     fingerprint: context.manifest.fingerprint,
     componentCount: context.manifest.components.length,
     tokenCount,
+    iconCount: context.iconCatalog?.count ?? 0,
     liveComponentCount: context.liveSummary.componentCount,
     fallbackReason: context.fallbackReason,
     capturedAt: context.capturedAt,

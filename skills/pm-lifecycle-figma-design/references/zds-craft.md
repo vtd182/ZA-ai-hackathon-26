@@ -11,6 +11,11 @@ Use the source Page as a catalog and the output Page as the only writable surfac
   and clone the one that fits — see `references/component-catalog.md`. A screen of only
   buttons + inputs + a plain list is a wireframe, not a shipped Mini App.
 - Avoid cloning a component only because its outer shape resembles the desired primitive.
+- For icons, use the ref's real icon library instead of drawn glyphs: when the brief carries an
+  `iconLibrary` (ZDS `zi_zds_ic_*` component sets), place each icon with
+  `instantiate_component({ componentSetId, parentId })` cross-page — never navigate to the icon
+  Page and never leave a placeholder square where a named icon exists. See
+  `references/component-catalog.md` › Icons.
 
 ## Override hygiene
 

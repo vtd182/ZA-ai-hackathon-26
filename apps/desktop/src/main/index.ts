@@ -53,6 +53,8 @@ import {
   createDraftProductSpec,
   designSystemManifestSchema,
   figmaArtifactPlanSchema,
+  figmaDesignSystemContextSchema,
+  figmaIconCatalogSchema,
   figmaPreflightResultSchema,
   mockJiraPlanSchema,
   mockZdocPlanSchema,
@@ -318,6 +320,7 @@ interface FigmaExecutionContext {
   manifest: DesignSystemManifest
   connectorMode: 'live' | 'mock'
   planMode: import('@pm-agent/domain').ArtifactPlanMode
+  iconCatalog: import('@pm-agent/domain').FigmaIconCatalog | null
 }
 
 function figmaExecutionContext(): FigmaExecutionContext {
@@ -327,11 +330,11 @@ function figmaExecutionContext(): FigmaExecutionContext {
     // A configured ZDS ref that captured live → reference mode: prefer its components and
     // icons, creatively fill anything it lacks, and never block the flow.
     if (context.mode === 'live') {
-      return { target, manifest: context.manifest, connectorMode: 'live', planMode: 'reference' }
+      return { target, manifest: context.manifest, connectorMode: 'live', planMode: 'reference', iconCatalog: context.iconCatalog }
     }
     // Ref configured but the live capture failed → degrade to free creative on the live
     // target instead of blocking. The design is still produced (labeled as free).
-    return { target, manifest: context.manifest, connectorMode: 'live', planMode: 'free' }
+    return { target, manifest: context.manifest, connectorMode: 'live', planMode: 'free', iconCatalog: context.iconCatalog }
   }
   // No ref configured → free creative composition offline against the synthetic palette.
   return {
@@ -347,7 +350,49 @@ function figmaExecutionContext(): FigmaExecutionContext {
     manifest: syntheticZaloDesignSystem,
     connectorMode: 'mock',
     planMode: 'free',
+    iconCatalog: null,
   }
+}
+
+// Lazily capture and persist the ZDS icon catalog for the active live target when it is missing
+// (e.g. the ref was allowlisted before icon capture shipped). Keeps the design flow icon-rich
+// without forcing a re-allowlist. Best-effort and non-blocking: any failure is swallowed.
+async function ensureIconCatalogForActiveTarget(): Promise<void> {
+  const target = figmaIntegration.getActiveTarget()
+  if (!target) return
+  const context = figmaIntegration.getContext(target.targetHash)
+  if (!context || context.mode !== 'live' || context.iconCatalog) return
+  try {
+    const iconCatalog = await figmaMcp.captureIconCatalog(target)
+    if (!iconCatalog) return
+    figmaIntegration.saveContext(figmaDesignSystemContextSchema.parse({ ...context, iconCatalog }))
+  } catch {
+    // Icon backfill never blocks design generation.
+  }
+}
+
+// Which craft path actually produced the design — the single most useful signal for "why does
+// my Figma look poor". Only the live agentic worker yields a fully composed product; the mock
+// preview and the bare scaffold are intentionally thin and must never be mistaken for the real
+// output. Also reports whether the real ZDS icon library was attached.
+function figmaCraftPathLabel(action: PlannedAction | undefined): string {
+  const payload = action?.payload
+  const worker = payload?.designWorker && typeof payload.designWorker === 'object' && !Array.isArray(payload.designWorker)
+    ? payload.designWorker as Record<string, unknown>
+    : null
+  const iconCatalog = worker?.iconCatalog && typeof worker.iconCatalog === 'object' && !Array.isArray(worker.iconCatalog)
+    ? worker.iconCatalog as { count?: unknown }
+    : null
+  const iconNote = typeof iconCatalog?.count === 'number' && iconCatalog.count > 0
+    ? ` · ${iconCatalog.count} ZDS icon`
+    : ' · chưa có icon ZDS (allowlist Page component để nạp)'
+  if (payload?.connectorMode !== 'live') {
+    return '⚠️ Mock preview — CHƯA allowlist ref ZDS nên đây KHÔNG phải bản thật; hãy mở Page component ZDS rồi allowlist để vào chế độ live.'
+  }
+  if (worker?.mode === 'codex_mcp') {
+    return `Agentic craft worker (Codex) — bản thiết kế đầy đủ${iconNote}.`
+  }
+  return '⚠️ Scaffold-only — worker craft chưa bật (Codex không khả dụng), Figma chỉ là khung thưa. Cần Codex CLI để có bản craft đẹp.'
 }
 
 // Honest human label combining where it writes (live/mock) and how it composes (reference
@@ -371,7 +416,7 @@ function assertFigmaRoleCoverage(spec: ProductSpec, context: FigmaExecutionConte
   throw new Error(
     `Figma Design System source "${context.manifest.sourceLabel}" thiếu semantic roles: ${missingRoles.join(', ')}. `
     + 'Page đang allow có thể là artifact output thay vì thư viện ZDS. '
-    + 'Mở Page chứa ZDS trong [PUBLIC] Zalo Mini App Framework 2.0 - dup, sau đó mở Figma setup và chọn "Dùng Page đang mở làm nguồn ZDS".',
+    + 'Mở Page chứa component ZDS trong file thư viện đang dùng, sau đó mở Figma setup và chọn "Dùng Page đang mở làm nguồn ZDS".',
   )
 }
 
@@ -581,6 +626,10 @@ async function prepareExecutableActions(
   const jiraAction = state.pendingActions.find((action) => action.target === 'jira')
   const zdocAction = state.pendingActions.find((action) => action.target === 'zdoc')
   if (!figmaAction || !jiraAction || !zdocAction) throw new Error('Change plan must contain Figma, Jira and Zdoc actions')
+  // Backfill the ZDS icon catalog for a live ref that was allowlisted before icon capture
+  // existed (or otherwise has none yet), so the craft worker gets real icons without the user
+  // re-allowlisting. Best-effort: a failure leaves the flow untouched.
+  await ensureIconCatalogForActiveTarget()
   const figmaContext = figmaExecutionContext()
   assertFigmaRoleCoverage(spec, figmaContext)
   const workerProbe = figmaContext.connectorMode === 'live' && process.env.PM_AGENT_FIGMA_DESIGN_WORKER !== 'blueprint'
@@ -619,9 +668,15 @@ async function prepareExecutableActions(
           { sparse: true },
         )
       : await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest, refineNote)
+    // Refine-in-place vs new sibling. A refine (feedback present) reuses the base idempotency key
+    // — with the deterministic sparse scaffold this matches the existing artifact root, so the
+    // scaffold apply is an idempotent no-op and the craft worker RESUMES and edits the already
+    // crafted design instead of piling a fresh root onto the version Page. A plain regenerate (no
+    // feedback) keeps the unique revisionLabel so it produces a new sibling and preserves the old.
+    const editInPlace = Boolean(refineNote)
     const metadata = {
       ...metadataBase,
-      idempotencyKey: `figma:${state.id}:spec-v${spec.version}${revisionLabel ? `:${revisionLabel}` : ''}:${useAgenticWorker ? 'craft' : 'creative'}-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}:${figmaContext.target.targetHash.slice(0, 12)}`,
+      idempotencyKey: `figma:${state.id}:spec-v${spec.version}${revisionLabel && !editInPlace ? `:${revisionLabel}` : ''}:${useAgenticWorker ? 'craft' : 'creative'}-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}:${figmaContext.target.targetHash.slice(0, 12)}`,
     }
     try {
       figmaPlan = createFigmaArtifactPlan(
@@ -746,6 +801,7 @@ async function prepareExecutableActions(
         maxReviewPasses: 3,
         timeoutBudgetMs: craftTimeoutBudgetMs,
         ...(refineNote ? { refinementNote: refineNote } : {}),
+        ...(figmaContext.iconCatalog ? { iconCatalog: figmaContext.iconCatalog } : {}),
         productTruth: {
           idea: {
             id: spec.idea.id,
@@ -820,6 +876,8 @@ function withFigmaDesignWorker(
         throw new Error('Approved design task has no immutable ProductSpec truth')
       }
       const typedProductTruth = productTruth as FigmaDesignWorkerTask['productTruth']
+      const parsedIconCatalog = figmaIconCatalogSchema.nullable().safeParse(workerConfig.iconCatalog ?? null)
+      const workerIconCatalog = parsedIconCatalog.success ? parsedIconCatalog.data : null
       const maxReviewPasses = Math.max(1, Math.min(3, typeof workerConfig.maxReviewPasses === 'number'
         ? Math.floor(workerConfig.maxReviewPasses)
         : 2))
@@ -855,6 +913,7 @@ function withFigmaDesignWorker(
           plan: preflight.plan,
           manifest,
           productTruth: typedProductTruth,
+          ...(workerIconCatalog ? { iconCatalog: workerIconCatalog } : {}),
           iteration,
           ...(qaFeedback ? { qaFeedback } : {}),
           timeoutMs: remainingMs,
@@ -1075,8 +1134,9 @@ async function regenerateArtifactsForThread(
   lifecycle.savePreview({ ...staged, pendingActions: executableActions })
   const figmaAction = executableActions.find((action) => action.target === 'figma')
   const mode = figmaModeLabel(figmaAction)
-  const intent = feedback ? `refine theo feedback: “${feedback}”` : 'tạo một bản thiết kế mới'
-  const message = `Đã chuẩn bị ${mode} bản mới (${intent}) trong ${seconds(Date.now() - startedAt)} — một artifact riêng, bản Figma cũ vẫn được giữ. Kiểm tra immutable plan rồi duyệt để tạo.`
+  const message = feedback
+    ? `Đã chuẩn bị ${mode} để refine theo feedback: “${feedback}” trong ${seconds(Date.now() - startedAt)} — sửa trực tiếp bản Figma hiện tại (cùng artifact root), không tạo bản mới. Kiểm tra immutable plan rồi duyệt để áp dụng.`
+    : `Đã chuẩn bị ${mode} bản thiết kế mới trong ${seconds(Date.now() - startedAt)} — một artifact riêng, bản Figma cũ vẫn được giữ. Kiểm tra immutable plan rồi duyệt để tạo.`
   const assistantMessage = history.addMessage(threadId, 'assistant', message)
   return { workspace: workspaceFor(threadId), message, assistantMessage }
 }
@@ -1137,9 +1197,16 @@ async function approveArtifactsForThread(
   const approvedState = transitionRunState({ ...state, pendingActions: approved.actions }, 'APPROVE', at)
   lifecycle.commitApprovedChange(approvedState, approved.approvals)
   const executed = await executeRun(threadId)
+  const craftPath = figmaCraftPathLabel(approved.actions.find((action) => action.target === 'figma'))
+  // Surface the concrete failure reason of any target (e.g. a craft-worker crash) so a poor or
+  // missing Figma is diagnosable instead of a silent "chưa hoàn tất".
+  const failureDetails = executed.results
+    .filter((result) => result.status !== 'verified' && result.error)
+    .map((result) => `\n- ${result.target}: ${result.error}`)
+    .join('')
   const message = executed.workspace.execution?.status === 'verified'
-    ? `Kickoff package đã verified: Figma, backlog mock và PRD Markdown tại ${markdownArtifactPath(executed.workspace.runState.productSpec)}.${timingSummary(executed.results)}`
-    : `Artifact execution chưa hoàn tất; xem trạng thái từng target để retry.${timingSummary(executed.results)}`
+    ? `Kickoff package đã verified: Figma, backlog mock và PRD Markdown tại ${markdownArtifactPath(executed.workspace.runState.productSpec)}.\nFigma craft path: ${craftPath}${timingSummary(executed.results)}`
+    : `Artifact execution chưa hoàn tất; xem trạng thái từng target để retry.\nFigma craft path: ${craftPath}${failureDetails}${timingSummary(executed.results)}`
   const assistantMessage = history.addMessage(threadId, 'assistant', message)
   return { workspace: executed.workspace, message, assistantMessage }
 }
@@ -1189,9 +1256,17 @@ async function allowFigmaTarget(sessionId: string, forceCapture: boolean): Promi
   const currentPage = pages.pages.find((page) => page.id === pages.currentPageId)
   if (!currentPage) throw new Error('Không đọc được Page hiện tại từ Figma session.')
   if (isManagedFigmaArtifactPage(currentPage.name)) {
+    // Name the actual file and list the real ZDS-source candidates in it (any non-output Page),
+    // instead of hardcoding a file name — the ref file may be "(Copy)", "- dup" or anything else.
+    const sourceCandidates = pages.pages
+      .filter((page) => !isManagedFigmaArtifactPage(page.name))
+      .map((page) => page.name)
+    const hint = sourceCandidates.length > 0
+      ? ` Ví dụ Page nguồn trong file này: ${sourceCandidates.slice(0, 6).map((name) => `"${name.trim()}"`).join(', ')}.`
+      : ' File này chưa có Page component ZDS nào — hãy mở đúng file thư viện ZDS.'
     throw new Error(
-      `"${currentPage.name}" là Page output do PM Lifecycle tạo, không phải nguồn ZDS. `
-      + 'Hãy mở Page chứa component trong [PUBLIC] Zalo Mini App Framework 2.0 - dup rồi thử lại.',
+      `"${currentPage.name}" là Page output do PM Lifecycle tạo trong file "${session.fileName}", không phải nguồn ZDS. `
+      + `Hãy mở Page chứa component ZDS (đang xem Page đó trong Figma) rồi thử lại.${hint}`,
     )
   }
   const activeTarget = figmaIntegration.getActiveTarget()
@@ -1203,7 +1278,10 @@ async function allowFigmaTarget(sessionId: string, forceCapture: boolean): Promi
   const cached = forceCapture ? null : figmaIntegration.getContext(target.targetHash)
   if (!cached) {
     const capture = await figmaMcp.captureDesignSystem(target)
-    const context = normalizeFigmaDesignSystemContext(capture, target, syntheticZaloDesignSystem, timestamp())
+    // Reference-only ZDS icon inventory (separate "Icon" Page). Best-effort and never blocking:
+    // a null catalog simply means the craft worker falls back to composed icon primitives.
+    const iconCatalog = await figmaMcp.captureIconCatalog(target).catch(() => null)
+    const context = normalizeFigmaDesignSystemContext(capture, target, syntheticZaloDesignSystem, timestamp(), iconCatalog)
     if (context.mode !== 'live') {
       throw new Error(
         `Page "${target.pageName}" không cung cấp semantic ZDS bindings. `

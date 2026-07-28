@@ -40,6 +40,25 @@ Give at least one meaningful non-default state with the right component: empty (
 primary action), loading (skeletons), error/recovery (clear cause + safe next step, e.g. a
 snackbar or an inline card), and success that leads into a real next product state.
 
+## Icons (use the real ZDS icon library, not placeholder squares)
+
+A configured ZDS ref usually ships a dedicated **Icon Page** with hundreds of icon
+**component sets** named like `zi_zds_ic_*` (e.g. `zi_zds_ic_search`, `zi_zds_ic_chevron_right`,
+`zi_zds_ic_backup`, `zi_zds_ic_call`, `zi_zds_ic_camera`, `zi_zds_ic_bookmark`). When the brief
+includes an `iconLibrary`, it lists these as `name → componentSetId`.
+
+- **Place a real icon** with `instantiate_component({ componentSetId: <setId>, parentId: <a
+  frame on the output Page> })`. The runtime resolves a variant automatically; then position,
+  size (usually 20–24px) and recolor to match the surface.
+- **Instantiate cross-page by id** — do **not** navigate to the icon Page (it is outside the
+  approved source/output pair). The `componentSetId` resolves without switching pages.
+- **Match the icon to the moment**: header back/actions, list-item leading/trailing icons, tab
+  glyphs, empty-state illustration accents, status marks (success/warning), chips.
+- **Never** draw a plain rectangle, generic geometry or a custom glyph where a matching named
+  icon exists in the library. A screen with placeholder squares reads as a wireframe.
+- If the library genuinely lacks a needed symbol (free mode, or no `iconLibrary` in the brief),
+  compose a clean labeled primitive — but prefer the real icon whenever one exists.
+
 ## Reference vs free mode
 
 - **Reference mode (a ZDS ref is configured):** prefer real ZDS instances for every

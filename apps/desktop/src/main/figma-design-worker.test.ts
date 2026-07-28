@@ -111,7 +111,7 @@ describe('Figma design worker', () => {
   })
 
   it('builds a prompt that names the exact writable and read-only Pages', () => {
-    const prompt = buildFigmaDesignWorkerPrompt({
+    const loginTask: FigmaDesignWorkerTask = {
       modelId: 'gpt-5.5',
       workingDirectory: '/tmp/pm-agent',
       mcpBinaryPath: '/repo/mcp-tool/za-talk-to-figma/bin/za-talk-to-figma',
@@ -247,7 +247,8 @@ describe('Figma design worker', () => {
           status: 'accepted',
         }],
       },
-    } satisfies FigmaDesignWorkerTask)
+    }
+    const prompt = buildFigmaDesignWorkerPrompt(loginTask)
 
     expect(prompt).toContain('The only writable Page is "PM · Login · v1"')
     expect(prompt).toContain('read-only ZDS source is "Page 1"')
@@ -260,6 +261,27 @@ describe('Figma design worker', () => {
     expect(prompt).toContain('Password login')
     expect(prompt).toContain('removed requirements are forbidden')
     expect(prompt).toContain('call audit_product_craft')
+    // No configured icon library → no icon instruction leaks into the brief.
+    expect(prompt).not.toContain('iconLibrary')
+
+    // With a captured ZDS icon library, the worker is told to instantiate real icons.
+    const withIcons = buildFigmaDesignWorkerPrompt({
+      ...loginTask,
+      iconCatalog: {
+        pageId: '2591:110173',
+        pageName: '      ↳ Icon',
+        namePrefixes: ['zi_zds_ic_'],
+        count: 2,
+        icons: [
+          { name: 'zi_zds_ic_search', setId: '2591:1' },
+          { name: 'zi_zds_ic_chevron_right', setId: '2591:2' },
+        ],
+      },
+    })
+    expect(withIcons).toContain('iconLibrary')
+    expect(withIcons).toContain('instantiate_component({ componentSetId')
+    expect(withIcons).toContain('zi_zds_ic_search')
+    expect(withIcons).toContain('do not navigate to the icon Page')
   })
 
   it('rejects a report that still mentions removed requirements', () => {

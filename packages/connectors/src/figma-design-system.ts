@@ -5,6 +5,7 @@ import {
   type DesignSystemManifest,
   type FigmaDesignSystemCapture,
   type FigmaDesignSystemContext,
+  type FigmaIconCatalog,
   type FigmaTargetBinding,
 } from '@pm-agent/domain'
 import { stableStringify, type JsonValue } from '@pm-agent/shared'
@@ -263,6 +264,7 @@ export function normalizeFigmaDesignSystemContext(
   target: FigmaTargetBinding,
   fixtureFallback: DesignSystemManifest,
   capturedAt = new Date().toISOString(),
+  iconCatalog: FigmaIconCatalog | null = null,
 ): FigmaDesignSystemContext {
   const liveManifest = normalizeLiveManifest(capture, target, capturedAt)
   const useFallback = liveManifest.components.length === 0
@@ -275,6 +277,7 @@ export function normalizeFigmaDesignSystemContext(
     target,
     mode: useFallback ? 'fixture_fallback' : 'live',
     manifest: useFallback ? fixtureFallback : liveManifest,
+    iconCatalog,
     liveSummary: {
       sourceRootId: capture.sourceRoot.id,
       sourceRootName: capture.sourceRoot.name,

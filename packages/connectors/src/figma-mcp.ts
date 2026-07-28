@@ -3,6 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import {
   figmaDesignSystemCaptureSchema,
+  figmaIconCatalogSchema,
   figmaPagesSchema,
   figmaApplyResultSchema,
   figmaArtifactAuditResultSchema,
@@ -23,6 +24,7 @@ import {
   type FigmaRuntimeErrorCode,
   type FigmaRuntimeHealth,
   type FigmaCraftAudit,
+  type FigmaIconCatalog,
   type FigmaTargetBinding,
 } from '@pm-agent/domain'
 import { stableStringify, type JsonValue } from '@pm-agent/shared'
@@ -55,6 +57,40 @@ export function figmaApplyTimeoutMs(estimatedOperations: number): number {
   )
 }
 
+interface FigmaScannedNode { id: string; name: string; type: string }
+
+// `scan_nodes_by_types` has returned results under a few keys across runtime versions
+// (matchingNodes / nodes / results) or as a bare array; normalise them all to `{ nodes }`.
+const figmaScanNodesResultSchema: Schema<{ nodes: FigmaScannedNode[] }> = {
+  parse(value: unknown) {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+    const raw = Array.isArray(value) ? value : source?.matchingNodes ?? source?.nodes ?? source?.results ?? []
+    const list = Array.isArray(raw) ? raw : []
+    const nodes: FigmaScannedNode[] = []
+    for (const item of list) {
+      if (!item || typeof item !== 'object') continue
+      const record = item as Record<string, unknown>
+      if (typeof record.id === 'string' && typeof record.name === 'string' && typeof record.type === 'string') {
+        nodes.push({ id: record.id, name: record.name, type: record.type })
+      }
+    }
+    return { nodes }
+  },
+}
+
+const ICON_PAGE_NAME = /icon/i
+const ICON_NAME = /(?:^|_)ic_|^zi_|icon/i
+const ICON_CATALOG_LIMIT = 260
+
+function iconNamePrefixes(names: string[]): string[] {
+  const prefixes = new Set<string>()
+  for (const name of names) {
+    const match = name.match(/^(zi_zds_ic_|zi_ic_|zds_ic_|ic_|icon[_/])/i)
+    if (match?.[1]) prefixes.add(match[1].toLowerCase())
+  }
+  return [...prefixes].sort()
+}
+
 export class FigmaMcpError extends Error {
   constructor(
     message: string,
@@ -63,6 +99,47 @@ export class FigmaMcpError extends Error {
   ) {
     super(message)
     this.name = 'FigmaMcpError'
+  }
+}
+
+export interface FigmaToolResult {
+  content?: unknown
+  isError?: unknown
+}
+
+// Interpret an MCP tool result into its JSON payload, or throw a FigmaMcpError that carries the
+// real reason. Tool-level failures arrive as `isError` results whose text is EITHER a JSON error
+// envelope OR a bare string (the runtime's `mcp.NewToolResultError` writes plain text). We must
+// inspect `isError` BEFORE attempting to parse — otherwise a plain-text tool error (e.g.
+// "mode must be strict or free") gets masked as an opaque "returned invalid JSON".
+export function interpretFigmaToolResult(name: string, result: FigmaToolResult): unknown {
+  const content = Array.isArray(result.content) ? result.content : []
+  const textBlock = content.find((item): item is { type: 'text'; text: string } => (
+    typeof item === 'object' && item !== null
+    && 'type' in item && item.type === 'text'
+    && 'text' in item && typeof item.text === 'string'
+  ))
+  const text = textBlock?.text
+  if (!text) throw new FigmaMcpError(`Figma MCP tool ${name} returned no JSON text`, 'INTERNAL_ERROR', false)
+
+  if (result.isError === true) {
+    let errorPayload: unknown = null
+    try {
+      errorPayload = JSON.parse(text)
+    } catch {
+      errorPayload = null
+    }
+    const envelope = errorPayload !== null ? figmaRuntimeErrorEnvelopeSchema.safeParse(errorPayload) : null
+    if (envelope?.success) {
+      throw new FigmaMcpError(envelope.data.error.message, envelope.data.error.code, envelope.data.error.retryable)
+    }
+    throw new FigmaMcpError(`Figma MCP tool ${name} failed: ${text.trim().slice(0, 600)}`, 'PLUGIN_ERROR', false)
+  }
+
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new FigmaMcpError(`Figma MCP tool ${name} returned invalid JSON: ${text.trim().slice(0, 300)}`, 'INTERNAL_ERROR', false)
   }
 }
 
@@ -97,32 +174,7 @@ class SdkFigmaJsonToolTransport implements FigmaJsonToolTransport {
     } catch (error) {
       throw new FigmaMcpError(error instanceof Error ? error.message : 'Figma MCP transport failed', 'TRANSPORT_ERROR', true)
     }
-
-    const resultRecord = result as { content?: unknown; isError?: unknown }
-    const content = Array.isArray(resultRecord.content) ? resultRecord.content : []
-    const textBlock = content.find((item): item is { type: 'text'; text: string } => (
-      typeof item === 'object' && item !== null
-      && 'type' in item && item.type === 'text'
-      && 'text' in item && typeof item.text === 'string'
-    ))
-    const text = textBlock?.text
-    if (!text) throw new FigmaMcpError(`Figma MCP tool ${name} returned no JSON text`, 'INTERNAL_ERROR', false)
-
-    let payload: unknown
-    try {
-      payload = JSON.parse(text)
-    } catch {
-      throw new FigmaMcpError(`Figma MCP tool ${name} returned invalid JSON`, 'INTERNAL_ERROR', false)
-    }
-
-    if (resultRecord.isError === true) {
-      const envelope = figmaRuntimeErrorEnvelopeSchema.safeParse(payload)
-      if (envelope.success) {
-        throw new FigmaMcpError(envelope.data.error.message, envelope.data.error.code, envelope.data.error.retryable)
-      }
-      throw new FigmaMcpError(`Figma MCP tool ${name} failed`, 'PLUGIN_ERROR', false)
-    }
-    return payload
+    return interpretFigmaToolResult(name, result as FigmaToolResult)
   }
 
   async close(): Promise<void> {
@@ -134,6 +186,16 @@ class SdkFigmaJsonToolTransport implements FigmaJsonToolTransport {
 
 function targetHash(target: Omit<FigmaTargetBinding, 'schemaVersion' | 'targetHash' | 'allowedAt'>): string {
   return createHash('sha256').update(stableStringify(target as unknown as JsonValue)).digest('hex')
+}
+
+// `reference` is a host-side planning concept ("prefer the ZDS ref, fall back to primitives,
+// never block"). The Figma runtime's strict preflight only understands `strict` | `free` and
+// resolves non-strict modes identically, so a `reference` plan must reach it as `free`. The
+// runtime echoes this mode into its immutable preflight result, so the approved plan hash and
+// every downstream apply stay internally consistent. The host label stays `reference` via the
+// action's guardMode — this only normalizes the value crossing the runtime boundary.
+function runtimeArtifactPlan(plan: FigmaArtifactPlan): FigmaArtifactPlan {
+  return plan.mode === 'reference' ? { ...plan, mode: 'free' } : plan
 }
 
 export class FigmaMcpAdapter {
@@ -202,6 +264,64 @@ export class FigmaMcpAdapter {
     }, figmaDesignSystemCaptureSchema, 180_000)
   }
 
+  // Best-effort ZDS icon inventory. ZDS keeps icons as COMPONENT_SET nodes (e.g. `zi_zds_ic_*`)
+  // on a dedicated "Icon" Page, separate from the component Page the manifest is captured from.
+  // We scan them cross-page by node id (no navigation, no side effect on the user's view) so the
+  // craft worker can instantiate real icons. Never throws — returns null on any failure so a
+  // missing/odd icon Page can never block the design flow.
+  async captureIconCatalog(target: FigmaTargetBinding): Promise<FigmaIconCatalog | null> {
+    try {
+      await this.verifyTarget(target)
+      const pages = await this.pages(target.sessionId)
+      const iconPages = pages.pages.filter((page) => ICON_PAGE_NAME.test(page.name))
+      if (iconPages.length === 0) return null
+
+      const icons = new Map<string, string>()
+      let sourcePage: { id: string; name: string } | null = null
+      for (const page of iconPages) {
+        if (icons.size >= ICON_CATALOG_LIMIT) break
+        let scanned
+        try {
+          scanned = await this.call('scan_nodes_by_types', {
+            sessionId: target.sessionId,
+            nodeId: page.id,
+            types: ['COMPONENT_SET', 'COMPONENT'],
+            maxVisited: 60_000,
+            maxTimeMs: 30_000,
+          }, figmaScanNodesResultSchema, 60_000)
+        } catch {
+          continue
+        }
+        const before = icons.size
+        // Prefer COMPONENT_SET (a whole icon with its variants); accept standalone COMPONENTs
+        // only when they are not variant children (variant names contain "=") and read as icons.
+        for (const node of scanned.nodes) {
+          if (node.type !== 'COMPONENT_SET') continue
+          if (!icons.has(node.name)) icons.set(node.name, node.id)
+        }
+        for (const node of scanned.nodes) {
+          if (node.type !== 'COMPONENT' || node.name.includes('=')) continue
+          if (!icons.has(node.name) && ICON_NAME.test(node.name)) icons.set(node.name, node.id)
+        }
+        if (icons.size > before && !sourcePage) sourcePage = { id: page.id, name: page.name }
+      }
+      if (icons.size === 0 || !sourcePage) return null
+
+      const entries = [...icons.entries()]
+        .map(([name, setId]) => ({ name, setId }))
+        .sort((left, right) => left.name.localeCompare(right.name))
+      return figmaIconCatalogSchema.parse({
+        pageId: sourcePage.id,
+        pageName: sourcePage.name,
+        namePrefixes: iconNamePrefixes(entries.map((entry) => entry.name)),
+        count: entries.length,
+        icons: entries.slice(0, ICON_CATALOG_LIMIT),
+      })
+    } catch {
+      return null
+    }
+  }
+
   async preflightArtifactPlan(
     plan: FigmaArtifactPlan,
     manifest: DesignSystemManifest,
@@ -210,7 +330,7 @@ export class FigmaMcpAdapter {
     await this.verifyTarget(allowedTarget)
     return this.call('plan_design_system_screens', {
       sessionId: allowedTarget.sessionId,
-      artifactPlan: plan,
+      artifactPlan: runtimeArtifactPlan(plan),
       manifest,
       allowedTarget,
     }, figmaPreflightResultSchema, 60_000)

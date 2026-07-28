@@ -9,6 +9,7 @@ import {
   FigmaMcpAdapter,
   FigmaMcpError,
   figmaApplyTimeoutMs,
+  interpretFigmaToolResult,
 } from './figma-mcp'
 
 class FakeTransport implements FigmaJsonToolTransport {
@@ -249,5 +250,84 @@ describe('FigmaMcpAdapter', () => {
       name: 'audit_product_craft',
       args: { sessionId, rootNodeId: '10:1', forbiddenTerms: ['payment'] },
     })
+  })
+
+  it('captures ZDS icon component sets cross-page into a reference-only catalog', async () => {
+    const withIconPage = {
+      currentPageId: '0:1',
+      pages: [{ id: '0:1', name: 'Page 1' }, { id: '2591:110173', name: '      ↳ Icon' }],
+    }
+    const scan = {
+      matchingNodes: [
+        { id: '2591:1', name: 'zi_zds_ic_search', type: 'COMPONENT_SET' },
+        { id: '2591:2', name: 'zi_zds_ic_chevron_right', type: 'COMPONENT_SET' },
+        { id: '2591:3', name: 'zi_zds_ic_search=on', type: 'COMPONENT' }, // variant child → ignored
+        { id: '2591:4', name: 'Layout Frame', type: 'FRAME' }, // wrong type → ignored
+      ],
+    }
+    const transport = new FakeTransport({ get_runtime_health: health, get_pages: withIconPage, scan_nodes_by_types: scan })
+    const adapter = new FigmaMcpAdapter({ binaryPath: '/unused' }, transport)
+    const target = await adapter.pinTarget(sessionId, '0:1', '2026-07-22T12:00:00.000Z')
+
+    const catalog = await adapter.captureIconCatalog(target)
+
+    expect(catalog).toMatchObject({ pageId: '2591:110173', pageName: '      ↳ Icon', count: 2 })
+    expect(catalog?.icons).toEqual([
+      { name: 'zi_zds_ic_chevron_right', setId: '2591:2' },
+      { name: 'zi_zds_ic_search', setId: '2591:1' },
+    ])
+    expect(catalog?.namePrefixes).toContain('zi_zds_ic_')
+    // Cross-page: the scan roots at the icon Page id and never navigates.
+    const scanCall = transport.calls.find((call) => call.name === 'scan_nodes_by_types')
+    expect(scanCall?.args).toMatchObject({ sessionId, nodeId: '2591:110173' })
+    expect(transport.calls.some((call) => call.name === 'navigate_to_page')).toBe(false)
+  })
+
+  it('returns null (never blocks the flow) when the file has no icon Page', async () => {
+    const transport = new FakeTransport({ get_runtime_health: health, get_pages: pages })
+    const adapter = new FigmaMcpAdapter({ binaryPath: '/unused' }, transport)
+    const target = await adapter.pinTarget(sessionId, '0:1', '2026-07-22T12:00:00.000Z')
+
+    await expect(adapter.captureIconCatalog(target)).resolves.toBeNull()
+  })
+
+  it('sends the runtime a free-mode plan when the host plan is reference', async () => {
+    // The runtime's strict preflight only accepts strict|free; a reference plan reaching it as
+    // "reference" is rejected with a plain-text error. The host concept must cross as "free".
+    const bootstrap = new FakeTransport({ get_runtime_health: health, get_pages: pages })
+    const target = await new FigmaMcpAdapter({ binaryPath: '/unused' }, bootstrap)
+      .pinTarget(sessionId, '0:1', '2026-07-22T12:00:00.000Z')
+    const referencePlan = createFigmaArtifactPlan(mealOrderingProductSpec, target, syntheticZaloDesignSystem, {
+      runId: 'RUN-REF', threadId: 'THREAD-REF', actionId: 'ACTION-FIGMA', idempotencyKey: 'figma:RUN-REF:v1',
+    }, 'reference')
+    expect(referencePlan.mode).toBe('reference')
+    const runtimePreflight = preflightFigmaArtifactPlan({ ...referencePlan, mode: 'free' }, syntheticZaloDesignSystem, target)
+    const transport = new FakeTransport({ get_runtime_health: health, get_pages: pages, plan_design_system_screens: runtimePreflight })
+    const adapter = new FigmaMcpAdapter({ binaryPath: '/unused' }, transport)
+
+    await adapter.preflightArtifactPlan(referencePlan, syntheticZaloDesignSystem, target)
+
+    const sent = transport.calls.at(-1)?.args as { artifactPlan: { mode: string } }
+    expect(sent.artifactPlan.mode).toBe('free')
+  })
+})
+
+describe('interpretFigmaToolResult', () => {
+  it('surfaces a plain-text tool error instead of masking it as invalid JSON', () => {
+    expect(() => interpretFigmaToolResult('plan_design_system_screens', {
+      isError: true,
+      content: [{ type: 'text', text: 'mode must be strict or free' }],
+    })).toThrow(/mode must be strict or free/)
+  })
+
+  it('unwraps a JSON error envelope with its code and retryable flag', () => {
+    expect(() => interpretFigmaToolResult('capture_design_system_context', {
+      isError: true,
+      content: [{ type: 'text', text: JSON.stringify({ error: { code: 'TIMEOUT', message: 'slow capture', retryable: true } }) }],
+    })).toThrow(expect.objectContaining({ code: 'TIMEOUT', retryable: true, message: 'slow capture' }) as unknown as Error)
+  })
+
+  it('parses a normal JSON success payload', () => {
+    expect(interpretFigmaToolResult('get_pages', { content: [{ type: 'text', text: '{"ok":1}' }] })).toEqual({ ok: 1 })
   })
 })

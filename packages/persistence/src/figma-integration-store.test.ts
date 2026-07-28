@@ -35,6 +35,7 @@ describe('FigmaIntegrationStore', () => {
       schemaVersion: 1,
       target: second,
       mode: 'fixture_fallback',
+      iconCatalog: null,
       manifest: {
         schemaVersion: 1,
         id: 'fixture',

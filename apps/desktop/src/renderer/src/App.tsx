@@ -922,7 +922,7 @@ function FigmaSetupDialog({
             <ShieldCheck size={18} />
             <div>
               <strong>{status.designSystem.mode === 'live' ? 'Live Design System context' : 'Synthetic fixture guard'}</strong>
-              <span>{status.designSystem.componentCount} components · {status.designSystem.tokenCount} tokens · {status.designSystem.fingerprint.slice(0, 12)}</span>
+              <span>{status.designSystem.componentCount} components · {status.designSystem.iconCount} icons · {status.designSystem.tokenCount} tokens · {status.designSystem.fingerprint.slice(0, 12)}</span>
               {status.designSystem.fallbackReason && <small>{status.designSystem.fallbackReason}</small>}
             </div>
             <button className="icon-button" disabled={busy} title="Đọc lại Design System" onClick={() => void run(onRefreshDesignSystem)}>
