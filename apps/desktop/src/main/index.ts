@@ -349,6 +349,12 @@ function figmaExecutionContext(): FigmaExecutionContext {
     return { target, manifest: context.manifest, connectorMode: 'live', planMode: 'free', iconCatalog: context.iconCatalog }
   }
   // No ref configured → free creative composition offline against the synthetic palette.
+  return mockFigmaExecutionContext()
+}
+
+// The offline mock Figma context (synthetic ZDS). Used both when no ref is configured and as the
+// safe fallback when a live Figma pipeline fails — Figma must never block Jira/Confluence/PRD.
+function mockFigmaExecutionContext(): FigmaExecutionContext {
   return {
     target: {
       schemaVersion: 1,
@@ -705,12 +711,14 @@ async function prepareExecutableActions(
   // existed (or otherwise has none yet), so the craft worker gets real icons without the user
   // re-allowlisting. Best-effort: a failure leaves the flow untouched.
   await ensureIconCatalogForActiveTarget()
-  const figmaContext = figmaExecutionContext()
+  // figmaContext / useAgenticWorker are mutable: a failing live Figma pipeline is degraded to the
+  // offline mock below so it never aborts the Jira + Confluence + PRD package.
+  let figmaContext = figmaExecutionContext()
   assertFigmaRoleCoverage(spec, figmaContext)
   const workerProbe = figmaContext.connectorMode === 'live' && process.env.PM_AGENT_FIGMA_DESIGN_WORKER !== 'blueprint'
     ? await figmaDesignWorker.probe()
     : { available: false, detail: 'Blueprint compositor được cấu hình' }
-  const useAgenticWorker = figmaContext.connectorMode === 'live' && workerProbe.available
+  let useAgenticWorker = figmaContext.connectorMode === 'live' && workerProbe.available
   const thread = history.getThread(state.threadId)
   const threadProfile = history.getProfile(thread.providerId)
   const designWorkerModelId = process.env.PM_AGENT_FIGMA_DESIGN_MODEL
@@ -732,115 +740,80 @@ async function prepareExecutableActions(
     actionId: figmaAction.id,
     pageStrategy: 'create_or_reuse_managed' as const,
   }
-  let figmaPlan: ReturnType<typeof createFigmaArtifactPlan>
+  const uniqueRoles = (manifest: DesignSystemManifest): string[] =>
+    [...new Set(manifest.components.filter((component) => !component.deprecated).map((component) => component.semanticRole))]
+  // Refine-in-place vs new sibling. A refine (feedback present) reuses the base idempotency key
+  // — with the deterministic sparse scaffold this matches the existing artifact root, so the
+  // scaffold apply is an idempotent no-op and the craft worker RESUMES and edits the already
+  // crafted design instead of piling a fresh root onto the version Page. A plain regenerate (no
+  // feedback) keeps the unique revisionLabel so it produces a new sibling and preserves the old.
+  const editInPlace = Boolean(refineNote)
+  let figmaPlan!: ReturnType<typeof createFigmaArtifactPlan>
+  let figmaPreflight!: Awaited<ReturnType<FigmaMcpArtifactConnector['preflight']>>
   try {
+    // PRIMARY Figma pipeline: blueprint → immutable plan → preflight. Any failure degrades to the
+    // offline mock below so a Figma problem never aborts the Jira + Confluence + PRD package.
     creativeBlueprint = useAgenticWorker
-      ? createScaffoldFigmaBlueprint(
-          spec,
-          [...new Set(figmaContext.manifest.components
-            .filter((component) => !component.deprecated)
-            .map((component) => component.semanticRole))],
-          { sparse: true },
-        )
+      ? createScaffoldFigmaBlueprint(spec, uniqueRoles(figmaContext.manifest), { sparse: true })
       : await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest, refineNote)
-    // Refine-in-place vs new sibling. A refine (feedback present) reuses the base idempotency key
-    // — with the deterministic sparse scaffold this matches the existing artifact root, so the
-    // scaffold apply is an idempotent no-op and the craft worker RESUMES and edits the already
-    // crafted design instead of piling a fresh root onto the version Page. A plain regenerate (no
-    // feedback) keeps the unique revisionLabel so it produces a new sibling and preserves the old.
-    const editInPlace = Boolean(refineNote)
     const metadata = {
       ...metadataBase,
       idempotencyKey: `figma:${state.id}:spec-v${spec.version}${revisionLabel && !editInPlace ? `:${revisionLabel}` : ''}:${useAgenticWorker ? 'craft' : 'creative'}-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}:${figmaContext.target.targetHash.slice(0, 12)}`,
     }
     try {
-      figmaPlan = createFigmaArtifactPlan(
-        spec,
-        figmaContext.target,
-        figmaContext.manifest,
-        metadata,
-        figmaContext.planMode,
-        creativeBlueprint,
-      )
+      figmaPlan = createFigmaArtifactPlan(spec, figmaContext.target, figmaContext.manifest, metadata, figmaContext.planMode, creativeBlueprint)
     } catch (error) {
       if (useAgenticWorker) throw error
       const feedback = error instanceof Error ? error.message : 'Creative blueprint failed preflight'
-      emitArtifactProgress(state.threadId, {
-        target: 'figma',
-        stage: 'planning',
-        status: 'running',
-        stageElapsedMs: Date.now() - planningStartedAt,
-        totalElapsedMs: Date.now() - planningStartedAt,
-        message: `Design agent đang refine blueprint: ${feedback}`,
-      })
+      emitArtifactProgress(state.threadId, { target: 'figma', stage: 'planning', status: 'running', stageElapsedMs: Date.now() - planningStartedAt, totalElapsedMs: Date.now() - planningStartedAt, message: `Design agent đang refine blueprint: ${feedback}` })
       creativeBlueprint = await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest, feedback)
-      const refinedMetadata = {
-        ...metadataBase,
-        idempotencyKey: `figma:${state.id}:spec-v${spec.version}:creative-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}`,
-      }
-      figmaPlan = createFigmaArtifactPlan(
-        spec,
-        figmaContext.target,
-        figmaContext.manifest,
-        refinedMetadata,
-        figmaContext.planMode,
-        creativeBlueprint,
-      )
+      const refinedMetadata = { ...metadataBase, idempotencyKey: `figma:${state.id}:spec-v${spec.version}:creative-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}` }
+      figmaPlan = createFigmaArtifactPlan(spec, figmaContext.target, figmaContext.manifest, refinedMetadata, figmaContext.planMode, creativeBlueprint)
+    }
+    figmaPreflight = await (figmaContext.connectorMode === 'live'
+      ? new FigmaMcpArtifactConnector(figmaMcp, figmaContext.manifest, figmaContext.target)
+      : new MockFigmaArtifactConnector(figmaContext.manifest, figmaContext.target, { store: mockFigmaStore })
+    ).preflight(figmaPlan)
+    // Blocking Figma issues degrade too (throw → mock fallback) rather than aborting the package.
+    if (!figmaPreflight.allowed) {
+      throw new Error(`Figma preflight blocked: ${figmaPreflight.issues.map((issue) => `${issue.code}: ${issue.message}`).join('; ') || 'unknown'}`)
     }
   } catch (error) {
-    const elapsed = Date.now() - planningStartedAt
-    emitArtifactProgress(state.threadId, {
-      target: 'figma',
-      stage: 'planning',
-      status: 'failed',
-      stageElapsedMs: elapsed,
-      totalElapsedMs: elapsed,
-      message: error instanceof Error ? error.message : 'Creative Figma planning thất bại',
-    })
-    throw error
+    // Figma failed (live capture, blueprint or preflight) — DEGRADE to the offline mock so the
+    // kickoff still ships Jira + Confluence + PRD. The synthetic scaffold is deterministic + valid.
+    const reason = error instanceof Error ? error.message : 'Figma không sẵn sàng'
+    emitArtifactProgress(state.threadId, { target: 'figma', stage: 'planning', status: 'running', stageElapsedMs: Date.now() - planningStartedAt, totalElapsedMs: Date.now() - planningStartedAt, message: `Figma chưa sẵn sàng (${reason}) — chuyển sang bản mock; gói vẫn tạo Jira + Confluence + PRD.` })
+    figmaContext = mockFigmaExecutionContext()
+    useAgenticWorker = false
+    creativeBlueprint = createScaffoldFigmaBlueprint(spec, uniqueRoles(figmaContext.manifest), { sparse: true })
+    const mockMetadata = { ...metadataBase, idempotencyKey: `figma:${state.id}:spec-v${spec.version}:mock-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}` }
+    figmaPlan = createFigmaArtifactPlan(spec, figmaContext.target, figmaContext.manifest, mockMetadata, figmaContext.planMode, creativeBlueprint)
+    figmaPreflight = await new MockFigmaArtifactConnector(figmaContext.manifest, figmaContext.target, { store: mockFigmaStore }).preflight(figmaPlan)
   }
-  const figmaConnector = figmaContext.connectorMode === 'live'
-    ? new FigmaMcpArtifactConnector(figmaMcp, figmaContext.manifest, figmaContext.target)
-    : new MockFigmaArtifactConnector(figmaContext.manifest, figmaContext.target, { store: mockFigmaStore })
-  let figmaPreflight
-  let jiraPreflight
-  let zdocPreflight
-  try {
-    [figmaPreflight, jiraPreflight, zdocPreflight] = await Promise.all([
-      figmaConnector.preflight(figmaPlan),
-      mockJira.preflight(createMockJiraPlan(spec, {
-        runId: state.id, threadId: state.threadId, actionId: jiraAction.id, idempotencyKey: `jira:${state.id}:v${spec.version}`,
-      })),
-      mockZdoc.preflight(createMockZdocPlan(spec, {
-        runId: state.id, threadId: state.threadId, actionId: zdocAction.id, idempotencyKey: `zdoc:${state.id}:v${spec.version}`,
-      })),
-    ])
-    const elapsed = Date.now() - planningStartedAt
-    emitArtifactProgress(state.threadId, {
-      target: 'figma',
-      stage: 'planning',
-      status: 'completed',
-      stageElapsedMs: elapsed,
-      totalElapsedMs: elapsed,
-      message: useAgenticWorker
-        ? `Guarded scaffold sẵn sàng: ${creativeBlueprint.screens.length} màn hình; craft + screenshot/refine sẽ chạy sau approval`
-        : `Creative plan sẵn sàng: ${creativeBlueprint.screens.length} màn hình, ${creativeBlueprint.screens.reduce((sum, screen) => sum + screen.elements.length, 0)} lớp (${figmaContext.connectorMode})`,
-    })
-  } catch (error) {
-    const elapsed = Date.now() - planningStartedAt
-    emitArtifactProgress(state.threadId, {
-      target: 'figma',
-      stage: 'planning',
-      status: 'failed',
-      stageElapsedMs: elapsed,
-      totalElapsedMs: elapsed,
-      message: error instanceof Error ? error.message : 'Figma preflight thất bại',
-    })
-    throw error
-  }
-  if (!figmaPreflight.allowed || !jiraPreflight.allowed || !zdocPreflight.allowed) {
+  // Jira + Confluence are independent of Figma — build them separately so a Figma hiccup can
+  // never block them, and surface only their own blocking issues.
+  const [jiraPreflight, zdocPreflight] = await Promise.all([
+    mockJira.preflight(createMockJiraPlan(spec, {
+      runId: state.id, threadId: state.threadId, actionId: jiraAction.id, idempotencyKey: `jira:${state.id}:v${spec.version}`,
+    })),
+    mockZdoc.preflight(createMockZdocPlan(spec, {
+      runId: state.id, threadId: state.threadId, actionId: zdocAction.id, idempotencyKey: `zdoc:${state.id}:v${spec.version}`,
+    })),
+  ])
+  emitArtifactProgress(state.threadId, {
+    target: 'figma',
+    stage: 'planning',
+    status: 'completed',
+    stageElapsedMs: Date.now() - planningStartedAt,
+    totalElapsedMs: Date.now() - planningStartedAt,
+    message: useAgenticWorker
+      ? `Guarded scaffold sẵn sàng: ${creativeBlueprint.screens.length} màn hình; craft + screenshot/refine sẽ chạy sau approval`
+      : `Plan sẵn sàng: ${creativeBlueprint.screens.length} màn hình (${figmaContext.connectorMode})`,
+  })
+  // Only Jira + Confluence can block the kickoff. Figma is already guaranteed valid (primary
+  // success, or degraded to the always-valid mock), so a Figma issue never fails the package.
+  if (!jiraPreflight.allowed || !zdocPreflight.allowed) {
     const blockingIssues = [
-      ...figmaPreflight.issues.map((issue) => `Figma ${issue.code}: ${issue.message}`),
       ...jiraPreflight.issues.map((issue) => `Jira ${issue.code}: ${issue.message}`),
       ...zdocPreflight.issues.map((issue) => `Zdoc ${issue.code}: ${issue.message}`),
     ].filter(Boolean)
