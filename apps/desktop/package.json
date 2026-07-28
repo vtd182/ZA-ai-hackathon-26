@@ -2,6 +2,7 @@
   "name": "@pm-agent/desktop",
   "version": "0.1.0",
   "private": true,
+  "author": "ZSpector",
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
