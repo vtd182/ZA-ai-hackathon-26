@@ -7,7 +7,26 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "dist": "node ../../scripts/prepare-package-assets.mjs && electron-vite build && electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.zspector.desktop",
+    "productName": "ZSpector",
+    "directories": { "output": "release", "buildResources": "build" },
+    "asarUnpack": ["**/*.node"],
+    "files": ["out/main/**/*", "out/preload/**/*", "out/renderer/**/*", "package.json"],
+    "extraResources": [
+      { "from": "out/package-resources/skill-packs", "to": "skill-packs" },
+      { "from": "../../mcp-tool/za-talk-to-figma/bin/za-talk-to-figma", "to": "figma-runtime/za-talk-to-figma" },
+      { "from": "../../mcp-tool/za-talk-to-figma/plugin", "to": "figma-runtime/plugin" }
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
+      "identity": null
+    }
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.112.5",

@@ -6,3 +6,8 @@ coverage/
 .DS_Store
 .vite/
 
+
+# electron-builder output
+release/
+apps/desktop/release/
+apps/desktop/build/icon.png

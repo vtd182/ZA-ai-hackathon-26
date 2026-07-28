@@ -2182,6 +2182,7 @@ function createWindow(): void {
     minWidth: 1040,
     minHeight: 680,
     show: false,
+    title: 'ZSpector',
     backgroundColor: '#f5f7f8',
     titleBarStyle: 'hiddenInset',
     webPreferences: {
