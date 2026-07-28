@@ -1238,6 +1238,22 @@ function ChatPanel({
           onRegenerate={onRegenerateArtifacts}
         />
       )}
+      {phase === 'IDEA_INTAKE' && collaborationMode !== 'studio' && !reasoning && !preview
+        && messages.some((message) => message.role === 'user') && (
+        <section className="discovery-starter" aria-label="Bắt đầu guided discovery">
+          <div>
+            <strong>Sẵn sàng dẫn dắt theo lựa chọn?</strong>
+            <span>Khởi động guided discovery: khóa 3 clarification (có lựa chọn sẵn) rồi tạo phương án MVP để chọn.</span>
+          </div>
+          <button
+            className="primary-button"
+            disabled={sending || disabled}
+            onClick={() => void onSend('bắt đầu discovery')}
+          >
+            {sending ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />} Bắt đầu Discovery
+          </button>
+        </section>
+      )}
       {reasoning && (reasoning.phase === 'discover' || reasoning.phase === 'decide') && (
         <PhaseReasoningPanel
           reasoning={reasoning}
