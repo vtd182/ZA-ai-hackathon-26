@@ -43,6 +43,8 @@ const api: DesktopApi = {
     approveArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:approve-artifacts', threadId),
     rejectArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:reject-artifacts', threadId),
     showDocument: (threadId) => ipcRenderer.invoke('lifecycle:show-document', threadId),
+    showBacklog: (threadId) => ipcRenderer.invoke('lifecycle:show-backlog', threadId),
+    showZdoc: (threadId) => ipcRenderer.invoke('lifecycle:show-zdoc', threadId),
     onArtifactProgress: (listener) => {
       const handler = (_event: Electron.IpcRendererEvent, progress: ArtifactProgressEvent): void => listener(progress)
       ipcRenderer.on('artifact:progress', handler)

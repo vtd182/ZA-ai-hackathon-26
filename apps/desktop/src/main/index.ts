@@ -470,6 +470,69 @@ function exportMarkdownArtifact(spec: ProductSpec): string {
   return path
 }
 
+function renderJiraBacklogMarkdown(snapshot: Awaited<ReturnType<MockJiraConnector['readBack']>>): string {
+  const stories = snapshot.stories.map((story) => [
+    `### ${story.key} · ${story.title}`,
+    `- Trạng thái: ${story.status}`,
+    `- Requirements: ${story.requirementIds.join(', ')}`,
+    '- Acceptance criteria:',
+    ...story.acceptanceCriteria.map((item) => `  - ${item}`),
+  ].join('\n'))
+  return [
+    `# Backlog — ${snapshot.epic.title}`,
+    `Epic: \`${snapshot.epic.key}\` · Requirements: ${snapshot.epic.requirementIds.join(', ')}`,
+    '',
+    `## User stories (${snapshot.stories.length})`,
+    stories.join('\n\n'),
+    '',
+    '_Mock Jira backlog — dữ liệu sandbox, không ghi ra Jira thật._',
+  ].join('\n')
+}
+
+function renderZdocMarkdown(snapshot: Awaited<ReturnType<MockZdocConnector['readBack']>>): string {
+  const sections = snapshot.requirementSections.map((section) => [
+    `## ${section.requirementId} · ${section.title}`,
+    `Priority: ${section.priority} · Status: ${section.status}`,
+    '',
+    section.description,
+    '',
+    '**Acceptance criteria:**',
+    ...section.acceptanceCriteria.map((item) => `- ${item}`),
+    '',
+    `Screens: ${section.screenIds.join(', ') || '—'} · Stories: ${section.storyIds.join(', ') || '—'}`,
+  ].join('\n'))
+  return [
+    `# ${snapshot.title}`,
+    `ProductSpec v${snapshot.specVersion}`,
+    '',
+    snapshot.summary,
+    '',
+    ...sections,
+    '',
+    '_Mock Confluence/Zdoc document — dữ liệu sandbox, không ghi ra Confluence thật._',
+  ].join('\n')
+}
+
+// Export the mock Jira backlog / Confluence document (already generated + verified into the
+// sandbox store during kickoff) to a readable markdown file so the user can actually SEE them.
+async function exportKickoffSideArtifact(threadId: string, kind: 'backlog' | 'zdoc'): Promise<string> {
+  const state = workspaceFor(threadId).runState
+  const version = state.productSpec.version
+  const base = markdownArtifactPath(state.productSpec).replace(/\.md$/, '')
+  if (kind === 'backlog') {
+    const snapshot = await mockJira.readBack({ idempotencyKey: `jira:${state.id}:v${version}` } as unknown as ActionReceipt)
+    const path = `${base}-backlog.md`
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, renderJiraBacklogMarkdown(snapshot), 'utf8')
+    return path
+  }
+  const snapshot = await mockZdoc.readBack({ idempotencyKey: `zdoc:${state.id}:v${version}` } as unknown as ActionReceipt)
+  const path = `${base}-confluence.md`
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, renderZdocMarkdown(snapshot), 'utf8')
+  return path
+}
+
 function exportThreadBundle(threadId: string): import('@pm-agent/domain').ThreadExportResult {
   const thread = history.getThread(threadId)
   const workspace = workspaceFor(threadId)
@@ -1453,6 +1516,16 @@ function registerIpc(): void {
   ipcMain.handle('lifecycle:show-document', (_event, threadId: string) => {
     const path = markdownArtifactPath(workspaceFor(threadId).runState.productSpec)
     if (!existsSync(path)) throw new Error('PRD Markdown chưa được tạo')
+    shell.showItemInFolder(path)
+  })
+  ipcMain.handle('lifecycle:show-backlog', async (_event, threadId: string) => {
+    const path = await exportKickoffSideArtifact(threadId, 'backlog')
+      .catch(() => { throw new Error('Backlog chưa được tạo — hãy duyệt kickoff package trước.') })
+    shell.showItemInFolder(path)
+  })
+  ipcMain.handle('lifecycle:show-zdoc', async (_event, threadId: string) => {
+    const path = await exportKickoffSideArtifact(threadId, 'zdoc')
+      .catch(() => { throw new Error('Tài liệu Confluence chưa được tạo — hãy duyệt kickoff package trước.') })
     shell.showItemInFolder(path)
   })
   ipcMain.handle('lifecycle:approve-change', async (_event, threadId: string) => {

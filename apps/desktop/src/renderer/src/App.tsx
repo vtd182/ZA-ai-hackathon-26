@@ -772,6 +772,12 @@ export function App(): React.JSX.Element {
         onShowDocument={async () => {
           if (activeThread) await window.pmAgent.lifecycle.showDocument(activeThread.id)
         }}
+        onShowBacklog={async () => {
+          if (activeThread) await window.pmAgent.lifecycle.showBacklog(activeThread.id)
+        }}
+        onShowZdoc={async () => {
+          if (activeThread) await window.pmAgent.lifecycle.showZdoc(activeThread.id)
+        }}
         onExport={async () => {
           if (!activeThread) return
           try {
@@ -1041,6 +1047,8 @@ function ChatPanel({
   onApproveArtifacts,
   onRejectArtifacts,
   onShowDocument,
+  onShowBacklog,
+  onShowZdoc,
   onExport,
 }: {
   messages: ChatMessage[]
@@ -1080,6 +1088,8 @@ function ChatPanel({
   onApproveArtifacts(): Promise<void>
   onRejectArtifacts(): Promise<void>
   onShowDocument(): Promise<void>
+  onShowBacklog(): Promise<void>
+  onShowZdoc(): Promise<void>
   onExport(): Promise<void>
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
@@ -1235,6 +1245,8 @@ function ChatPanel({
           busy={approving || artifactBusy}
           onRetry={onRetry}
           onShowDocument={onShowDocument}
+          onShowBacklog={onShowBacklog}
+          onShowZdoc={onShowZdoc}
           onRegenerate={onRegenerateArtifacts}
         />
       )}
@@ -1665,6 +1677,8 @@ function ExecutionPanel({
   busy,
   onRetry,
   onShowDocument,
+  onShowBacklog,
+  onShowZdoc,
   onRegenerate,
 }: {
   execution?: ExecutionSummary
@@ -1673,6 +1687,8 @@ function ExecutionPanel({
   busy: boolean
   onRetry(target: PlannedAction['target']): Promise<void>
   onShowDocument(): Promise<void>
+  onShowBacklog(): Promise<void>
+  onShowZdoc(): Promise<void>
   onRegenerate(feedback?: string): Promise<void>
 }): React.JSX.Element {
   const labels: Record<PlannedAction['target'], string> = { figma: 'Figma', jira: 'Backlog mock', zdoc: 'PRD Markdown' }
@@ -1739,6 +1755,12 @@ function ExecutionPanel({
         <div className="execution-actions">
           <button className="document-open-button" onClick={() => void onShowDocument()}>
             <FolderOpen size={15} /> Mở PRD.md
+          </button>
+          <button className="document-open-button" onClick={() => void onShowBacklog()}>
+            <FolderOpen size={15} /> Mở backlog
+          </button>
+          <button className="document-open-button" onClick={() => void onShowZdoc()}>
+            <FolderOpen size={15} /> Mở tài liệu Confluence
           </button>
           <button
             className="regenerate-button"

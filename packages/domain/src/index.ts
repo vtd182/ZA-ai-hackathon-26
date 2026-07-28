@@ -325,6 +325,8 @@ export interface DesktopApi {
     approveArtifacts(threadId: string): Promise<ApproveChangeOutput>
     rejectArtifacts(threadId: string): Promise<ApproveChangeOutput>
     showDocument(threadId: string): Promise<void>
+    showBacklog(threadId: string): Promise<void>
+    showZdoc(threadId: string): Promise<void>
     onArtifactProgress(listener: (event: ArtifactProgressEvent) => void): () => void
   }
   figma: {
