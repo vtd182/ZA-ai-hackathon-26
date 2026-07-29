@@ -181,7 +181,7 @@ function outputSchemaFor(request: ReasoningRequest): Record<string, unknown> {
   })
 }
 
-function buildPrompt(request: ReasoningRequest): string {
+function buildPrompt(request: ReasoningRequest, options: { includeSystemPolicy?: boolean } = {}): string {
   const transcript = request.recentMessages
     .slice(-12)
     .map((message) => `${message.role}: ${message.content}`)
@@ -192,9 +192,15 @@ function buildPrompt(request: ReasoningRequest): string {
       .map((item) => `${item.entityId ?? item.shapeId}:${item.label}`)
       .join(' | ') || request.selection.entityId}`
     : 'Canvas không có entity được chọn.'
+  // The routing/conversation pass only needs canvas awareness, not draw-ready detail — cap it far
+  // tighter than the creative pass (which actually renders shapes) to avoid re-billing a full
+  // 80-shape dump on every turn (and twice on draw/edit turns that route then create).
+  const compactCanvas = request.responseMode === 'route'
+  const canvasShapeLimit = compactCanvas ? 40 : 80
+  const canvasContentLines = compactCanvas ? 1 : 4
   const canvas = request.canvas
-    ? `Canvas revision ${request.canvas.revision}, ${request.canvas.shapes.length} shapes:\n${request.canvas.shapes.slice(0, 80).map((shape) => {
-      const details = [shape.description, shape.lane ? `lane=${shape.lane}` : '', ...(shape.content ?? []).slice(0, 4)].filter(Boolean).join(' · ')
+    ? `Canvas revision ${request.canvas.revision}, ${request.canvas.shapes.length} shapes:\n${request.canvas.shapes.slice(0, canvasShapeLimit).map((shape) => {
+      const details = [shape.description, shape.lane ? `lane=${shape.lane}` : '', ...(shape.content ?? []).slice(0, canvasContentLines)].filter(Boolean).join(' · ')
       return `- ${shape.semanticId ?? shape.id} [${shape.type}/${shape.visualRole ?? shape.nodeKind ?? 'free'}] ${shape.label || ''}${details ? ` — ${details}` : ''}`
     }).join('\n') || '- trống'}`
     : 'Canvas chưa có read-back context.'
@@ -223,7 +229,10 @@ Trong message, cho người dùng thấy một giả thuyết hoặc lựa chọ
 Chỉ dùng intent khác conversation khi câu hiện tại yêu cầu hành động rõ ràng. Không tự bắt đầu Discovery, không tự vẽ và không tự chuẩn bị artifact chỉ vì người dùng đang kể một ý tưởng.
 Đưa 0-3 suggestions ngắn, cụ thể theo nội dung vừa trao đổi, khác nhau và hoàn toàn tùy chọn. Suggestions có thể là khám phá thêm, phác trực quan, refine ý tưởng, chốt ProductSpec hoặc chuẩn bị artifact. Không dùng nhãn chung chung kiểu "Tiếp tục" và không biến suggestions thành checklist bắt buộc.`
     : 'Đây là lượt lifecycle có cấu trúc. Hoàn thành đúng phaseData của phase hiện tại.'
-  return `${systemPolicy}\n\n${responseInstruction}\n\nPhase hiện tại: ${request.phase}\n${selection}\n${canvas}\n${diff}\n\nLịch sử gần đây:\n${transcript}\n\nYêu cầu mới:\n${request.message}`
+  // Providers that carry systemPolicy in a native field (Anthropic `system`, Codex
+  // `baseInstructions`) pass includeSystemPolicy:false so it is not billed twice per turn.
+  const policyBlock = options.includeSystemPolicy === false ? '' : `${systemPolicy}\n\n`
+  return `${policyBlock}${responseInstruction}\n\nPhase hiện tại: ${request.phase}\n${selection}\n${canvas}\n${diff}\n\nLịch sử gần đây:\n${transcript}\n\nYêu cầu mới:\n${request.message}`
 }
 
 function parseProviderText(text: string, phase: WorkflowView): PhaseReasoningResult {
@@ -1008,8 +1017,9 @@ class AnthropicProvider implements ReasoningProvider {
         : request.responseMode === 'creative'
           ? 8_000
           : 1_400,
-      system: systemPolicy,
-      messages: [{ role: 'user', content: buildPrompt(request) }],
+      // systemPolicy is static per session → cache it and don't also inline it in the user turn.
+      system: [{ type: 'text', text: systemPolicy, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: buildPrompt(request, { includeSystemPolicy: false }) }],
       output_config: {
         format: { type: 'json_schema', schema: outputSchemaFor(request) },
       },
@@ -1164,7 +1174,9 @@ async function reasonWithCodexAppServer(input: {
     })
     await client.request('turn/start', {
       threadId,
-      input: [{ type: 'text', text: buildPrompt(request), text_elements: [] }],
+      // systemPolicy is already the thread's baseInstructions — omit it here to avoid re-billing
+      // the full policy on every turn/start (and every resume).
+      input: [{ type: 'text', text: buildPrompt(request, { includeSystemPolicy: false }), text_elements: [] }],
       outputSchema: outputSchemaFor(request),
     })
     await completed
