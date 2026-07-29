@@ -26,6 +26,7 @@ export interface FigmaDesignWorkerReport {
   removedRequirementMentions: 0
   visualQaPassed: true
   summary: string
+  remoteRef?: string
 }
 
 export interface FigmaProductTruth {
@@ -73,8 +74,10 @@ export interface FigmaDesignWorkerTask {
   iteration?: number
   qaFeedback?: string[]
   timeoutMs: number
+  remoteRef?: string | null
+  persistRemoteRef?: boolean
   // Optional Codex transport overrides — used to route the craft worker through AgentRouter
-  // (a temp CODEX_HOME whose config.toml points Codex at the AgentRouter Responses provider).
+  // (an app-managed CODEX_HOME whose config.toml points Codex at the AgentRouter Responses provider).
   codexHome?: string
   extraEnv?: Record<string, string>
 }
@@ -362,6 +365,7 @@ export class CodexFigmaDesignWorker {
       let stderr = ''
       let buffer = ''
       let output = ''
+      let activeThreadId: string | null = null
       let screenshotSeen = false
       let toolOrdinal = 0
       const observed: ObservedCraftEvidence = {
@@ -471,7 +475,7 @@ export class CodexFigmaDesignWorker {
               allowZeroZdsInstances: task.plan.source.mode === 'free',
             }, observed)
             emit('completed', report.summary)
-            finish(null, report)
+            finish(null, { ...report, ...(activeThreadId ? { remoteRef: activeThreadId } : {}) })
           } catch (error) {
             finish(error instanceof Error ? error : new Error(String(error)))
           }
@@ -515,17 +519,36 @@ export class CodexFigmaDesignWorker {
             capabilities: null,
           })
           send({ method: 'initialized', params: {} })
-          const started = await request('thread/start', {
-            model: task.modelId,
-            cwd: task.workingDirectory,
-            approvalPolicy: 'on-request',
-            approvalsReviewer: 'user',
-            sandbox: 'read-only',
-            ephemeral: true,
-            baseInstructions: 'Use only the za-talk-to-figma MCP. Shell commands, file changes, other MCP servers and external apps are forbidden.',
-          }) as { thread: { id: string } }
+          activeThreadId = task.remoteRef ?? null
+          if (activeThreadId) {
+            try {
+              await request('thread/resume', {
+                threadId: activeThreadId,
+                model: task.modelId,
+                cwd: task.workingDirectory,
+                approvalPolicy: 'on-request',
+                approvalsReviewer: 'user',
+                sandbox: 'read-only',
+                baseInstructions: 'Use only the za-talk-to-figma MCP. Shell commands, file changes, other MCP servers and external apps are forbidden.',
+              })
+            } catch {
+              activeThreadId = null
+            }
+          }
+          if (!activeThreadId) {
+            const started = await request('thread/start', {
+              model: task.modelId,
+              cwd: task.workingDirectory,
+              approvalPolicy: 'on-request',
+              approvalsReviewer: 'user',
+              sandbox: 'read-only',
+              ephemeral: task.persistRemoteRef !== true,
+              baseInstructions: 'Use only the za-talk-to-figma MCP. Shell commands, file changes, other MCP servers and external apps are forbidden.',
+            }) as { thread: { id: string } }
+            activeThreadId = started.thread.id
+          }
           await request('turn/start', {
-            threadId: started.thread.id,
+            threadId: activeThreadId,
             input: [{ type: 'text', text: buildFigmaDesignWorkerPrompt(task), text_elements: [] }],
             effort: 'high',
             outputSchema: task.skillPack.reportSchema,

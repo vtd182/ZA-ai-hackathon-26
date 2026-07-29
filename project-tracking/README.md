@@ -26,6 +26,7 @@ MVP dùng:
 | [FIGMA_MCP_INTEGRATION.md](FIGMA_MCP_INTEGRATION.md) | Review và kế hoạch mở rộng MCP Figma hiện có | Khi sửa connector/MCP/plugin Figma |
 | [TEST_AND_DEMO_PLAN.md](TEST_AND_DEMO_PLAN.md) | Test matrix, demo script, fallback | Khi thêm behavior hoặc sửa demo |
 | [READINESS_AUDIT.md](READINESS_AUDIT.md) | Evidence map và khoảng trống P0 thực tế | Sau mỗi completion audit lớn |
+| [PRODUCT_SHARPENING_AUDIT.md](PRODUCT_SHARPENING_AUDIT.md) | Product goal, differentiator, ProductSpec clarity, prompt/flow audit và task cards làm nét sản phẩm | Khi sửa chat/ProductSpec/canvas/Figma/prompt để làm nét giá trị |
 | [DECISIONS.md](DECISIONS.md) | Quyết định kiến trúc/sản phẩm đã chốt | Trước hoặc ngay sau quyết định quan trọng |
 | [PROJECT_MEMORY.md](PROJECT_MEMORY.md) | Memory ngắn hạn dài hạn, bug/fix, lưu ý | Cuối mỗi phiên implementation |
 

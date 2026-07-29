@@ -486,6 +486,14 @@
 - **Acceptance:** Figma craft worker no longer relies on `/repo/skills/...` paths at runtime; missing packaged skill packs fail with an actionable error; tests cover dev and packaged resolution; build/package instructions copy `skills/pm-lifecycle-*` into app resources.
 - **Evidence:** `apps/desktop/src/main/skill-packs.ts` resolves the global Figma craft skill pack from `resources/skill-packs` in packaged mode or `skills/` in dev, reads all required skill/reference files, parses the report schema, computes a stable hash and renders embedded prompt content. Figma worker now receives `workingDirectory + skillPack`, uses `userData` as packaged cwd and no longer asks Codex to read repo-relative skill files. `./run.sh build` now runs `pnpm package:assets`, producing `apps/desktop/out/package-resources/skill-packs` for packager extra resources. Targeted skill/worker tests, workspace typecheck/test/build and diff check pass.
 
+### `P0-PROD-001` Product sharpness audit and value clarification
+
+- **Status:** IN_PROGRESS
+- **Depends on:** P0-CRE-001, P0-CAN-009, P0-FIG-014
+- **Deliver:** a product-sharpening audit that defines the agent goal, differentiator, ProductSpec meaning, clear-input path, prompt/guard ownership and priority implementation tasks for follow-up AI agents.
+- **Acceptance:** audit document names what the product is and is not; identifies current flow/prompt/architecture gaps; defines the target end-to-end demo; decomposes fixes into task cards with owners, acceptance criteria and verification; becomes the source checklist for the next implementation slice.
+- **Evidence:** `project-tracking/PRODUCT_SHARPENING_AUDIT.md` created and linked from `project-tracking/README.md`. It defines product goal, differentiator versus a normal agent, ProductSpec mental model, clear-input/ambiguous-input paths, target demo narrative, current audit findings, principles and `P0-SHARP-001..009` task cards. Current implementation slice adds app-owned clear-brief extraction to Draft ProductSpec, visible Draft ProductSpec UI copy/surface labeling, and an app-managed persistent AgentRouter Codex bridge used by chat and Figma craft. Verification: `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, `pnpm exec vitest run packages/agent-core/src/product-spec-synthesis.test.ts`, and `pnpm exec vitest run packages/reasoning/src/index.test.ts apps/desktop/src/main/figma-design-worker.test.ts` pass.
+
 ## Epic E7 - Change synchronization
 
 ### `P0-CHG-001` Change intent and impact preview

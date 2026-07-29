@@ -1493,7 +1493,10 @@ function DeliveryGuide({
   return (
     <section className="delivery-guide" aria-label="Delivery next steps">
       <header>
-        <div><strong>Delivery workspace</strong><span>ProductSpec v{productSpec.version} · {productSpec.status}</span></div>
+        <div>
+          <strong>{productSpec.status === 'draft' ? 'Draft ProductSpec workspace' : 'Delivery workspace'}</strong>
+          <span>ProductSpec v{productSpec.version} · {productSpec.status} · {productSurfaceLabel(productSpec)} · artifact chỉ write sau approval</span>
+        </div>
         <CheckCircle2 size={17} />
       </header>
       <div className="delivery-status">
@@ -1501,7 +1504,7 @@ function DeliveryGuide({
         <span><b>{productSpec.screens.length}</b> Screen</span>
         <span><b>{canvasItemCount}</b> Canvas</span>
       </div>
-      <p>Chọn đầu ra tiếp theo. Agent sẽ báo trước việc đang làm và xác nhận sau khi đọc lại canvas.</p>
+      <p>Đây là truth đang dùng để vẽ flow/prototype và chuẩn bị artifact. Bạn có thể review scope trước khi cho phép Figma/PRD/backlog write.</p>
       <div className="delivery-actions">
         <button disabled={busy} onClick={() => void onSend('Vẽ user flow MVP dựa trên phương án đã chọn')}>
           <Route size={16} /><span><strong>User flow</strong><small>Luồng và nhánh chính</small></span>
@@ -1522,6 +1525,11 @@ function DeliveryGuide({
 
 const PRIORITY_LABEL: Record<string, string> = { must: 'Must', should: 'Should', could: 'Could', wont: "Won't" }
 
+function productSurfaceLabel(productSpec: import('@pm-agent/domain').ProductSpec): string {
+  return productSpec.findings.find((finding) => finding.id === 'FINDING-PRODUCT-SURFACE')?.evidence
+    ?? productSpec.idea.productType
+}
+
 function ProductSpecOverview({
   productSpec,
   onClose,
@@ -1538,7 +1546,7 @@ function ProductSpecOverview({
         <header className="spec-overview-head">
           <div>
             <strong>{productSpec.title}</strong>
-            <span>ProductSpec v{productSpec.version} · {productSpec.status} · {productSpec.idea.productType.toUpperCase()}</span>
+            <span>ProductSpec v{productSpec.version} · {productSpec.status} · {productSurfaceLabel(productSpec).toUpperCase()}</span>
           </div>
           <button className="icon-button" title="Đóng" onClick={onClose}><X size={18} /></button>
         </header>
@@ -1628,8 +1636,8 @@ function ProductSpecInspector({
   return (
     <button className="spec-inspector" aria-label="Mở tổng quan ProductSpec" onClick={onOpen} title="Xem toàn bộ ProductSpec">
       <header>
-        <strong>ProductSpec v{productSpec.version}</strong>
-        <span className="spec-open-hint">{productSpec.status} · Xem chi tiết <Maximize2 size={11} /></span>
+        <strong>{productSpec.status === 'draft' ? 'Draft ProductSpec' : 'ProductSpec'} v{productSpec.version}</strong>
+        <span className="spec-open-hint">{productSurfaceLabel(productSpec)} · source of truth <Maximize2 size={11} /></span>
       </header>
       <div className="spec-metrics">
         <span><b>{productSpec.requirements.filter((item) => item.status !== 'removed').length}</b> Req</span>

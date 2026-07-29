@@ -1,8 +1,8 @@
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
-import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, changeIntentFromCanvasCommand, createHandoffPackage, createImpactPreview, customDecisionOptionId, executeConnectorAction, normalizeClarificationAnswers, rejectActions, resolveRemovalChangeIntent, selectDecisionOption, synthesizeProductSpecFromDecision, type ConnectorExecutionResult } from '@pm-agent/agent-core'
+import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, changeIntentFromCanvasCommand, createHandoffPackage, createImpactPreview, customDecisionOptionId, executeConnectorAction, extractProductBrief, normalizeClarificationAnswers, rejectActions, resolveRemovalChangeIntent, selectDecisionOption, synthesizeProductSpecFromBrief, synthesizeProductSpecFromDecision, type ConnectorExecutionResult } from '@pm-agent/agent-core'
 import { legacyCommandsToCanvasProgram, planDiagramScene, planExplicitCanvasRequest, resolveCanvasSelection, synthesizeProductSpecFromCanvas } from '@pm-agent/canvas'
 import {
   createFigmaArtifactPlan,
@@ -41,6 +41,7 @@ import type {
   ProviderProfile,
   ProviderEvent,
   ProviderIntent,
+  ConversationSuggestion,
   SendChatInput,
   PlannedAction,
   ThreadSummary,
@@ -138,6 +139,30 @@ function deliveryStatusMessage(productSpec: ProductSpec, selectedOption?: string
   return `${prefix}Mình đã tự tổng hợp ProductSpec v${productSpec.version} từ chính cuộc hội thoại: ${requirements} requirement, ${productSpec.screens.length} screen, ${productSpec.stories.length} story.\n\nĐề xuất của mình cho bước tiếp: (1) vẽ user flow ngay để bạn review — gõ “vẽ user flow” hoặc bấm **User flow**; (2) sau đó mình chuẩn bị kickoff package (Figma + PRD.md + backlog mock) và chờ bạn duyệt. Bạn muốn bắt đầu từ đâu?`
 }
 
+function clearBriefDraftMessage(spec: ProductSpec, brief: ReturnType<typeof extractProductBrief>): string {
+  const activeRequirements = spec.requirements.filter((item) => item.status !== 'removed')
+  return [
+    'Mình đọc brief này là đủ rõ, nên bỏ qua guided discovery và tạo ngay Draft ProductSpec để bạn review.',
+    '',
+    `Draft ProductSpec v${spec.version}: ${activeRequirements.length} requirement, ${spec.screens.length} screen, ${spec.stories.length} story.`,
+    `Surface: ${brief?.productSurface ?? spec.idea.productType}. Users: ${spec.idea.targetUsers.join(', ')}.`,
+    `MVP scope: ${activeRequirements.map((item) => item.title).join(' · ')}.`,
+    spec.decisions.some((decision) => decision.id.startsWith('DECISION-OUT-OF-SCOPE'))
+      ? `Out of scope: ${spec.decisions.filter((decision) => decision.id.startsWith('DECISION-OUT-OF-SCOPE')).map((decision) => decision.choice).join(' · ')}.`
+      : '',
+    '',
+    'ProductSpec vẫn đang là draft. Bước tiếp theo hợp lý: vẽ flow để review logic, tạo prototype để review trải nghiệm, hoặc chuẩn bị kickoff package nếu scope đã ổn.',
+  ].filter(Boolean).join('\n')
+}
+
+function clearBriefSuggestions(): ConversationSuggestion[] {
+  return [
+    { id: 'draft-flow', label: 'Vẽ user flow', prompt: '/canvas flow luồng MVP từ Draft ProductSpec hiện tại, bao gồm exception và recovery', kind: 'visualize' },
+    { id: 'draft-prototype', label: 'Vẽ prototype', prompt: '/canvas prototype các màn hình chính từ Draft ProductSpec hiện tại', kind: 'visualize' },
+    { id: 'draft-artifact', label: 'Tạo kickoff package', prompt: '/figma prepare', kind: 'artifact' },
+  ]
+}
+
 // Automatic flow self-critique: surface the logical completeness warnings the linter found so
 // the app flags the same gaps a reviewer would (dead-ends, missing branches, loops with no exit).
 function flowCritiqueSuffix(receipt: CanvasExecutionReceipt): string {
@@ -222,6 +247,12 @@ function skillPackRuntimeRoots(): Parameters<typeof loadFigmaCraftSkillPack>[0] 
 
 function figmaWorkerDirectory(): string {
   return app.isPackaged ? app.getPath('userData') : developmentRepositoryRoot()
+}
+
+function agentRouterCodexHome(): string {
+  const directory = join(app.getPath('userData'), 'codex-homes', 'agentrouter')
+  mkdirSync(directory, { recursive: true })
+  return directory
 }
 
 function workspaceFor(threadId: string): LifecycleWorkspaceState {
@@ -985,20 +1016,20 @@ function withFigmaDesignWorker(
       // Route the craft worker's Codex transport through AgentRouter when the thread runs on it,
       // so the design is crafted by the AgentRouter model instead of a plain Codex login.
       let craftCodexHome: string | null = null
+      let craftRemoteRef: string | null = null
       const craftExtraEnv: Record<string, string> = {}
       if (workerConfig.craftProvider === 'agentrouter') {
         const profileId = typeof workerConfig.providerProfileId === 'string' ? workerConfig.providerProfileId : ''
         const token = (profileId ? secrets.get(profileId) : undefined) || process.env.AGENT_ROUTER_TOKEN || process.env.AGENTROUTER_API_KEY
         if (!token) throw new Error('Figma craft qua AgentRouter cần API key (AGENT_ROUTER_TOKEN) trong Settings.')
-        craftCodexHome = createAgentRouterCodexHome(modelId)
+        craftCodexHome = createAgentRouterCodexHome(modelId, { rootPath: agentRouterCodexHome() })
         craftExtraEnv.AGENT_ROUTER_TOKEN = token
       }
 
-      try {
       for (let iteration = 1; iteration <= maxReviewPasses; iteration += 1) {
         const remainingMs = workerDeadline - Date.now()
         if (remainingMs < 60_000) throw new Error('Figma craft budget đã hết trước independent QA repair pass')
-        await figmaDesignWorker.run({
+        const craftReport = await figmaDesignWorker.run({
           modelId,
           workingDirectory: figmaWorkerDirectory(),
           mcpBinaryPath: figmaRuntimePaths().binaryPath,
@@ -1014,6 +1045,8 @@ function withFigmaDesignWorker(
           productTruth: typedProductTruth,
           ...(workerIconCatalog ? { iconCatalog: workerIconCatalog } : {}),
           ...(craftCodexHome ? { codexHome: craftCodexHome, extraEnv: craftExtraEnv } : {}),
+          ...(craftRemoteRef ? { remoteRef: craftRemoteRef } : {}),
+          persistRemoteRef: Boolean(craftCodexHome),
           iteration,
           ...(qaFeedback ? { qaFeedback } : {}),
           timeoutMs: remainingMs,
@@ -1035,6 +1068,7 @@ function withFigmaDesignWorker(
             })
           },
         })
+        craftRemoteRef = craftReport.remoteRef ?? craftRemoteRef
 
         const audit = await figmaMcp.auditProductCraft({
           target: preflight.plan.source.target,
@@ -1071,9 +1105,6 @@ function withFigmaDesignWorker(
         })
       }
       throw new Error(`Independent Figma craft QA vẫn còn lỗi sau ${maxReviewPasses} pass: ${(qaFeedback ?? []).join('; ')}`)
-      } finally {
-        if (craftCodexHome) rmSync(craftCodexHome, { recursive: true, force: true })
-      }
     },
     readBack: (receipt) => base.readBack(receipt),
     verify: (plan: FigmaPreflightPlan, snapshot: FigmaArtifactSnapshot): Promise<VerificationResult> => base.verify(plan, snapshot),
@@ -1823,11 +1854,12 @@ function registerIpc(): void {
         message: string,
         providerEvents: ProviderEvent[] = [],
         remoteRef?: string | null,
+        suggestions: ConversationSuggestion[] = [],
       ): {
         userMessage: ChatMessage
         assistantMessage: ChatMessage
         commands: []
-        suggestions: []
+        suggestions: ConversationSuggestion[]
         canvasProgram: CanvasProgram
         canvasProgramSource: 'none'
         canvasRequestId: null
@@ -1842,7 +1874,7 @@ function registerIpc(): void {
           userMessage,
           assistantMessage,
           commands: [],
-          suggestions: [],
+          suggestions,
           canvasProgram: { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null },
           canvasProgramSource: 'none',
           canvasRequestId: null,
@@ -1959,6 +1991,35 @@ function registerIpc(): void {
       }
 
       const currentWorkspace = workspaceFor(input.threadId)
+      const clearBrief = !slashCommand
+        && currentWorkspace.runState.status === 'ACTIVE'
+        && currentWorkspace.runState.productSpec.requirements.length === 0
+        ? extractProductBrief(routedContent)
+        : null
+      if (clearBrief?.clarity === 'clear') {
+        const createdAt = timestamp()
+        const productSpec = synthesizeProductSpecFromBrief({
+          current: currentWorkspace.runState.productSpec,
+          threadTitle: thread.title,
+          brief: clearBrief,
+          createdAt,
+        })
+        const nextState: RunState = {
+          ...currentWorkspace.runState,
+          phase: 'DELIVERY',
+          status: 'ACTIVE',
+          productSpec,
+          pendingIntent: null,
+          pendingActions: [],
+          lastCheckpointAt: createdAt,
+        }
+        lifecycle.commitSynthesizedSpec(nextState)
+        history.setThreadPhase(input.threadId, 'deliver')
+        if (thread.title === 'Ý tưởng chưa đặt tên') {
+          history.renameThread(input.threadId, productSpec.title)
+        }
+        return appOwnedReply(clearBriefDraftMessage(productSpec, clearBrief), [], undefined, clearBriefSuggestions())
+      }
       if (currentWorkspace.runState.phase === 'DISCOVERY'
         && currentWorkspace.runState.status === 'ACTIVE'
         && currentWorkspace.reasoning?.phase === 'discover') {
@@ -3255,6 +3316,7 @@ function buildApplicationMenu(): void {
 
 app.whenReady().then(() => {
   const databasePath = join(app.getPath('userData'), 'pm-lifecycle-agent.sqlite')
+  process.env.PM_AGENT_AGENTROUTER_CODEX_HOME ??= agentRouterCodexHome()
   const figmaPaths = figmaRuntimePaths()
   history = new HistoryStore(databasePath)
   lifecycle = new LifecycleStore(databasePath)

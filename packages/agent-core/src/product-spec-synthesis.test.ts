@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createDraftProductSpec, validateProductSpecInvariants, type ChatMessage, type PhaseReasoningResult } from '@pm-agent/domain'
-import { synthesizeProductSpecFromDecision } from './product-spec-synthesis'
+import { extractProductBrief, synthesizeProductSpecFromBrief, synthesizeProductSpecFromDecision } from './product-spec-synthesis'
 
 const at = '2026-07-23T09:00:00.000Z'
 const decision: Extract<PhaseReasoningResult, { phase: 'decide' }> = {
@@ -30,6 +30,39 @@ const messages: ChatMessage[] = [
 ]
 
 describe('decision to ProductSpec synthesis', () => {
+  it('extracts a clear admin dashboard brief and skips generic discovery inputs', () => {
+    const clearBrief = extractProductBrief('Tôi cần admin web dashboard quản lý booking nội bộ cho ops. Có sidebar, bảng booking realtime, filter theo trạng thái, màn xử lý exception, phân quyền admin/staff. MVP chưa cần analytics.')
+    expect(clearBrief).toMatchObject({
+      clarity: 'clear',
+      productSurface: 'admin_dashboard',
+      targetUsers: expect.arrayContaining(['Ops nội bộ']),
+      mvpScope: expect.arrayContaining(['Danh sách dữ liệu chính', 'Tìm kiếm và bộ lọc', 'Xử lý exception và recovery']),
+      outOfScope: ['Analytics'],
+    })
+
+    expect(extractProductBrief('Tôi muốn làm miniapp đặt xe')).toBeNull()
+    expect(extractProductBrief('Vẽ workflow onboarding gồm đăng ký và xác thực')).toBeNull()
+  })
+
+  it('creates a reviewable Draft ProductSpec directly from a clear web brief', () => {
+    const brief = extractProductBrief('Tôi cần admin web dashboard quản lý booking nội bộ cho ops. Có sidebar, bảng booking realtime, filter theo trạng thái, màn xử lý exception, phân quyền admin/staff. MVP chưa cần analytics.')
+    if (!brief) throw new Error('expected clear brief')
+    const spec = synthesizeProductSpecFromBrief({
+      current: createDraftProductSpec('thread-admin', at),
+      threadTitle: 'Ý tưởng chưa đặt tên',
+      brief,
+      createdAt: at,
+    })
+
+    expect(spec.status).toBe('draft')
+    expect(spec.title).toContain('Admin web dashboard')
+    expect(spec.idea.summary).toContain('Out of scope: Analytics')
+    expect(spec.requirements.map((item) => item.id)).toContain('REQ-EXCEPTION-QUEUE')
+    expect(spec.screens.map((item) => item.title)).toContain('Hàng đợi exception')
+    expect(spec.decisions.map((item) => item.id)).toContain('DECISION-CLEAR-BRIEF-DRAFT')
+    expect(validateProductSpecInvariants(spec)).toEqual([])
+  })
+
   it('creates a traceable domain-specific ProductSpec from normal thread context', () => {
     const spec = synthesizeProductSpecFromDecision({
       current: createDraftProductSpec('thread-ride', at),

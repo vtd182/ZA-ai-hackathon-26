@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -181,7 +181,7 @@ function outputSchemaFor(request: ReasoningRequest): Record<string, unknown> {
   })
 }
 
-function buildPrompt(request: ReasoningRequest, options: { includeSystemPolicy?: boolean } = {}): string {
+function buildPrompt(request: ReasoningRequest, options: { includeSystemPolicy?: boolean; includeTranscript?: boolean } = {}): string {
   const transcript = request.recentMessages
     .slice(-12)
     .map((message) => `${message.role}: ${message.content}`)
@@ -232,10 +232,9 @@ Chỉ dùng intent khác conversation khi câu hiện tại yêu cầu hành đ�
   // Providers that carry systemPolicy in a native field (Anthropic `system`, Codex
   // `baseInstructions`) pass includeSystemPolicy:false so it is not billed twice per turn.
   const policyBlock = options.includeSystemPolicy === false ? '' : `${systemPolicy}\n\n`
-  // The creative (draw/edit) pass resumes the SAME stateful thread the routing pass just ran on
-  // (remoteRef set) — that thread already holds the transcript, so re-sending it is pure waste.
-  // Stateless providers (no remoteRef) still get the transcript every call.
-  const includeTranscript = !(request.responseMode === 'creative' && request.remoteRef)
+  // Resume-backed Codex/App Server calls already hold the transcript in the remote thread, so
+  // callers can omit it explicitly. Stateless providers keep the compact recent transcript.
+  const includeTranscript = options.includeTranscript ?? !(request.responseMode === 'creative' && request.remoteRef)
   const transcriptBlock = includeTranscript ? `\n\nLịch sử gần đây:\n${transcript}` : ''
   return `${policyBlock}${responseInstruction}\n\nPhase hiện tại: ${request.phase}\n${selection}\n${canvas}\n${diff}${transcriptBlock}\n\nYêu cầu mới:\n${request.message}`
 }
@@ -872,8 +871,13 @@ function tomlString(value: string): string {
   return JSON.stringify(value)
 }
 
-export function createAgentRouterCodexHome(modelId: string): string {
-  const codexHome = mkdtempSync(join(tmpdir(), 'pm-agent-agentrouter-codex-'))
+export interface AgentRouterCodexHomeOptions {
+  rootPath?: string
+}
+
+export function createAgentRouterCodexHome(modelId: string, options: AgentRouterCodexHomeOptions = {}): string {
+  const codexHome = options.rootPath ?? mkdtempSync(join(tmpdir(), 'pm-agent-agentrouter-codex-'))
+  mkdirSync(codexHome, { recursive: true })
   writeFileSync(join(codexHome, 'config.toml'), [
     `model = ${tomlString(modelId)}`,
     'model_provider = "agentrouter-responses"',
@@ -931,7 +935,9 @@ class AgentRouterProvider implements ReasoningProvider {
   async reason(request: ReasoningRequest, config: ProviderRuntimeConfig, signal: AbortSignal): Promise<ProviderResponse> {
     const apiKey = agentRouterCredential(config.apiKey)
     if (!apiKey) throw new Error('Thiếu credential: AGENT_ROUTER_TOKEN')
-    const codexHome = createAgentRouterCodexHome(config.modelId)
+    const managedCodexHome = process.env.PM_AGENT_AGENTROUTER_CODEX_HOME?.trim()
+    const codexHome = createAgentRouterCodexHome(config.modelId, managedCodexHome ? { rootPath: managedCodexHome } : {})
+    const persistRemoteRef = Boolean(managedCodexHome)
     try {
       return await reasonWithCodexAppServer({
         request,
@@ -942,12 +948,12 @@ class AgentRouterProvider implements ReasoningProvider {
           CODEX_HOME: codexHome,
           AGENT_ROUTER_TOKEN: apiKey,
         },
-        persistRemoteRef: false,
+        persistRemoteRef,
       })
     } catch (error) {
       throw agentRouterError(error, config.modelId)
     } finally {
-      rmSync(codexHome, { recursive: true, force: true })
+      if (!managedCodexHome) rmSync(codexHome, { recursive: true, force: true })
     }
   }
 }
@@ -1133,6 +1139,7 @@ async function reasonWithCodexAppServer(input: {
   try {
     await client.initialize()
     let threadId = persistRemoteRef ? request.remoteRef : null
+    let resumedThread = false
     if (threadId) {
       try {
         await client.request('thread/resume', {
@@ -1143,6 +1150,7 @@ async function reasonWithCodexAppServer(input: {
           sandbox: 'read-only',
           baseInstructions: systemPolicy,
         })
+        resumedThread = true
       } catch {
         threadId = null
       }
@@ -1181,7 +1189,10 @@ async function reasonWithCodexAppServer(input: {
       threadId,
       // systemPolicy is already the thread's baseInstructions — omit it here to avoid re-billing
       // the full policy on every turn/start (and every resume).
-      input: [{ type: 'text', text: buildPrompt(request, { includeSystemPolicy: false }), text_elements: [] }],
+      input: [{ type: 'text', text: buildPrompt(request, {
+        includeSystemPolicy: false,
+        includeTranscript: !resumedThread,
+      }), text_elements: [] }],
       outputSchema: outputSchemaFor(request),
     })
     await completed

@@ -1,5 +1,9 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  createAgentRouterCodexHome,
   createScaffoldFigmaBlueprint,
   DEFAULT_AGENTROUTER_OPENAI_BASE_URL,
   ProviderRegistry,
@@ -52,6 +56,21 @@ describe('mock provider command inference', () => {
   it('rejects the Anthropic-compatible AgentRouter endpoint for the OpenAI-compatible profile', () => {
     expect(() => resolveAgentRouterOpenAIBaseURL('https://agentrouter.org'))
       .toThrow(/OpenAI-compatible.*\/v1/)
+  })
+
+  it('can write a managed AgentRouter Codex home without storing the API key', () => {
+    const root = mkdtempSync(join(tmpdir(), 'pm-agent-agentrouter-home-'))
+    try {
+      const managedHome = join(root, 'managed')
+      expect(createAgentRouterCodexHome('claude-opus-5', { rootPath: managedHome })).toBe(managedHome)
+      const config = readFileSync(join(managedHome, 'config.toml'), 'utf8')
+      expect(config).toContain('model = "claude-opus-5"')
+      expect(config).toContain('base_url = "https://agentrouter.org/v1"')
+      expect(config).toContain('env_key = "AGENT_ROUTER_TOKEN"')
+      expect(config).not.toContain('sk-')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('maps Vietnamese remove-payment intent', () => {
