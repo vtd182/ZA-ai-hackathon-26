@@ -320,6 +320,9 @@ Intent:
   ArtifactBriefs created from the same ProductSpec payload hash. Their snapshots preserve the brief
   and verification fails on `ARTIFACT_BRIEF_MISMATCH`, so a kickoff package cannot silently drift
   between ProductSpec, Figma, backlog and PRD.
+- **Status note 2026-07-30 UI update:** approval UI now shows package-wide `Kickoff contracts`
+  instead of a Figma-only brief. Figma, Backlog mock and PRD.md each display target, mode, surface,
+  output policy, design-system policy, verification count and the ProductSpec hash before approval.
 
 ### `P0-SHARP-004` Split prompt packs by task
 
@@ -363,6 +366,9 @@ Intent:
   card per provider. AgentRouter is explicitly described as reasoning + Figma craft through the
   managed Codex Responses bridge, while external writes stay behind Agent Core approval, Figma MCP
   and read-back. The settings provider list also previews each provider's role.
+- **Status note 2026-07-30 update:** artifact approval no longer hides the non-Figma contracts.
+  The panel names all kickoff briefs before write approval, helping the user see PRD/backlog are
+  governed outputs too, not unchecked side effects.
 
 ### `P0-SHARP-007` Demo script and rehearsal matrix
 

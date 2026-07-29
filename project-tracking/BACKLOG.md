@@ -522,6 +522,11 @@
   Execution progress stage labels now match the governed contract (`ArtifactBrief + plan`, guard
   preflight, write with approval, read-back, verify). Verification: `./run.sh typecheck`,
   `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
+- **Evidence update:** Artifact approval UI now shows package-wide `Kickoff contracts` for every
+  prepared target with an ArtifactBrief, including Figma, Backlog mock and PRD.md. The cards expose
+  mode/surface/output/DS/verification count and ProductSpec hash before approval. Verification:
+  `pnpm exec vitest run apps/desktop/src/renderer/src/artifact-brief-copy.test.ts`,
+  `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
 - **Evidence update:** Renderer error toasts now classify failures by contract (`ProductSpec`,
   `ArtifactBrief`, `Figma MCP`, `Figma craft`, `Read-back verification`, `Provider`, `Canvas`,
   `Runtime`) and show a next action instead of only a raw error string. Verification:

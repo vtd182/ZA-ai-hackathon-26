@@ -1528,6 +1528,16 @@ a:focus-visible,
   text-transform: capitalize;
 }
 
+.artifact-brief-list {
+  display: grid;
+  gap: 7px;
+}
+
+.artifact-brief-list > strong {
+  color: #204b3e;
+  font-size: 10.5px;
+}
+
 .artifact-brief-card {
   display: grid;
   gap: 6px;
@@ -1537,9 +1547,21 @@ a:focus-visible,
   background: #ffffff;
 }
 
-.artifact-brief-card strong {
+.artifact-brief-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.artifact-brief-title b {
   color: #204b3e;
   font-size: 10.5px;
+}
+
+.artifact-brief-title span {
+  color: #78868b;
+  font-size: 9.5px;
 }
 
 .artifact-brief-facts {
