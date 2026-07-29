@@ -453,6 +453,10 @@ Intent:
   target inside Agent Core. The meal-ordering demo starts from an approved Delivery baseline, making
   `Bỏ payment khỏi MVP` demonstrate impact preview -> approved ProductSpec v2 -> verified Figma,
   backlog and PRD sync.
+- **Status note 2026-07-30 slash control update:** `/change remove [target]` and `/scope drop ...`
+  provide a deterministic change-impact path when the user wants exact control instead of intent
+  guessing. The handler is app-owned: it resolves against ProductSpec, stages before/after or
+  ambiguity, and requires approval before any artifact write.
 
 ## 9. Prompt Audit Checklist
 

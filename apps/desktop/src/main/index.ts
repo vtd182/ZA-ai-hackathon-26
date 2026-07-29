@@ -38,7 +38,9 @@ import type {
   ConfigureProviderInput,
   DesktopApi,
   LifecycleWorkspaceState,
+  ChangePreview,
   ProviderProfile,
+  ProviderCommand,
   ProviderEvent,
   ProviderIntent,
   ConversationSuggestion,
@@ -2052,6 +2054,59 @@ function registerIpc(): void {
           canvasProgram: { schemaVersion: 1, mode: 'none' as const, summary: '', operations: [], script: null },
           canvasProgramSource: 'none' as const,
           canvasRequestId: null,
+        }
+      }
+      if (slashCommand?.kind === 'change_remove') {
+        const workspace = workspaceFor(input.threadId)
+        const query = slashCommand.query.trim() || input.selection?.entityId || ''
+        if (!query) {
+          return appOwnedReply(
+            'Hãy nhập target cần loại, ví dụ `/change remove payment` hoặc `/change remove REQ-PAYMENT`. Agent Core sẽ tạo impact preview trước, chưa write artifact.',
+            [],
+            undefined,
+            [{ id: 'change-remove-payment', label: 'Bỏ payment', prompt: '/change remove payment', kind: 'refine' }],
+          )
+        }
+        const commands: ProviderCommand[] = [{ type: 'switch_view', view: 'change' }]
+        let changePreview: ChangePreview | undefined
+        let responseMessage = ''
+        if (workspace.preview) {
+          changePreview = workspace.preview
+          responseMessage = 'Change plan hiện tại vẫn đang chờ duyệt; payload và before/after chưa thay đổi.'
+          commands.unshift({ type: 'focus_card', query: workspace.preview.intent.targetEntityId })
+        } else {
+          const resolution = resolveRemovalChangeIntent(workspace.runState.productSpec, {
+            query,
+            reason: `Slash /change remove ${query}`,
+            ...(input.selection ? { selectedEntityId: input.selection.entityId } : {}),
+          })
+          if (resolution.status === 'needs_user_input') {
+            stageChangeAmbiguity(input.threadId, resolution.ambiguity, timestamp())
+            responseMessage = resolution.ambiguity
+          } else {
+            const target = workspace.runState.productSpec.requirements.find((item) => item.id === resolution.intent.targetEntityId)
+            if (target?.status === 'removed') {
+              responseMessage = `${target.id} đã bị loại khỏi ProductSpec v${workspace.runState.productSpec.version}; không tạo action trùng.`
+              commands.unshift({ type: 'focus_card', query: target.id })
+            } else {
+              const staged = stageChangePreview(input.threadId, resolution.intent, timestamp())
+              changePreview = staged.workspace.preview ?? undefined
+              responseMessage = `Đã tạo impact preview cho ${resolution.intent.targetEntityId}: ${changePreview?.affectedEntityIds.length ?? 0} entity bị ảnh hưởng. Chưa có artifact nào được ghi; hãy review before/after rồi duyệt hoặc từ chối.`
+            }
+          }
+        }
+        const assistantMessage = history.addMessage(input.threadId, 'assistant', responseMessage)
+        history.completeTurn(turnId, 'completed', [])
+        turnFinished = true
+        return {
+          userMessage,
+          assistantMessage,
+          commands,
+          suggestions: [],
+          canvasProgram: { schemaVersion: 1, mode: 'none' as const, summary: '', operations: [], script: null },
+          canvasProgramSource: 'none' as const,
+          canvasRequestId: null,
+          ...(changePreview ? { changePreview } : {}),
         }
       }
       if (slashCommand?.kind === 'figma_status') {

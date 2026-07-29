@@ -8,6 +8,7 @@ export type SlashCommand =
   | { kind: 'figma_regenerate' }
   | { kind: 'figma_refine'; prompt: string }
   | { kind: 'spec_confirm' }
+  | { kind: 'change_remove'; query: string }
   | { kind: 'canvas_flow'; prompt: string }
   | { kind: 'canvas_prototype'; prompt: string }
   | { kind: 'canvas_diagram'; diagram: 'sequence' | 'state' | 'mindmap' | 'er'; prompt: string }
@@ -37,6 +38,9 @@ export function parseSlashCommand(input: string): SlashCommand | null {
   if (namespace === '/spec' || namespace === '/productspec') {
     if (action === 'confirm' || action === 'approve' || action === 'chot') return { kind: 'spec_confirm' }
   }
+  if (namespace === '/change' || namespace === '/scope') {
+    if (action === 'remove' || action === 'drop' || action === 'bo' || action === 'xoa') return { kind: 'change_remove', query: prompt }
+  }
   if (namespace === '/canvas') {
     if (action === 'flow') return { kind: 'canvas_flow', prompt }
     if (action === 'prototype') return { kind: 'canvas_prototype', prompt }
@@ -61,7 +65,7 @@ export function slashHelpMessage(): string {
     '◆ FIGMA — kickoff artifact (Figma + PRD + backlog)',
     '  /figma prepare — tạo & kiểm tra immutable plan, chưa write',
     '  /figma approve — duyệt plan đang chờ và tạo artifact',
-    '  /figma create — prepare nếu chưa có plan, có thì approve & tạo',
+    '  /figma create — prepare nếu chưa có plan, có thì approve, write và read-back',
     '  /figma regenerate — tạo lại một bản thiết kế mới (giữ bản cũ)',
     '  /figma refine [feedback] — agent sửa bản Figma hiện tại theo feedback',
     '  /figma retry — retry riêng Figma sau lỗi',
@@ -77,6 +81,10 @@ export function slashHelpMessage(): string {
     '',
     '◆ SPEC — source of truth',
     '  /spec confirm — chốt Draft ProductSpec trước khi tạo artifact',
+    '',
+    '◆ CHANGE — impact preview, chưa write',
+    '  /change remove [target] — resolve requirement, tạo before/after và chờ duyệt',
+    '  Ví dụ: /change remove payment hoặc /change remove REQ-PAYMENT',
     '',
     '◆ STUDIO — trao đổi & phác thảo',
     '  /studio explore [chủ đề] — mở rộng ý tưởng, không tự vẽ',

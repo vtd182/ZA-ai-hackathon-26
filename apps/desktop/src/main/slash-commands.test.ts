@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseSlashCommand } from './slash-commands'
+import { parseSlashCommand, slashHelpMessage } from './slash-commands'
 
 describe('slash commands', () => {
   it('parses deterministic Figma controls and aliases', () => {
@@ -21,6 +21,12 @@ describe('slash commands', () => {
     expect(parseSlashCommand('/spec confirm')).toEqual({ kind: 'spec_confirm' })
     expect(parseSlashCommand('/productspec approve')).toEqual({ kind: 'spec_confirm' })
     expect(parseSlashCommand('/spec chot')).toEqual({ kind: 'spec_confirm' })
+  })
+
+  it('parses explicit change impact controls', () => {
+    expect(parseSlashCommand('/change remove payment')).toEqual({ kind: 'change_remove', query: 'payment' })
+    expect(parseSlashCommand('/scope drop REQ-PAYMENT')).toEqual({ kind: 'change_remove', query: 'REQ-PAYMENT' })
+    expect(parseSlashCommand('/change bo thanh toán')).toEqual({ kind: 'change_remove', query: 'thanh toán' })
   })
 
   it('parses explicit creative studio modes without guessing from prose', () => {
@@ -60,5 +66,14 @@ describe('slash commands', () => {
     expect(parseSlashCommand('Tạo thiết kế trên Figma')).toBeNull()
     expect(parseSlashCommand('/figma destroy')).toEqual({ kind: 'invalid', command: '/figma destroy' })
     expect(parseSlashCommand('/canvas hologram')).toEqual({ kind: 'invalid', command: '/canvas hologram' })
+  })
+
+  it('explains the governed product loop in slash help', () => {
+    const help = slashHelpMessage()
+
+    expect(help).toContain('◆ CHANGE')
+    expect(help).toContain('/change remove [target]')
+    expect(help).toContain('impact preview')
+    expect(help).toContain('read-back')
   })
 })

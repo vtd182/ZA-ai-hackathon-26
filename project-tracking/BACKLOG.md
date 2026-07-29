@@ -576,6 +576,14 @@
   `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, `PM_AGENT_SMOKE_RESET_COUNT=1 ./run.sh smoke`,
   visual review of `/var/folders/0s/jn8plpxx1hq0d03tywsm69640000gn/T/pm-agent-smoke.png`, and
   `git diff --check` pass.
+- **Evidence update:** Slash commands now include an explicit app-owned change control:
+  `/change remove [target]` (plus `/scope drop ...`). It resolves a requirement inside Agent Core,
+  creates a before/after impact preview or ambiguity prompt, and never calls the provider or writes
+  artifacts before approval. Help copy now frames the governed loop around canvas, ProductSpec,
+  change impact, Figma write and read-back. Verification:
+  `pnpm exec vitest run apps/desktop/src/main/slash-commands.test.ts apps/desktop/src/renderer/src/workflow-state-receipt.test.ts`,
+  `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, `PM_AGENT_SMOKE_RESET_COUNT=1 ./run.sh smoke`,
+  and `git diff --check` pass.
 
 ## Epic E7 - Change synchronization
 

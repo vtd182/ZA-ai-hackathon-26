@@ -76,6 +76,7 @@ const slashCommands = [
   { command: '/canvas mindmap', label: 'Mind map', detail: 'Phân rã tính năng', acceptsPrompt: true },
   { command: '/canvas er', label: 'ER data model', detail: 'Entity + quan hệ', acceptsPrompt: true },
   { command: '/spec confirm', label: 'Chốt ProductSpec', detail: 'Khóa source of truth trước artifact' },
+  { command: '/change remove', label: 'Impact remove', detail: 'Before/after + approval', acceptsPrompt: true },
   { command: '/figma create', label: 'Tạo Figma', detail: 'Kickoff: Figma + PRD + backlog' },
   { command: '/figma refine', label: 'Sửa Figma', detail: 'Agent sửa bản hiện tại theo feedback', acceptsPrompt: true },
   { command: '/figma regenerate', label: 'Figma bản mới', detail: 'Tạo lại thiết kế, giữ bản cũ' },
