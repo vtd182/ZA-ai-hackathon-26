@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="DualMind - Biến ý tưởng thành Zalo Mini App chuẩn-ship.">
+    <meta name="description" content="DualMind — Biến ý tưởng thô thành Zalo Mini App chuẩn-ship: Figma, Jira, Confluence, PRD từ một ProductSpec. Local-first, có duyệt & hash bất biến.">
     <title>DualMind | ZA AI Hackathon</title>
+    <link rel="icon" href="images/icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="css/style.css">
-    
+
     <script>
         (function() {
             try {
@@ -27,20 +28,10 @@
             DualMind
         </a>
         <div class="nav-links">
-            <a href="index.html#features">
-                <span class="lang-en">Features</span>
-                <span class="lang-vi">Tính năng</span>
-            </a>
-            <a href="project.html">
-                <span class="lang-en">Deep Dive</span>
-                <span class="lang-vi">Chi tiết Dự án</span>
-            </a>
-            <a href="guide.html">
-                <span class="lang-en">User Guide</span>
-                <span class="lang-vi">Hướng dẫn</span>
-            </a>
+            <a href="index.html#features"><span class="lang-en">Features</span><span class="lang-vi">Tính năng</span></a>
+            <a href="project.html"><span class="lang-en">Deep Dive</span><span class="lang-vi">Chi tiết Dự án</span></a>
+            <a href="guide.html"><span class="lang-en">User Guide</span><span class="lang-vi">Hướng dẫn</span></a>
             <a href="https://github.com/vtd182/ZA-ai-hackathon-26" target="_blank" rel="noopener noreferrer" class="btn-nav">GitHub</a>
-            
             <div class="controls">
                 <button id="theme-toggle" class="btn-icon" aria-label="Toggle Theme">☀️</button>
                 <button id="lang-toggle" class="btn-icon" aria-label="Toggle Language">🇺🇸 EN</button>
@@ -49,16 +40,16 @@
     </nav>
 
     <main>
-        <!-- HERO SECTION -->
+        <!-- HERO -->
         <section class="hero reveal-on-scroll">
             <div class="hero-content">
                 <h1>
-                    <span class="lang-en">Turn raw ideas into ship-ready Zalo Mini Apps.</span>
-                    <span class="lang-vi">Biến ý tưởng thô thành Zalo Mini App chuẩn-ship.</span>
+                    <span class="lang-en">Turn a raw idea into a ship-ready Zalo Mini App kickoff.</span>
+                    <span class="lang-vi">Biến một ý tưởng thô thành gói khởi động Zalo Mini App chuẩn-ship.</span>
                 </h1>
                 <p>
-                    <span class="lang-en">Meet <strong>DualMind</strong>. Experience the true synergy of Human ingenuity and AI precision. Together, as two minds in sync, you design the logic while the Agent crafts the Figma UI and specs.</span>
-                    <span class="lang-vi">Khám phá <strong>DualMind</strong> — Trải nghiệm sức mạnh cộng hưởng giữa tư duy Con người và độ chuẩn xác của AI. Bạn định hình Logic cốt lõi, phần còn lại hãy để DualMind lo.</span>
+                    <span class="lang-en"><strong>DualMind</strong> is a local-first PM workspace. You steer the logic through clickable choices; the Agent drafts the user-flow, self-critiques it, then crafts Figma, Jira, Confluence and a PRD — from a single ProductSpec. Every external write is gated by approval + an immutable hash.</span>
+                    <span class="lang-vi"><strong>DualMind</strong> là workspace PM chạy hoàn toàn trên máy. Bạn định hình logic bằng các lựa chọn bấm được; Agent dựng user-flow, tự phản biện, rồi craft Figma, Jira, Confluence và PRD — tất cả từ một ProductSpec duy nhất. Mọi ghi ra ngoài đều qua duyệt + hash bất biến.</span>
                 </p>
                 <div class="cta-group">
                     <a href="https://github.com/vtd182/ZA-ai-hackathon-26/releases/latest" target="_blank" rel="noopener noreferrer" class="btn-primary">
@@ -67,114 +58,149 @@
                         <span class="lang-vi">Tải Ứng dụng</span>
                     </a>
                     <a href="project.html" class="btn-secondary">
-                        <span class="lang-en">Read Deep Dive</span>
-                        <span class="lang-vi">Xem phân tích kỹ thuật</span>
+                        <span class="lang-en">See how it works</span>
+                        <span class="lang-vi">Xem cách vận hành</span>
                     </a>
                 </div>
             </div>
-            
             <div class="hero-visual">
                 <img src="images/hero_demo.png" alt="DualMind Interface" style="width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
             </div>
         </section>
 
-        <!-- TRUSTED BY -->
-        <section class="trusted-by reveal-on-scroll">
-            <p class="trust-label">
-                <span class="lang-en">GENERATES A COMPLETE KICKOFF PACKAGE FOR</span>
-                <span class="lang-vi">TỰ ĐỘNG KHỞI TẠO BỘ TÀI LIỆU KHỞI ĐỘNG CHO</span>
-            </p>
-            <div class="logo-wall">
-                <img src="https://cdn.simpleicons.org/jira/ffffff" alt="Jira">
-                <img src="https://cdn.simpleicons.org/figma/ffffff" alt="Figma">
-                <img src="https://cdn.simpleicons.org/confluence/ffffff" alt="Confluence">
-                <img src="https://cdn.simpleicons.org/zalo/ffffff" alt="Zalo">
+        <!-- STATS -->
+        <section class="stat-row reveal-on-scroll">
+            <div class="stat">
+                <div class="stat-num">1 → 4</div>
+                <div class="stat-label"><span class="lang-en">One ProductSpec → Figma, Jira, Confluence &amp; PRD</span><span class="lang-vi">Một ProductSpec → Figma, Jira, Confluence &amp; PRD</span></div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">0</div>
+                <div class="stat-label"><span class="lang-en">API keys needed to run (offline mock)</span><span class="lang-vi">API key cần để chạy (mock offline)</span></div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">6</div>
+                <div class="stat-label"><span class="lang-en">AI providers, switchable mid-session</span><span class="lang-vi">Nhà cung cấp AI, đổi giữa phiên</span></div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">100%</div>
+                <div class="stat-label"><span class="lang-en">Local-first · data stays in SQLite on your machine</span><span class="lang-vi">Local-first · dữ liệu lưu SQLite trên máy bạn</span></div>
             </div>
         </section>
 
-        <!-- FEATURES BENTO GRID -->
+        <!-- LIFECYCLE -->
+        <section class="lifecycle reveal-on-scroll">
+            <div class="section-header">
+                <h2><span class="lang-en">One guided path: Idea → Delivery.</span><span class="lang-vi">Một hành trình có dẫn dắt: Ý tưởng → Thực thi.</span></h2>
+            </div>
+            <div class="lifecycle-steps">
+                <div class="lifecycle-step">
+                    <div class="step-num">1</div>
+                    <h4><span class="lang-en">Idea</span><span class="lang-vi">Ý tưởng</span></h4>
+                    <p><span class="lang-en">Describe the idea in the chat — no forms.</span><span class="lang-vi">Mô tả ý tưởng ngay trong chat — không form.</span></p>
+                </div>
+                <div class="lifecycle-step">
+                    <div class="step-num">2</div>
+                    <h4><span class="lang-en">Discovery</span><span class="lang-vi">Khám phá</span></h4>
+                    <p><span class="lang-en">3 clickable clarifications lock the scope.</span><span class="lang-vi">3 clarification bấm được để chốt scope.</span></p>
+                </div>
+                <div class="lifecycle-step">
+                    <div class="step-num">3</div>
+                    <h4><span class="lang-en">Decision</span><span class="lang-vi">Quyết định</span></h4>
+                    <p><span class="lang-en">Pick one MVP option → a ProductSpec.</span><span class="lang-vi">Chọn một phương án MVP → ProductSpec.</span></p>
+                </div>
+                <div class="lifecycle-step">
+                    <div class="step-num">4</div>
+                    <h4><span class="lang-en">Delivery</span><span class="lang-vi">Delivery</span></h4>
+                    <p><span class="lang-en">Draw &amp; self-critique the flow on canvas.</span><span class="lang-vi">Vẽ &amp; tự phản biện flow trên canvas.</span></p>
+                </div>
+                <div class="lifecycle-step">
+                    <div class="step-num">5</div>
+                    <h4><span class="lang-en">Kickoff</span><span class="lang-vi">Kickoff</span></h4>
+                    <p><span class="lang-en">Craft Figma + Jira + Confluence + PRD.</span><span class="lang-vi">Sinh Figma + Jira + Confluence + PRD.</span></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- FEATURES BENTO -->
         <section class="features reveal-on-scroll" id="features">
             <div class="section-header">
-                <h2>
-                    <span class="lang-en">Guided product discovery, from Idea to Delivery.</span>
-                    <span class="lang-vi">Dẫn dắt quy trình phát triển, từ Ý tưởng đến Thực thi.</span>
-                </h2>
+                <h2><span class="lang-en">Everything a PM needs to go from talk to artifacts.</span><span class="lang-vi">Tất cả những gì một PM cần, từ trò chuyện đến artifact.</span></h2>
             </div>
-            
+
             <div class="bento-grid">
-                <div class="bento-cell cell-large dark-surface">
-                    <h3>
-                        <span class="lang-en">Automated Figma Crafting</span>
-                        <span class="lang-vi">Tự động hóa Vẽ giao diện Figma</span>
-                    </h3>
-                    <p>
-                        <span class="lang-en">Connect to a Zalo Design System (ZDS) reference file, and our Agentic Craft Worker will generate real, clickable prototypes directly inside Figma, strictly following ZDS guidelines.</span>
-                        <span class="lang-vi">Chỉ cần nối với file chuẩn Zalo Design System (ZDS), Agent sẽ tự động vẽ ra các bản thiết kế thực thụ trên Figma, thậm chí tự tạo prototype điều hướng có thể bấm được với các component chuẩn chỉnh của Zalo.</span>
-                    </p>
+                <div class="bento-cell dark-surface">
+                    <h3><span class="lang-en">Guided by choices</span><span class="lang-vi">Dẫn dắt bằng lựa chọn</span></h3>
+                    <p><span class="lang-en">No open-ended chatbot fatigue. The agent locks scope with clickable clarifications and MVP options, so decisions converge fast and consistently.</span><span class="lang-vi">Không mệt mỏi với chatbot hỏi mở. Agent khóa scope bằng clarification và phương án MVP bấm được, nên quyết định hội tụ nhanh và nhất quán.</span></p>
                 </div>
                 <div class="bento-cell accent-surface">
-                    <h3>
-                        <span class="lang-en">Self-Critiquing Canvas</span>
-                        <span class="lang-vi">Bảng vẽ Vô cực Tự Phản biện</span>
-                    </h3>
-                    <p>
-                        <span class="lang-en">The logical flow linter analyzes your user journey on the Infinity Canvas. It automatically flags dead ends, missing decision branches, and infinite loops.</span>
-                        <span class="lang-vi">Tính năng linter logic chạy ngầm trên Bảng vẽ Vô cực sẽ soi xét biểu đồ người dùng của bạn, tự động gắn cờ cảnh báo các ngõ cụt, nhánh thiếu logic, hay vòng lặp vô tận.</span>
-                    </p>
+                    <h3><span class="lang-en">Self-critiquing canvas</span><span class="lang-vi">Canvas tự phản biện</span></h3>
+                    <p><span class="lang-en">A logical-flow linter treats your user journey as a directed graph and flags dead ends, missing decision branches and infinite loops — before any design or code.</span><span class="lang-vi">Linter logic coi user journey như đồ thị có hướng, tự tô đỏ ngõ cụt, nhánh thiếu điều kiện và vòng lặp vô tận — trước khi đụng thiết kế hay code.</span></p>
                 </div>
                 <div class="bento-cell dark-surface">
-                    <h3>
-                        <span class="lang-en">Interactive Choices</span>
-                        <span class="lang-vi">Dẫn dắt bằng Lựa chọn</span>
-                    </h3>
-                    <p>
-                        <span class="lang-en">No open-ended chatbot fatigue. The agent guides you through the Discovery phase using actionable, clickable choices to build the MVP efficiently.</span>
-                        <span class="lang-vi">Không còn cảnh mệt mỏi với Chatbot hỏi mở. Agent dẫn dắt bạn qua các giai đoạn Khám phá (Discovery) bằng những lựa chọn có sẵn, giúp chốt phương án MVP một cách cực kỳ nhanh chóng.</span>
-                    </p>
+                    <h3><span class="lang-en">ZDS Figma crafting</span><span class="lang-vi">Craft Figma chuẩn ZDS</span></h3>
+                    <p><span class="lang-en">An agentic craft worker reads Zalo Design System components and builds real, clickable Figma prototypes with prototype wiring — right inside your file.</span><span class="lang-vi">Craft worker đọc component Zalo Design System và dựng prototype Figma thật, bấm được, có nối điều hướng — ngay trong file của bạn.</span></p>
                 </div>
                 <div class="bento-cell dark-surface">
-                    <h3>
-                        <span class="lang-en">Multi-Artifact Output</span>
-                        <span class="lang-vi">Khởi tạo Đa Tài liệu</span>
-                    </h3>
-                    <p>
-                        <span class="lang-en">From a single ProductSpec, DualMind generates a complete kickoff package: Figma designs, Jira backlogs, Confluence docs, and Markdown PRDs.</span>
-                        <span class="lang-vi">Chỉ từ một ProductSpec duy nhất, DualMind sinh ra trọn bộ gói khởi động dự án: Thiết kế Figma, Backlog Jira, Tài liệu Confluence, và bản PRD Markdown sắc nét.</span>
-                    </p>
+                    <h3><span class="lang-en">One spec, four artifacts</span><span class="lang-vi">Một spec, bốn artifact</span></h3>
+                    <p><span class="lang-en">From a single ProductSpec, DualMind generates Figma designs, a Jira backlog, Confluence docs and a Markdown PRD — reviewable in-app before you export.</span><span class="lang-vi">Từ một ProductSpec, DualMind sinh thiết kế Figma, backlog Jira, tài liệu Confluence và PRD Markdown — xem lại ngay trong app trước khi export.</span></p>
+                </div>
+                <div class="bento-cell dark-surface">
+                    <h3><span class="lang-en">Governed writes</span><span class="lang-vi">Ghi ra ngoài có kiểm soát</span></h3>
+                    <p><span class="lang-en">Every external write needs your approval, carries an immutable payload hash, and is verified by read-back. Targets are independent — one failing never breaks the rest.</span><span class="lang-vi">Mọi ghi ra ngoài đều cần bạn duyệt, gắn payload hash bất biến, và verify bằng read-back. Các target độc lập — một cái lỗi không kéo sập phần còn lại.</span></p>
+                </div>
+                <div class="bento-cell dark-surface">
+                    <h3><span class="lang-en">Local-first &amp; provider-agnostic</span><span class="lang-vi">Local-first &amp; đa provider</span></h3>
+                    <p><span class="lang-en">Runs fully offline on a deterministic mock — no API key required. Or switch between Mock, Codex, OpenAI, Gemini, Claude and AgentRouter mid-session without losing context.</span><span class="lang-vi">Chạy hoàn toàn offline bằng mock deterministic — không cần API key. Hoặc đổi giữa Mock, Codex, OpenAI, Gemini, Claude, AgentRouter ngay giữa phiên mà không mất ngữ cảnh.</span></p>
                 </div>
             </div>
-            
+
             <div class="features-footer">
-                <a href="project.html" class="link-arrow">
-                    <span class="lang-en">Read the full architectural deep dive &rarr;</span>
-                    <span class="lang-vi">Khám phá chi tiết cấu trúc kiến trúc kỹ thuật của DualMind &rarr;</span>
-                </a>
+                <a href="project.html" class="link-arrow"><span class="lang-en">Read the full architectural deep dive &rarr;</span><span class="lang-vi">Đọc phân tích kiến trúc chi tiết &rarr;</span></a>
+            </div>
+        </section>
+
+        <!-- GOVERNANCE CALLOUT -->
+        <section class="callout reveal-on-scroll">
+            <h2><span class="lang-en">Ship fast, without shipping mistakes.</span><span class="lang-vi">Nhanh, nhưng không ẩu.</span></h2>
+            <p><span class="lang-en">DualMind is built for real teams: nothing leaves your machine until you approve it, and what gets written is exactly what you saw.</span><span class="lang-vi">DualMind làm cho team thật: không gì rời khỏi máy bạn cho tới khi bạn duyệt, và thứ được ghi ra đúng bằng thứ bạn đã thấy.</span></p>
+            <div class="callout-grid">
+                <div><strong><span class="lang-en">Human approval</span><span class="lang-vi">Có duyệt</span></strong><span><span class="lang-en">Every Figma / Jira / Confluence / PRD write waits for a click.</span><span class="lang-vi">Mọi ghi Figma / Jira / Confluence / PRD đều chờ một cú bấm.</span></span></div>
+                <div><strong><span class="lang-en">Immutable hash</span><span class="lang-vi">Hash bất biến</span></strong><span><span class="lang-en">The approved payload is hashed; changing it invalidates approval.</span><span class="lang-vi">Payload đã duyệt được hash; đổi payload là mất duyệt.</span></span></div>
+                <div><strong><span class="lang-en">Read-back verify</span><span class="lang-vi">Read-back verify</span></strong><span><span class="lang-en">Each target is read back after writing to confirm it landed.</span><span class="lang-vi">Mỗi target được đọc lại sau khi ghi để xác nhận đã vào.</span></span></div>
+                <div><strong><span class="lang-en">Figma-optional</span><span class="lang-vi">Không cần Figma</span></strong><span><span class="lang-en">No Figma? It degrades gracefully — Jira, Confluence &amp; PRD still ship.</span><span class="lang-vi">Không có Figma? Tự hạ mượt — Jira, Confluence &amp; PRD vẫn ra đủ.</span></span></div>
+            </div>
+        </section>
+
+        <!-- KICKOFF TARGETS -->
+        <section class="trusted-by reveal-on-scroll">
+            <p class="trust-label"><span class="lang-en">ONE PRODUCTSPEC, A COMPLETE KICKOFF PACKAGE FOR</span><span class="lang-vi">MỘT PRODUCTSPEC, TRỌN GÓI KHỞI ĐỘNG CHO</span></p>
+            <div class="logo-wall">
+                <img src="https://cdn.simpleicons.org/figma/ffffff" alt="Figma">
+                <img src="https://cdn.simpleicons.org/jira/ffffff" alt="Jira">
+                <img src="https://cdn.simpleicons.org/confluence/ffffff" alt="Confluence">
+                <img src="https://cdn.simpleicons.org/zalo/ffffff" alt="Zalo">
             </div>
         </section>
 
         <!-- FINAL CTA -->
         <section class="final-cta reveal-on-scroll">
             <div class="cta-box">
-                <h2>
-                    <span class="lang-en">Install DualMind today.</span>
-                    <span class="lang-vi">Tải và cài đặt DualMind ngay hôm nay.</span>
-                </h2>
+                <h2><span class="lang-en">Install DualMind today.</span><span class="lang-vi">Cài đặt DualMind ngay hôm nay.</span></h2>
                 <div class="cta-group">
                     <a href="https://github.com/vtd182/ZA-ai-hackathon-26/releases/latest" target="_blank" rel="noopener noreferrer" class="btn-primary btn-large">
                         <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                         <span class="lang-en">Download App (.dmg / .exe)</span>
                         <span class="lang-vi">Tải Ứng dụng (.dmg / .exe)</span>
                     </a>
+                    <a href="guide.html" class="btn-secondary"><span class="lang-en">Read the setup guide</span><span class="lang-vi">Xem hướng dẫn cài đặt</span></a>
                 </div>
             </div>
         </section>
     </main>
 
     <footer class="site-footer">
-        <p>
-            <span class="lang-en">&copy; 2026 ZA AI Hackathon - Team 3. Crafted with precision.</span>
-            <span class="lang-vi">&copy; 2026 ZA AI Hackathon - Đội 3. Xây dựng bằng sự tỉ mỉ.</span>
-        </p>
+        <p><span class="lang-en">&copy; 2026 ZA AI Hackathon - Team 3. Crafted with precision.</span><span class="lang-vi">&copy; 2026 ZA AI Hackathon - Đội 3. Xây dựng bằng sự tỉ mỉ.</span></p>
     </footer>
 
     <script src="js/script.js"></script>

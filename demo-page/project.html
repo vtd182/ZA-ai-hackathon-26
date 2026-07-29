@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Project Deep Dive: DualMind.">
+    <meta name="description" content="DualMind Deep Dive — lifecycle state machine, self-critiquing canvas, ZDS Figma crafting, governed writes, local-first & provider-agnostic.">
     <title>Deep Dive | DualMind</title>
+    <link rel="icon" href="images/icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="css/style.css">
-    
+
     <script>
         (function() {
             try {
@@ -19,22 +20,14 @@
             } catch (e) {}
         })();
     </script>
-    
+
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
             const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
             let currentTheme = localStorage.getItem('theme') || (prefersDark ? 'dark' : 'light');
-            
-            mermaid.initialize({
-                startOnLoad: true,
-                theme: currentTheme === 'dark' ? 'dark' : 'default',
-                fontFamily: 'Gilroy, sans-serif'
-            });
-
-            document.querySelectorAll('.mermaid').forEach(el => {
-                el.setAttribute('data-original', el.innerHTML);
-            });
+            mermaid.initialize({ startOnLoad: true, theme: currentTheme === 'dark' ? 'dark' : 'default', fontFamily: 'Gilroy, sans-serif' });
+            document.querySelectorAll('.mermaid').forEach(el => { el.setAttribute('data-original', el.innerHTML); });
         });
     </script>
 </head>
@@ -45,20 +38,10 @@
             DualMind
         </a>
         <div class="nav-links">
-            <a href="index.html#features">
-                <span class="lang-en">Features</span>
-                <span class="lang-vi">Tính năng</span>
-            </a>
-            <a href="project.html" class="active">
-                <span class="lang-en">Deep Dive</span>
-                <span class="lang-vi">Chi tiết Dự án</span>
-            </a>
-            <a href="guide.html">
-                <span class="lang-en">User Guide</span>
-                <span class="lang-vi">Hướng dẫn</span>
-            </a>
+            <a href="index.html#features"><span class="lang-en">Features</span><span class="lang-vi">Tính năng</span></a>
+            <a href="project.html" class="active"><span class="lang-en">Deep Dive</span><span class="lang-vi">Chi tiết Dự án</span></a>
+            <a href="guide.html"><span class="lang-en">User Guide</span><span class="lang-vi">Hướng dẫn</span></a>
             <a href="https://github.com/vtd182/ZA-ai-hackathon-26" target="_blank" rel="noopener noreferrer" class="btn-nav">GitHub</a>
-            
             <div class="controls">
                 <button id="theme-toggle" class="btn-icon" aria-label="Toggle Theme">☀️</button>
                 <button id="lang-toggle" class="btn-icon" aria-label="Toggle Language">🇺🇸 EN</button>
@@ -69,116 +52,96 @@
     <main class="article-page">
         <article class="deep-dive-content">
             <header class="article-header reveal-on-scroll">
-                <p class="eyebrow">
-                    <span class="lang-en">PROJECT DEEP DIVE</span>
-                    <span class="lang-vi">PHÂN TÍCH CHUYÊN SÂU</span>
-                </p>
-                <h1>
-                    <span class="lang-en">How DualMind orchestrates the Product Lifecycle.</span>
-                    <span class="lang-vi">Cách DualMind điều phối toàn bộ vòng đời Sản phẩm.</span>
-                </h1>
-                <p class="subtitle">
-                    <span class="lang-en">An in-depth look at the architecture, the local-first execution model, and the Figma Crafting worker behind DualMind.</span>
-                    <span class="lang-vi">Góc nhìn sâu sắc về kiến trúc ứng dụng cục bộ (local-first) và hệ thống Agentic Figma Crafting phía sau DualMind.</span>
-                </p>
+                <p class="eyebrow"><span class="lang-en">PROJECT DEEP DIVE</span><span class="lang-vi">PHÂN TÍCH CHUYÊN SÂU</span></p>
+                <h1><span class="lang-en">How DualMind turns a conversation into governed artifacts.</span><span class="lang-vi">Cách DualMind biến một cuộc trò chuyện thành artifact có kiểm soát.</span></h1>
+                <p class="subtitle"><span class="lang-en">A controlled lifecycle, a self-critiquing canvas, a ZDS Figma craft worker, and a governance layer where nothing leaves your machine without approval — all local-first.</span><span class="lang-vi">Một vòng đời có kiểm soát, canvas tự phản biện, craft worker Figma chuẩn ZDS, và một lớp governance — không gì rời máy bạn nếu chưa duyệt — tất cả local-first.</span></p>
             </header>
 
+            <!-- Full pipeline -->
             <section class="article-section reveal-on-scroll">
-                <h2>
-                    <span class="lang-en">1. Idea → Discovery → Decision → Delivery</span>
-                    <span class="lang-vi">1. Từ Ý tưởng đến Thực thi</span>
-                </h2>
-                <p>
-                    <span class="lang-en">DualMind is not an open-ended chatbot. It relies on a controlled lifecycle state machine. When a PM inputs an idea, the agent triggers a guided flow. Instead of chatting aimlessly, it presents 3 selectable clarification paths leading directly to an MVP proposal. Once decided, it generates a comprehensive ProductSpec on the Infinity Canvas.</span>
-                    <span class="lang-vi">DualMind không phải là một con Chatbot mở mông lung. Nó được kiểm soát bởi một cỗ máy trạng thái (State Machine) chặt chẽ. Khi PM nhập ý tưởng, Agent sẽ kích hoạt luồng "Discovery". Thay vì chat tự do, nó đưa ra 3 hướng khai thác có sẵn (lựa chọn bấm được) để dẫn dắt ra phương án MVP tối ưu. Sau khi chốt phương án, nó dựng toàn bộ bản ProductSpec lên Bảng vẽ Vô cực.</span>
-                </p>
-                
+                <h2><span class="lang-en">The pipeline at a glance</span><span class="lang-vi">Toàn cảnh pipeline</span></h2>
+                <div class="mermaid-wrapper">
+                    <div class="mermaid">
+                        graph TD
+                            Idea[Idea] --> A(Lifecycle Agent)
+                            A -->|Guided choices| B[Discovery + Decision]
+                            B --> C[(ProductSpec · local SQLite)]
+                            C -->|Promote &amp; self-critique| D[Infinity Canvas + Flow Linter]
+                            C --> E{{Kickoff plan}}
+                            E -->|Immutable payload hash| F{Human approval}
+                            F -->|Approve| G[Figma Craft Worker · ZDS]
+                            F -->|Approve| H[Jira backlog]
+                            F -->|Approve| I[Confluence doc]
+                            F -->|Approve| J[PRD.md]
+                            G -->|read-back verify| K((Verified))
+                            H --> K
+                            I --> K
+                            J --> K
+                    </div>
+                </div>
+            </section>
+
+            <section class="article-section reveal-on-scroll">
+                <h2><span class="lang-en">1. A controlled lifecycle, guided by choices</span><span class="lang-vi">1. Vòng đời có kiểm soát, dẫn bằng lựa chọn</span></h2>
+                <p><span class="lang-en">DualMind is not an open-ended chatbot — it runs a lifecycle state machine: <strong>Idea → Discovery → Decision → Delivery</strong>. Instead of aimless chat, it locks scope with three clickable clarifications, then a small set of MVP options. A deterministic <strong>"next step"</strong> control lets you advance the phase yourself, so the flow never stalls waiting for the model to volunteer.</span><span class="lang-vi">DualMind không phải chatbot mở — nó chạy một cỗ máy trạng thái: <strong>Ý tưởng → Khám phá → Quyết định → Delivery</strong>. Thay vì chat lan man, nó khóa scope bằng ba clarification bấm được, rồi vài phương án MVP. Nút <strong>"Sang bước tiếp"</strong> deterministic cho phép bạn tự chuyển bước, nên luồng không bao giờ kẹt chờ model tự quyết.</span></p>
                 <div class="large-media">
                     <img src="images/hero_demo.png" alt="DualMind Guided Discovery" style="width: 100%; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                 </div>
             </section>
 
             <section class="article-section reveal-on-scroll">
-                <h2>
-                    <span class="lang-en">2. Infinity Canvas & Self-Critique</span>
-                    <span class="lang-vi">2. Bảng vẽ Vô cực và Linter Logic</span>
-                </h2>
-                <p>
-                    <span class="lang-en">DualMind visualizes the user flow using a semantic dagre layout. But it goes further: it treats your workflow as a directed graph and runs a <strong>Logical Flow Linter</strong>. It actively flags dead ends, branches without decisions, or infinite loops directly on the canvas, ensuring the logic is bulletproof before any design or code is written.</span>
-                    <span class="lang-vi">DualMind trình bày luồng người dùng (User Flow) bằng thuật toán layout dagre có định hướng ngữ nghĩa. Hơn thế nữa, nó coi toàn bộ luồng làm việc của bạn như một đồ thị có hướng và chạy <strong>Logical Flow Linter</strong>. Nó sẽ tự động tô đỏ các ngõ cụt, các nhánh thiếu điều kiện, hay những vòng lặp vô tận ngay trên Bảng vẽ. Mọi lỗ hổng logic đều được bít kín trước khi chuyển qua thiết kế và code.</span>
-                </p>
-                
+                <h2><span class="lang-en">2. Infinity Canvas &amp; self-critique</span><span class="lang-vi">2. Bảng vẽ Vô cực &amp; tự phản biện</span></h2>
+                <p><span class="lang-en">The user flow is laid out with a semantic dagre layout, then treated as a directed graph. A <strong>Logical Flow Linter</strong> flags dead ends, branches without decisions, and infinite loops right on the canvas. Select any node and chat about just that region — logic gets bulletproof before design or code.</span><span class="lang-vi">User flow được bố cục bằng thuật toán dagre ngữ nghĩa, rồi coi như một đồ thị có hướng. <strong>Logical Flow Linter</strong> tô đỏ ngõ cụt, nhánh thiếu điều kiện và vòng lặp vô tận ngay trên canvas. Chọn một node bất kỳ và chat đúng về vùng đó — logic được bít kín trước khi thiết kế hay code.</span></p>
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
-                    <div class="media-overlay">
-                        <span class="lang-en">[ DEMO: CANVAS LINTER ]<br>Show the canvas highlighting a logical error in the flow</span>
-                        <span class="lang-vi">[ DEMO: CANVAS LINTER ]<br>Cảnh Bảng vẽ tự động báo lỗi một luồng người dùng bị cụt</span>
-                    </div>
+                    <div class="media-overlay"><span class="lang-en">[ DEMO: CANVAS LINTER ]<br>Canvas highlighting a dead-end / missing branch</span><span class="lang-vi">[ DEMO: CANVAS LINTER ]<br>Canvas tự báo ngõ cụt / nhánh thiếu điều kiện</span></div>
                 </div>
             </section>
 
             <section class="article-section reveal-on-scroll">
-                <h2>
-                    <span class="lang-en">3. Figma Crafting Worker</span>
-                    <span class="lang-vi">3. Sức mạnh Vẽ Giao diện (Figma Crafting)</span>
-                </h2>
-                <p>
-                    <span class="lang-en">Once the ProductSpec is approved, DualMind doesn't just stop at text. Powered by an Agentic Craft Worker (via Codex CLI) and a custom Figma MCP runtime, it reads Zalo Design System (ZDS) reference components and generates <strong>real, clickable Figma prototypes</strong> perfectly matching the ZDS guidelines. If you don't have Figma connected, it seamlessly gracefully degrades to Jira + PRD mocks.</span>
-                    <span class="lang-vi">Khi ProductSpec đã được chốt, DualMind không dừng lại ở văn bản. Với sức mạnh của Agentic Craft Worker và runtime Figma MCP nội bộ, nó sẽ nạp các component của Zalo Design System (ZDS) và <strong>tự động vẽ ra các Prototype có thể bấm được trên Figma</strong>. Bản vẽ tuân thủ 100% chuẩn ZDS. Nếu bạn chưa kết nối Figma, hệ thống vẫn tự động xuất đủ Backlog Jira và PRD Markdown.</span>
-                </p>
-
-                <!-- Mermaid Diagram -->
-                <div class="mermaid-wrapper">
-                    <div class="mermaid">
-                        graph TD
-                            Idea[Idea / Scope Change] --> A(DualMind Lifecycle Agent)
-                            A -->|Guided Discovery| B[(Local SQLite ProductSpec)]
-                            B -->|Logical Linter Pass| C[Execution Outbox]
-                            C -->|Immutable Payload Hash| D{Human Approval}
-                            D -->|Approve| E[Figma Craft Worker]
-                            D -->|Approve| F[Jira Mock / Confluence]
-                            E -->|Zalo Design System| G(Clickable Figma Prototypes)
-                    </div>
+                <h2><span class="lang-en">3. One ProductSpec → four artifacts</span><span class="lang-vi">3. Một ProductSpec → bốn artifact</span></h2>
+                <p><span class="lang-en">Promote the canvas and every semantic node becomes a traceable requirement + screen inside a single <strong>ProductSpec</strong> — the confirmed source of truth. From it, DualMind generates a Figma design, a Jira backlog, a Confluence doc and a Markdown PRD. You can <strong>review the task decomposition and the document in-app</strong> before anything is exported or pushed.</span><span class="lang-vi">Promote canvas và mỗi node semantic thành một requirement + screen có truy vết trong một <strong>ProductSpec</strong> duy nhất — nguồn sự thật đã chốt. Từ đó, DualMind sinh thiết kế Figma, backlog Jira, tài liệu Confluence và PRD Markdown. Bạn có thể <strong>xem lại phân rã task và tài liệu ngay trong app</strong> trước khi export hay đẩy đi.</span></p>
+                <div class="pill-row">
+                    <span class="pill">Figma</span><span class="pill">Jira backlog</span><span class="pill">Confluence</span><span class="pill">PRD.md</span><span class="pill">In-app review</span>
                 </div>
-                
+            </section>
+
+            <section class="article-section reveal-on-scroll">
+                <h2><span class="lang-en">4. The ZDS Figma craft worker</span><span class="lang-vi">4. Craft worker Figma chuẩn ZDS</span></h2>
+                <p><span class="lang-en">An agentic craft worker (driven through a local Figma MCP runtime) reads Zalo Design System components and composes <strong>real, clickable prototypes</strong> — instantiating ZDS controls, wiring navigation between screens, and iterating with screenshot-based self-review. No Figma connected? It <strong>degrades gracefully</strong> to a mock preview so Jira, Confluence and the PRD still ship.</span><span class="lang-vi">Craft worker agentic (điều khiển qua runtime Figma MCP nội bộ) đọc component Zalo Design System và dựng <strong>prototype thật, bấm được</strong> — instantiate ZDS control, nối điều hướng giữa các màn, và tự review bằng screenshot qua từng vòng. Chưa nối Figma? Hệ thống <strong>tự hạ mượt</strong> xuống bản preview để Jira, Confluence và PRD vẫn ra đủ.</span></p>
                 <div class="large-media">
                     <img src="images/figma_craft.png" alt="DualMind Figma Crafting" style="width: 100%; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                 </div>
             </section>
 
             <section class="article-section reveal-on-scroll">
-                <h2>
-                    <span class="lang-en">4. Local-First & Provider Agnostic</span>
-                    <span class="lang-vi">4. Local-First & Đa Nền tảng (Provider Agnostic)</span>
-                </h2>
-                <p>
-                    <span class="lang-en">Enterprise data is secure. DualMind is an Electron desktop app storing all execution memory in SQLite. Furthermore, it integrates an AgentRouter gateway, allowing you to instantly switch between OpenAI, Gemini, Claude, or local offline mocks seamlessly without losing session context. Every external action requires an immutable Payload Hash approval.</span>
-                    <span class="lang-vi">Bảo mật dữ liệu là ưu tiên số một. DualMind là một ứng dụng Desktop (Electron), lưu trữ toàn bộ lịch sử chạy trong SQLite. Khủng hơn nữa, nhờ tích hợp AgentRouter, bạn có thể chuyển đổi mượt mà giữa OpenAI, Gemini, Claude, hoặc thậm chí là mô hình offline ngay giữa phiên làm việc mà không hề gián đoạn. Mọi thao tác đẩy ra ngoài đều cần một mã băm không thể thay đổi (Payload Hash) để bạn duyệt.</span>
-                </p>
-                
+                <h2><span class="lang-en">5. Governed writes — approval, hash, read-back</span><span class="lang-vi">5. Ghi có kiểm soát — duyệt, hash, read-back</span></h2>
+                <p><span class="lang-en">Nothing goes out silently. Every external write is staged into an execution outbox, carries an <strong>immutable payload hash</strong>, and waits for your <strong>approval</strong>. Change the payload and the approval is void. After writing, each target is <strong>read back</strong> to confirm it landed — and targets execute independently, so a Figma hiccup never blocks the Jira or PRD write.</span><span class="lang-vi">Không gì âm thầm rời đi. Mọi ghi ra ngoài được đưa vào execution outbox, gắn <strong>payload hash bất biến</strong>, và chờ bạn <strong>duyệt</strong>. Đổi payload là mất duyệt. Sau khi ghi, mỗi target được <strong>đọc lại</strong> để xác nhận đã vào — và các target chạy độc lập, nên một trục trặc Figma không bao giờ chặn ghi Jira hay PRD.</span></p>
+                <div class="pill-row">
+                    <span class="pill"><span class="lang-en">Human approval</span><span class="lang-vi">Có duyệt</span></span>
+                    <span class="pill"><span class="lang-en">Immutable hash</span><span class="lang-vi">Hash bất biến</span></span>
+                    <span class="pill"><span class="lang-en">Read-back verify</span><span class="lang-vi">Read-back verify</span></span>
+                    <span class="pill"><span class="lang-en">Per-target isolation</span><span class="lang-vi">Độc lập theo target</span></span>
+                </div>
+            </section>
+
+            <section class="article-section reveal-on-scroll">
+                <h2><span class="lang-en">6. Local-first &amp; provider-agnostic</span><span class="lang-vi">6. Local-first &amp; đa provider</span></h2>
+                <p><span class="lang-en">DualMind is an Electron desktop app that stores all execution memory in local <strong>SQLite</strong> — synthetic/sandbox data only, no cloud round-trip for state. It runs fully offline on a deterministic mock (<strong>no API key</strong>), or you can switch between <strong>Mock, Codex, OpenAI, Gemini, Claude and AgentRouter</strong> mid-session without losing context. Credentials live in the OS keychain, never in SQLite or the renderer.</span><span class="lang-vi">DualMind là app desktop Electron lưu toàn bộ execution memory trong <strong>SQLite</strong> cục bộ — chỉ dữ liệu synthetic/sandbox, không round-trip cloud cho state. Chạy hoàn toàn offline bằng mock deterministic (<strong>không cần API key</strong>), hoặc đổi giữa <strong>Mock, Codex, OpenAI, Gemini, Claude, AgentRouter</strong> ngay giữa phiên mà không mất ngữ cảnh. Credential nằm trong keychain của OS, không lưu trong SQLite hay renderer.</span></p>
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
-                    <div class="media-overlay">
-                        <span class="lang-en">[ DEMO: PROVIDER SWITCHING & APPROVAL ]<br>Show seamless LLM switching and payload approval</span>
-                        <span class="lang-vi">[ DEMO: ĐỔI MODEL & DUYỆT PAYLOAD ]<br>Cảnh đổi model AI và bấm nút duyệt gửi lên hệ thống ngoài</span>
-                    </div>
+                    <div class="media-overlay"><span class="lang-en">[ DEMO: PROVIDER SWITCH &amp; APPROVAL ]<br>Switch LLM provider, then approve a hashed payload</span><span class="lang-vi">[ DEMO: ĐỔI PROVIDER &amp; DUYỆT ]<br>Đổi provider LLM rồi duyệt payload đã hash</span></div>
                 </div>
             </section>
         </article>
-        
+
         <div class="back-home text-center reveal-on-scroll">
-            <a href="index.html" class="btn-primary">
-                <span class="lang-en">Return to Homepage</span>
-                <span class="lang-vi">Trở về Trang chủ</span>
-            </a>
+            <a href="index.html" class="btn-primary"><span class="lang-en">Return to Homepage</span><span class="lang-vi">Trở về Trang chủ</span></a>
         </div>
     </main>
 
     <footer class="site-footer">
-        <p>
-            <span class="lang-en">&copy; 2026 ZA AI Hackathon - Team 3. Crafted with precision.</span>
-            <span class="lang-vi">&copy; 2026 ZA AI Hackathon - Đội 3. Xây dựng bằng sự tỉ mỉ.</span>
-        </p>
+        <p><span class="lang-en">&copy; 2026 ZA AI Hackathon - Team 3. Crafted with precision.</span><span class="lang-vi">&copy; 2026 ZA AI Hackathon - Đội 3. Xây dựng bằng sự tỉ mỉ.</span></p>
     </footer>
 
     <script src="js/script.js"></script>
