@@ -535,6 +535,25 @@ export function App(): React.JSX.Element {
     }
   }
 
+  const advancePhase = async (): Promise<void> => {
+    if (!activeThread || runningThreadId) return
+    const requestThreadId = activeThread.id
+    setRunningThreadId(requestThreadId)
+    setError(null)
+    try {
+      const workspace = await window.pmAgent.lifecycle.advancePhase(requestThreadId)
+      if (activeThreadIdRef.current === requestThreadId) {
+        setLifecycleWorkspace(workspace)
+        setActiveThread(await window.pmAgent.threads.get(requestThreadId))
+      }
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setRunningThreadId((current) => current === requestThreadId ? null : current)
+    }
+  }
+
   const regenerateArtifacts = async (feedback?: string): Promise<void> => {
     if (!activeThread || approving) return
     const requestThreadId = activeThread.id
@@ -815,6 +834,7 @@ export function App(): React.JSX.Element {
         onReject={rejectChange}
         onRetry={retryAction}
         onAdvanceDecision={advanceDecision}
+        onAdvancePhase={advancePhase}
         onSelectDecision={selectDecision}
         onCommitPromotion={commitPromotion}
         onCancelPromotion={() => setPromotionPreview(null)}
@@ -1098,11 +1118,13 @@ function FigmaSetupDialog({
 
 const LIFECYCLE_STEPS = ['Ý tưởng', 'Khám phá', 'Quyết định', 'Delivery', 'Kickoff Figma'] as const
 
-function LifecycleStepper({ phase, requirements, canvasItemCount, onStartPromotion, busy }: {
+function LifecycleStepper({ phase, requirements, canvasItemCount, onStartPromotion, onAdvancePhase, canAdvance, busy }: {
   phase?: import('@pm-agent/domain').RunState['phase']
   requirements: number
   canvasItemCount: number
   onStartPromotion(): Promise<void>
+  onAdvancePhase(): Promise<void>
+  canAdvance: boolean
   busy: boolean
 }): React.JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
@@ -1110,6 +1132,14 @@ function LifecycleStepper({ phase, requirements, canvasItemCount, onStartPromoti
   const base = phase ? phaseIndex[phase] ?? 0 : 0
   const readyForFigma = phase === 'DELIVERY' && requirements > 0
   const activeIndex = readyForFigma ? 4 : base
+  // Deterministic wizard "next step" — host-controlled, so a thread never gets stuck waiting for
+  // the LLM to volunteer a phase change. Only IDEA_INTAKE/DISCOVERY have a forward transition here;
+  // Decision advances by picking an option, Delivery by creating the kickoff package.
+  const advance = phase === 'IDEA_INTAKE'
+    ? { label: 'Chốt ý tưởng → Khám phá', hint: 'Cần mô tả ý tưởng ít nhất một lần' }
+    : phase === 'DISCOVERY'
+      ? { label: 'Sang Quyết định (dùng giả định)', hint: '' }
+      : null
 
   let hint = ''
   let action: { label: string; run(): Promise<void> } | null = null
@@ -1157,6 +1187,18 @@ function LifecycleStepper({ phase, requirements, canvasItemCount, onStartPromoti
               )}
             </div>
           )}
+          {advance && (
+            <div className="stepper-nav">
+              <button
+                className="stepper-advance"
+                disabled={busy || !canAdvance}
+                title={!canAdvance ? advance.hint : undefined}
+                onClick={() => void onAdvancePhase()}
+              >
+                {advance.label} <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
         </>
       )}
     </section>
@@ -1194,6 +1236,7 @@ function ChatPanel({
   onReject,
   onRetry,
   onAdvanceDecision,
+  onAdvancePhase,
   onSelectDecision,
   onCommitPromotion,
   onCancelPromotion,
@@ -1239,6 +1282,7 @@ function ChatPanel({
   onReject(): Promise<void>
   onRetry(target: PlannedAction['target']): Promise<void>
   onAdvanceDecision(answers: Record<string, string>): Promise<void>
+  onAdvancePhase(): Promise<void>
   onSelectDecision(optionId: string, customTitle?: string): Promise<void>
   onCommitPromotion(): Promise<void>
   onCancelPromotion(): void
@@ -1327,6 +1371,8 @@ function ChatPanel({
         requirements={productSpec?.requirements.filter((item) => item.status !== 'removed').length ?? 0}
         canvasItemCount={canvasItemCount}
         onStartPromotion={onStartPromotion}
+        onAdvancePhase={onAdvancePhase}
+        canAdvance={phase === 'IDEA_INTAKE' ? messages.some((message) => message.role === 'user') : phase === 'DISCOVERY'}
         busy={sending || approving}
       />
       {productSpec && (productSpec.requirements.length > 0 || productSpec.screens.length > 0 || productSpec.stories.length > 0) && (

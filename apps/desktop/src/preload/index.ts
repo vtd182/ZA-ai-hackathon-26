@@ -36,6 +36,7 @@ const api: DesktopApi = {
     rejectChange: (threadId) => ipcRenderer.invoke('lifecycle:reject-change', threadId),
     retryAction: (threadId, target) => ipcRenderer.invoke('lifecycle:retry-action', threadId, target),
     advanceDecision: (threadId, answers) => ipcRenderer.invoke('lifecycle:advance-decision', threadId, answers),
+    advancePhase: (threadId) => ipcRenderer.invoke('lifecycle:advance-phase', threadId),
     selectDecision: (threadId, optionId, customTitle) => ipcRenderer.invoke('lifecycle:select-decision', threadId, optionId, customTitle),
     previewPromotion: (threadId, canvas) => ipcRenderer.invoke('lifecycle:preview-promotion', threadId, canvas),
     commitPromotion: (threadId, payloadHash) => ipcRenderer.invoke('lifecycle:commit-promotion', threadId, payloadHash),

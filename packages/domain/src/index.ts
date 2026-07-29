@@ -321,6 +321,7 @@ export interface DesktopApi {
     rejectChange(threadId: string): Promise<ApproveChangeOutput>
     retryAction(threadId: string, target: PlannedAction['target']): Promise<ApproveChangeOutput>
     advanceDecision(threadId: string, answers: Record<string, string>): Promise<LifecycleWorkspaceState>
+    advancePhase(threadId: string): Promise<LifecycleWorkspaceState>
     selectDecision(threadId: string, optionId: string, customTitle?: string): Promise<LifecycleWorkspaceState>
     previewPromotion(threadId: string, canvas: CanvasDocumentContext): Promise<CanvasPromotionPreview>
     commitPromotion(threadId: string, payloadHash: string): Promise<LifecycleWorkspaceState>

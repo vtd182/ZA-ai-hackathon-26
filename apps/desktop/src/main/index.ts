@@ -1885,6 +1885,61 @@ function registerIpc(): void {
       activeRuns.delete(threadId)
     }
   })
+  // Wizard "Sang bước tiếp →": deterministically move to the next lifecycle phase instead of
+  // waiting for the LLM to decide to advance (which left studio/IDEA_INTAKE threads stuck). The
+  // transition is host-controlled; the provider only generates the next step's content
+  // (clarifications for Discovery, options for Decision). Guards keep each step's invariants.
+  ipcMain.handle('lifecycle:advance-phase', async (_event, threadId: string) => {
+    assertNoActiveProviderTurn(threadId)
+    const state = workspaceFor(threadId).runState
+    const targetPhase = state.phase === 'IDEA_INTAKE' ? 'discover'
+      : state.phase === 'DISCOVERY' ? 'decide'
+        : null
+    if (!targetPhase || state.status !== 'ACTIVE') {
+      throw new Error('Bước hiện tại không thể chuyển nhanh; hãy hoàn tất lựa chọn/duyệt của bước này.')
+    }
+    if (state.phase === 'IDEA_INTAKE' && !history.recentMessages(threadId).some((message) => message.role === 'user')) {
+      throw new Error('Hãy mô tả ý tưởng ít nhất một lần trước khi bắt đầu Khám phá.')
+    }
+    const thread = history.getThread(threadId)
+    const profile = history.getProfile(thread.providerId)
+    const apiKey = secrets.get(profile.id)
+    const directive = targetPhase === 'discover'
+      ? 'Chốt ý tưởng đang thảo luận và khóa đúng 3 clarification quan trọng nhất để làm rõ scope MVP.'
+      : 'Tổng hợp 2-3 phương án MVP để người dùng chọn; dùng giả định hợp lý cho những điểm chưa trả lời rõ.'
+    const turnId = history.startTurn(threadId, directive)
+    const controller = new AbortController()
+    let turnFinished = false
+    activeRuns.set(threadId, controller)
+    try {
+      const response = await providers.get(profile.providerId).reason({
+        threadId,
+        phase: targetPhase,
+        message: directive,
+        recentMessages: history.recentMessages(threadId),
+        remoteRef: history.getActiveRemoteRef(threadId, profile.id),
+      }, { modelId: profile.modelId, ...(apiKey ? { apiKey } : {}) }, controller.signal)
+      const proposal = acceptCompletedProviderEvents(state, response.events, targetPhase)
+      const advanced = advanceReasoningPhase(state, proposal.result, timestamp())
+      lifecycle.saveReasoningCheckpoint(advanced.state, advanced.checkpoint)
+      history.setThreadPhase(threadId, targetPhase)
+      history.addMessage(threadId, 'assistant', proposal.result.message)
+      history.saveProviderSegment(threadId, profile.id, profile.modelId, response.remoteRef)
+      history.completeTurn(turnId, 'completed', response.events)
+      turnFinished = true
+      return workspaceFor(threadId)
+    } catch (error) {
+      if (!turnFinished) {
+        const at = timestamp()
+        history.completeTurn(turnId, controller.signal.aborted ? 'cancelled' : 'failed', controller.signal.aborted
+          ? [{ type: 'turn_cancelled', sequence: 0, at }]
+          : [{ type: 'turn_failed', sequence: 0, at, error: 'Provider turn failed' }])
+      }
+      throw error
+    } finally {
+      activeRuns.delete(threadId)
+    }
+  })
   ipcMain.handle('lifecycle:select-decision', (_event, threadId: string, optionId: string, customTitle?: string) => {
     const workspace = workspaceFor(threadId)
     if (workspace.runState.phase === 'DELIVERY' && workspace.runState.status === 'ACTIVE') return workspace

@@ -895,8 +895,11 @@ class MockProvider implements ReasoningProvider {
 }
 
 function providerTimeoutMs(request: ReasoningRequest): number {
-  if (request.responseMode === 'figma') return 300_000
-  if (request.responseMode === 'creative') return 180_000
+  // Single source of truth for every provider path (OpenAI/Gemini/Anthropic via withProviderDeadline
+  // AND the Codex/AgentRouter app-server). Creative = drawing a full workflow/scene, which is as
+  // heavy as a Figma blueprint, so it gets a generous budget instead of the old 2-min cap.
+  if (request.responseMode === 'figma') return 600_000
+  if (request.responseMode === 'creative') return 360_000
   return 120_000
 }
 
@@ -1260,17 +1263,46 @@ async function reasonWithCodexAppServer(input: {
     }
 
     let output = ''
+    // Stream observability: PM_AGENT_DEBUG_STREAM=1 logs every notification method the app-server
+    // emits (reasoning/thinking deltas included, which we otherwise ignore), plus time-to-first
+    // agentMessage token, delta count and total chars — so it is obvious whether the API is
+    // actually streaming or the model is stuck "reasoning" with nothing coming back. The timeout
+    // summary is logged unconditionally so any future hang self-reports how far it got.
+    const debugStream = process.env.PM_AGENT_DEBUG_STREAM === '1'
+    const startedAt = Date.now()
+    let deltaCount = 0
+    let firstTokenAt = 0
+    const methodSeen = new Map<string, number>()
+    const streamSummary = (): string =>
+      `mode=${request.responseMode} deltas=${deltaCount} chars=${output.length} `
+      + `ttft=${firstTokenAt ? firstTokenAt - startedAt : -1}ms methods=${JSON.stringify(Object.fromEntries(methodSeen))}`
     const completed = new Promise<void>((resolve, reject) => {
-      const timeoutMs = request.responseMode === 'figma' ? 10 * 60_000 : 120_000
-      const timeout = setTimeout(() => reject(new Error(`Codex timeout sau ${Math.round(timeoutMs / 60_000)} phút`)), timeoutMs)
+      const timeoutMs = providerTimeoutMs(request)
+      const timeout = setTimeout(() => {
+        console.warn(`[codex-stream] TIMEOUT ${Math.round(timeoutMs / 1000)}s ${streamSummary()}`)
+        reject(new Error(`Codex timeout sau ${Math.round(timeoutMs / 60_000)} phút`))
+      }, timeoutMs)
       const unsubscribe = client.onNotification((notification) => {
-        const method = notification.method
+        const method = String(notification.method)
         const params = notification.params as JsonObject | undefined
+        // Observe EVERY method before the thread filter — reasoning events may omit threadId.
+        if (debugStream && !methodSeen.has(method)) {
+          console.log(`[codex-stream] +${Date.now() - startedAt}ms first-seen method=${method} thread=${String(params?.threadId)}`)
+        }
+        methodSeen.set(method, (methodSeen.get(method) ?? 0) + 1)
         if (params?.threadId !== threadId) return
-        if (method === 'item/agentMessage/delta' && typeof params.delta === 'string') output += params.delta
+        if (method === 'item/agentMessage/delta' && typeof params.delta === 'string') {
+          if (!firstTokenAt) {
+            firstTokenAt = Date.now()
+            if (debugStream) console.log(`[codex-stream] first agentMessage delta +${firstTokenAt - startedAt}ms`)
+          }
+          deltaCount += 1
+          output += params.delta
+        }
         if (method === 'turn/completed') {
           clearTimeout(timeout)
           unsubscribe()
+          if (debugStream) console.log(`[codex-stream] completed ${streamSummary()}`)
           const turn = params.turn as JsonObject | undefined
           if (turn?.status === 'failed') reject(new Error(`Codex turn failed: ${JSON.stringify(turn.error)}`))
           else resolve()
