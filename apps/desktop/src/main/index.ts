@@ -900,12 +900,24 @@ async function prepareExecutableActions(
   }
   // Jira + Confluence are independent of Figma — build them separately so a Figma hiccup can
   // never block them, and surface only their own blocking issues.
+  const jiraArtifactBrief = createArtifactBrief({
+    spec,
+    target: 'jira',
+    sourcePayloadHash,
+    createdAt: timestamp(),
+  })
+  const zdocArtifactBrief = createArtifactBrief({
+    spec,
+    target: 'zdoc',
+    sourcePayloadHash,
+    createdAt: timestamp(),
+  })
   const [jiraPreflight, zdocPreflight] = await Promise.all([
     mockJira.preflight(createMockJiraPlan(spec, {
-      runId: state.id, threadId: state.threadId, actionId: jiraAction.id, idempotencyKey: `jira:${state.id}:v${spec.version}`,
+      runId: state.id, threadId: state.threadId, actionId: jiraAction.id, idempotencyKey: `jira:${state.id}:v${spec.version}`, artifactBrief: jiraArtifactBrief,
     })),
     mockZdoc.preflight(createMockZdocPlan(spec, {
-      runId: state.id, threadId: state.threadId, actionId: zdocAction.id, idempotencyKey: `zdoc:${state.id}:v${spec.version}`,
+      runId: state.id, threadId: state.threadId, actionId: zdocAction.id, idempotencyKey: `zdoc:${state.id}:v${spec.version}`, artifactBrief: zdocArtifactBrief,
     })),
   ])
   emitArtifactProgress(state.threadId, {
@@ -1705,14 +1717,34 @@ function registerIpc(): void {
   // document, derived directly from the current ProductSpec so a PM can review BEFORE export/push.
   ipcMain.handle('lifecycle:get-backlog', (_event, threadId: string) => {
     const state = workspaceFor(threadId).runState
+    const sourcePayloadHash = hashConnectorPayload(state.productSpec as unknown as Record<string, unknown>)
     return createMockJiraPlan(state.productSpec, {
-      runId: state.id, threadId, actionId: `review:jira:${state.id}`, idempotencyKey: `jira:${state.id}:v${state.productSpec.version}`,
+      runId: state.id,
+      threadId,
+      actionId: `review:jira:${state.id}`,
+      idempotencyKey: `jira:${state.id}:v${state.productSpec.version}`,
+      artifactBrief: createArtifactBrief({
+        spec: state.productSpec,
+        target: 'jira',
+        sourcePayloadHash,
+        createdAt: timestamp(),
+      }),
     })
   })
   ipcMain.handle('lifecycle:get-zdoc', (_event, threadId: string) => {
     const state = workspaceFor(threadId).runState
+    const sourcePayloadHash = hashConnectorPayload(state.productSpec as unknown as Record<string, unknown>)
     return createMockZdocPlan(state.productSpec, {
-      runId: state.id, threadId, actionId: `review:zdoc:${state.id}`, idempotencyKey: `zdoc:${state.id}:v${state.productSpec.version}`,
+      runId: state.id,
+      threadId,
+      actionId: `review:zdoc:${state.id}`,
+      idempotencyKey: `zdoc:${state.id}:v${state.productSpec.version}`,
+      artifactBrief: createArtifactBrief({
+        spec: state.productSpec,
+        target: 'zdoc',
+        sourcePayloadHash,
+        createdAt: timestamp(),
+      }),
     })
   })
   ipcMain.handle('lifecycle:show-backlog', async (_event, threadId: string) => {

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { artifactBriefSchema } from './artifact-brief'
 import { lifecycleArtifactMetadataSchema } from './artifact-plan'
 
 export const mockJiraStoryPlanSchema = z.object({
@@ -13,6 +14,7 @@ export const mockJiraPlanSchema = z.object({
   schemaVersion: z.literal(1),
   kind: z.literal('mock_jira_plan'),
   metadata: lifecycleArtifactMetadataSchema,
+  artifactBrief: artifactBriefSchema,
   epic: z.object({
     title: z.string().min(1),
     requirementIds: z.array(z.string().min(1)).min(1),
@@ -27,6 +29,7 @@ export const mockJiraSnapshotSchema = z.object({
   planHash: z.string().min(1),
   payloadHash: z.string().min(1),
   idempotencyKey: z.string().min(1),
+  artifactBrief: artifactBriefSchema,
   epic: mockJiraPlanSchema.shape.epic.extend({ key: z.string().min(1) }),
   stories: z.array(mockJiraStoryPlanSchema.extend({ key: z.string().min(1), epicKey: z.string().min(1) })),
   readAt: z.string().datetime(),
@@ -48,6 +51,7 @@ export const mockZdocPlanSchema = z.object({
   schemaVersion: z.literal(1),
   kind: z.literal('mock_zdoc_plan'),
   metadata: lifecycleArtifactMetadataSchema,
+  artifactBrief: artifactBriefSchema,
   title: z.string().min(1),
   summary: z.string().min(1),
   requirementSections: z.array(mockZdocRequirementSectionSchema).min(1),
@@ -60,6 +64,7 @@ export const mockZdocSnapshotSchema = z.object({
   planHash: z.string().min(1),
   payloadHash: z.string().min(1),
   idempotencyKey: z.string().min(1),
+  artifactBrief: artifactBriefSchema,
   title: z.string().min(1),
   specVersion: z.number().int().positive(),
   summary: z.string().min(1),

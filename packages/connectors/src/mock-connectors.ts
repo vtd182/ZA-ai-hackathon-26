@@ -6,6 +6,7 @@ import {
   mockZdocPlanSchema,
   mockZdocSnapshotSchema,
   type ActionReceipt,
+  type ArtifactBrief,
   type ArtifactIssue,
   type LifecycleArtifactMetadata,
   type MockJiraPlan,
@@ -25,6 +26,7 @@ export interface MockPlanMetadataInput {
   threadId: string
   actionId: string
   idempotencyKey: string
+  artifactBrief: ArtifactBrief
 }
 
 function metadataFor(spec: ProductSpec, input: MockPlanMetadataInput): LifecycleArtifactMetadata {
@@ -42,6 +44,7 @@ export function createMockJiraPlan(spec: ProductSpec, input: MockPlanMetadataInp
     schemaVersion: 1,
     kind: 'mock_jira_plan',
     metadata: metadataFor(spec, input),
+    artifactBrief: input.artifactBrief,
     epic: {
       title: `[Mock] ${spec.title} · v${spec.version}`,
       requirementIds: activeRequirements.map((requirement) => requirement.id),
@@ -61,6 +64,7 @@ export function createMockZdocPlan(spec: ProductSpec, input: MockPlanMetadataInp
     schemaVersion: 1,
     kind: 'mock_zdoc_plan',
     metadata: metadataFor(spec, input),
+    artifactBrief: input.artifactBrief,
     title: `[Mock Zdoc] ${spec.title} · ProductSpec v${spec.version}`,
     summary: spec.idea.summary,
     requirementSections: spec.requirements.map((requirement) => ({
@@ -158,6 +162,7 @@ export class MockJiraConnector extends MockConnectorBase implements ArtifactConn
       planHash: prepared.planHash,
       payloadHash: action.payloadHash,
       idempotencyKey,
+      artifactBrief: prepared.plan.artifactBrief,
       epic: { ...prepared.plan.epic, key: externalId },
       stories: prepared.plan.stories.map((story, index) => ({ ...story, key: `${externalId}-${index + 1}`, epicKey: externalId })),
       readAt: this.now(),
@@ -178,6 +183,9 @@ export class MockJiraConnector extends MockConnectorBase implements ArtifactConn
     const add = (code: string, message: string, entityId?: string): void => { issues.push({ code, severity: 'error', message, ...(entityId ? { entityId } : {}) }) }
     const planHash = hashConnectorPayload(plan as unknown as Record<string, unknown>)
     if (snapshot.planHash !== planHash) add('PLAN_HASH_MISMATCH', 'Mock Jira plan hash does not match.')
+    if (stableStringify(snapshot.artifactBrief as unknown as JsonValue) !== stableStringify(plan.artifactBrief as unknown as JsonValue)) {
+      add('ARTIFACT_BRIEF_MISMATCH', 'Mock Jira ArtifactBrief does not match the approved plan.')
+    }
     if (snapshot.epic.key !== snapshot.externalId) add('EPIC_LINK_MISMATCH', 'Mock Jira Epic key does not match external ID.')
     if (stableStringify([...snapshot.epic.requirementIds].sort() as JsonValue) !== stableStringify([...plan.epic.requirementIds].sort() as JsonValue)) {
       add('REQUIREMENT_IDS_MISMATCH', 'Mock Jira Epic requirement IDs do not match.')
@@ -232,6 +240,7 @@ export class MockZdocConnector extends MockConnectorBase implements ArtifactConn
       planHash: prepared.planHash,
       payloadHash: action.payloadHash,
       idempotencyKey,
+      artifactBrief: prepared.plan.artifactBrief,
       title: prepared.plan.title,
       specVersion: prepared.plan.metadata.specVersion,
       summary: prepared.plan.summary,
@@ -258,6 +267,9 @@ export class MockZdocConnector extends MockConnectorBase implements ArtifactConn
     const issues: ArtifactIssue[] = []
     const add = (code: string, message: string, entityId?: string): void => { issues.push({ code, severity: 'error', message, ...(entityId ? { entityId } : {}) }) }
     if (snapshot.planHash !== hashConnectorPayload(plan as unknown as Record<string, unknown>)) add('PLAN_HASH_MISMATCH', 'Mock Zdoc plan hash does not match.')
+    if (stableStringify(snapshot.artifactBrief as unknown as JsonValue) !== stableStringify(plan.artifactBrief as unknown as JsonValue)) {
+      add('ARTIFACT_BRIEF_MISMATCH', 'Mock Zdoc ArtifactBrief does not match the approved plan.')
+    }
     if (snapshot.title !== plan.title || snapshot.specVersion !== plan.metadata.specVersion) add('DOCUMENT_IDENTITY_MISMATCH', 'Mock Zdoc title or ProductSpec version does not match.')
     const sections = new Map(snapshot.requirementSections.map((section) => [section.requirementId, section]))
     for (const expected of plan.requirementSections) {

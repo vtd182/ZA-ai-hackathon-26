@@ -315,8 +315,11 @@ Intent:
   Figma connector mode, plan mode, output page strategy and ProductSpec payload hash; the brief is
   stored in the approval payload and passed to the Figma craft worker. No-ZDS/free briefs send zero
   component roles to providers/workers and carry adaptive surface policy; ZDS reference/strict
-  briefs keep DS policy explicit. Remaining polish: make Jira/Zdoc consume ArtifactBriefs too and
-  surface the brief in the renderer approval panel.
+  briefs keep DS policy explicit. The renderer approval panel surfaces the Figma brief.
+- **Status note 2026-07-30 update:** Jira/backlog and Zdoc/PRD mock plans now also carry typed
+  ArtifactBriefs created from the same ProductSpec payload hash. Their snapshots preserve the brief
+  and verification fails on `ARTIFACT_BRIEF_MISMATCH`, so a kickoff package cannot silently drift
+  between ProductSpec, Figma, backlog and PRD.
 
 ### `P0-SHARP-004` Split prompt packs by task
 

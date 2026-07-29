@@ -506,6 +506,11 @@
   and preserve adaptive web/admin surface policy. Verification:
   `pnpm exec vitest run packages/domain/src/artifact-brief.test.ts apps/desktop/src/main/figma-design-worker.test.ts`,
   `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
+- **Evidence update:** ArtifactBrief now covers the whole kickoff package, not only Figma. Mock
+  Jira/backlog and Mock Zdoc/PRD plans include typed ArtifactBriefs from the same ProductSpec hash;
+  snapshots preserve them and verification fails on brief drift. Verification:
+  `pnpm exec vitest run packages/connectors/src/mock-connectors.test.ts packages/domain/src/artifact-brief.test.ts`,
+  `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
 - **Evidence update:** ProductSpec schema no longer forces web/admin/landing ideas into Mini App or
   fake ZDS slots. `productType` supports richer surfaces, `screen.designSystemRoles` defaults to
   `[]`, clear admin dashboard synthesis emits `productType: admin_dashboard` with zero DS roles,
