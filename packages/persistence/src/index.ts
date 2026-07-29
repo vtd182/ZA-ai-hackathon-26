@@ -66,6 +66,7 @@ const defaultProfiles: Omit<ProviderProfile, 'hasCredential'>[] = [
   { id: 'openai-api', providerId: 'openai', displayName: 'OpenAI API', modelId: 'gpt-5.6-sol', costMode: 'api_paid', enabled: true },
   { id: 'gemini-api', providerId: 'gemini', displayName: 'Gemini API', modelId: 'gemini-3-flash-preview', costMode: 'api_paid', enabled: true },
   { id: 'anthropic-api', providerId: 'anthropic', displayName: 'Claude API', modelId: 'claude-sonnet-4-6', costMode: 'api_paid', enabled: true },
+  { id: 'agentrouter-api', providerId: 'agentrouter', displayName: 'AgentRouter', modelId: 'gpt-5', costMode: 'api_paid', enabled: true },
 ]
 
 export const DEMO_FIXTURE_VERSION = 1 as const

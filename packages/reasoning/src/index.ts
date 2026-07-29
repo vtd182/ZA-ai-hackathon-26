@@ -94,6 +94,7 @@ const codexCapabilities: ProviderCapabilities = { structuredOutput: true, stream
 const openAiCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: true, remoteResume: false, usage: true }
 const geminiCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: false, remoteResume: false, usage: true }
 const anthropicCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: true, remoteResume: false, usage: true }
+const agentRouterCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: true, remoteResume: false, usage: true }
 
 const systemPolicy = `Bạn là reasoning provider cho PM Lifecycle Agent.
 Mục tiêu: giúp PM biến ý tưởng thành ProductSpec có traceability và thay đổi scope có kiểm soát.
@@ -747,6 +748,40 @@ class OpenAIProvider implements ReasoningProvider {
   }
 }
 
+// AgentRouter (https://agentrouter.org) is an OpenAI-compatible gateway to 30+ models. We reuse
+// the OpenAI SDK pointed at its /v1 base URL and use chat.completions + json_schema, which is the
+// broadly-supported structured-output path across the aggregated models.
+class AgentRouterProvider implements ReasoningProvider {
+  readonly id = 'agentrouter'
+  readonly capabilities = agentRouterCapabilities
+  private static readonly baseURL = 'https://agentrouter.org/v1'
+
+  async probe(config: ProviderRuntimeConfig): Promise<ProviderProbe> {
+    return credentialProbe(config.apiKey, 'AGENTROUTER_API_KEY', 'AgentRouter API key', this.capabilities)
+  }
+
+  async reason(request: ReasoningRequest, config: ProviderRuntimeConfig, signal: AbortSignal): Promise<ProviderResponse> {
+    const apiKey = requiredCredential(config.apiKey, 'AGENTROUTER_API_KEY')
+    const client = new OpenAI({ apiKey, baseURL: AgentRouterProvider.baseURL })
+    const completion = await withProviderDeadline(signal, providerTimeoutMs(request), (deadlineSignal) => client.chat.completions.create({
+      model: config.modelId,
+      messages: [{ role: 'user', content: buildPrompt(request) }],
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'pm_lifecycle_reasoning',
+          strict: true,
+          schema: outputSchemaFor(request),
+        },
+      },
+    }, { signal: deadlineSignal }))
+    const text = completion.choices[0]?.message?.content ?? ''
+    return normalizedParsedResponse(parseProviderOutput(text, request), completion.id, this.capabilities, completion.usage
+      ? { inputTokens: completion.usage.prompt_tokens, outputTokens: completion.usage.completion_tokens }
+      : undefined)
+  }
+}
+
 class GeminiProvider implements ReasoningProvider {
   readonly id = 'gemini'
   readonly capabilities = geminiCapabilities
@@ -987,6 +1022,7 @@ export class ProviderRegistry {
       new MockProvider(),
       new CodexProvider(),
       new OpenAIProvider(),
+      new AgentRouterProvider(),
       new GeminiProvider(),
       new AnthropicProvider(),
     ]
