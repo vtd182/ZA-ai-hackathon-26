@@ -1,35 +1,39 @@
-document.addEventListener('DOMContentLoaded', () => {
-    // Scroll interaction
-    const startBtn = document.getElementById('startBtn');
-    if (startBtn) {
-        startBtn.addEventListener('click', () => {
-            document.getElementById('features').scrollIntoView({ 
-                behavior: 'smooth' 
+document.addEventListener("DOMContentLoaded", () => {
+    // Reveal Stagger Animation using Intersection Observer
+    // Matches the taste-skill standard for lightweight reveal on scroll
+    const revealElements = document.querySelectorAll('.reveal-on-scroll');
+
+    if (revealElements.length > 0) {
+        const observerOptions = {
+            root: null,
+            rootMargin: '0px',
+            threshold: 0.15
+        };
+
+        const revealObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach((entry, index) => {
+                if (entry.isIntersecting) {
+                    // Add a slight delay based on index if multiple elements appear at once
+                    setTimeout(() => {
+                        entry.target.classList.add('is-visible');
+                    }, index * 100);
+                    
+                    // Stop observing once revealed
+                    observer.unobserve(entry.target);
+                }
             });
+        }, observerOptions);
+
+        revealElements.forEach(el => {
+            revealObserver.observe(el);
         });
     }
 
-    // Intersection Observer for scroll animations
-    const observerOptions = {
-        threshold: 0.1,
-        rootMargin: "0px 0px -50px 0px"
-    };
-
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.style.opacity = "1";
-                entry.target.style.transform = "translateY(0)";
-                observer.unobserve(entry.target);
-            }
-        });
-    }, observerOptions);
-
-    const featureCards = document.querySelectorAll('.feature-card');
-    featureCards.forEach((card, index) => {
-        card.style.opacity = "0";
-        card.style.transform = "translateY(30px)";
-        card.style.transition = `all 0.6s ease ${index * 0.1}s`;
-        observer.observe(card);
-    });
+    // Force hero to reveal immediately without scroll
+    const hero = document.querySelector('.hero');
+    if (hero) {
+        setTimeout(() => {
+            hero.classList.add('is-visible');
+        }, 100);
+    }
 });
