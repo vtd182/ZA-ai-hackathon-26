@@ -342,13 +342,14 @@ function figmaExecutionContext(): FigmaExecutionContext {
   const context = target ? figmaIntegration.getContext(target.targetHash) : null
   if (target && context) {
     // A configured ZDS ref that captured live → reference mode: prefer its components and
-    // icons, creatively fill anything it lacks, and never block the flow.
+    // icons, creatively fill anything it lacks, and never block the flow. (ZDS rule kept.)
     if (context.mode === 'live') {
       return { target, manifest: context.manifest, connectorMode: 'live', planMode: 'reference', iconCatalog: context.iconCatalog }
     }
-    // Ref configured but the live capture failed → degrade to free creative on the live
-    // target instead of blocking. The design is still produced (labeled as free).
-    return { target, manifest: context.manifest, connectorMode: 'live', planMode: 'free', iconCatalog: context.iconCatalog }
+    // Allowlisted a Page with NO ZDS (or capture failed) → there is no reliable ZDS manifest to
+    // clone onto the real Page, so run SAFE free-creative (AI taste) via the mock/offline path
+    // instead of blocking or failing live clones. "No ZDS ref → AI taste" honored safely.
+    return { target, manifest: context.manifest, connectorMode: 'mock', planMode: 'free', iconCatalog: null }
   }
   // No ref configured → free creative composition offline against the synthetic palette.
   return mockFigmaExecutionContext()
@@ -1353,12 +1354,10 @@ async function allowFigmaTarget(sessionId: string, forceCapture: boolean): Promi
     // a null catalog simply means the craft worker falls back to composed icon primitives.
     const iconCatalog = await figmaMcp.captureIconCatalog(target).catch(() => null)
     const context = normalizeFigmaDesignSystemContext(capture, target, syntheticZaloDesignSystem, timestamp(), iconCatalog)
-    if (context.mode !== 'live') {
-      throw new Error(
-        `Page "${target.pageName}" không cung cấp semantic ZDS bindings. `
-        + 'Hãy mở đúng Page chứa các component ZDS rồi chọn lại nguồn.',
-      )
-    }
+    // A Page without ZDS bindings (context.mode === 'fixture_fallback') is NOT an error: we accept
+    // it as a free-creative source. figmaExecutionContext routes such targets to the safe mock
+    // free-creative path (no live ZDS cloning). A Page WITH ZDS captures live and drives reference
+    // mode as before — the ZDS rule is unchanged.
     figmaIntegration.saveActiveTarget(target)
     figmaIntegration.saveContext(context)
   } else {
