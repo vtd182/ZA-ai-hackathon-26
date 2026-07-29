@@ -149,7 +149,7 @@ Mở **Settings** trong app → chọn provider → nhập API key (mã hóa b�
 **AgentRouter** — thêm sẵn, cách dùng:
 1. Lấy API key tại **https://agentrouter.org/console/token**.
 2. Chọn provider **AgentRouter** trong app → dán key (hoặc set `AGENTROUTER_API_KEY`).
-3. **Đặt đúng model** trong ô cấu hình model của profile (mặc định `gpt-5`) theo catalog AgentRouter.
+3. **Đặt đúng model** trong ô cấu hình model của profile (mặc định `claude-opus-4-8`) — đảm bảo model nằm trong gói của API key (nếu không sẽ bị `content-blocked`).
 
 > Model ID sửa được cho từng provider. Nếu model được route không hỗ trợ `json_schema strict`, đổi sang model hỗ trợ (GPT‑5 / Claude thường OK).
 
