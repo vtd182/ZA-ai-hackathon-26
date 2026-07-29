@@ -698,6 +698,8 @@ a:focus-visible,
 }
 
 .canvas-activity {
+  /* Purely informational — must never intercept clicks on the canvas or tldraw toolbar. */
+  pointer-events: none;
   position: absolute;
   z-index: 6;
   top: 14px;

@@ -530,7 +530,9 @@ export function App(): React.JSX.Element {
   const decideArtifacts = async (decision: 'approve' | 'reject'): Promise<void> => {
     if (!activeThread || approving) return
     setApproving(true)
-    if (decision === 'approve') setArtifactProgress({})
+    // Clear stale progress on BOTH decisions: a leftover 'running' entry would keep artifactBusy
+    // true and lock the composer after "Hủy writes", stranding the user.
+    setArtifactProgress({})
     setError(null)
     try {
       const workspace = decision === 'approve'
