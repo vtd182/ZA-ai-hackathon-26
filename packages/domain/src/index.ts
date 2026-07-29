@@ -323,6 +323,7 @@ export interface DesktopApi {
     selectDecision(threadId: string, optionId: string, customTitle?: string): Promise<LifecycleWorkspaceState>
     previewPromotion(threadId: string, canvas: CanvasDocumentContext): Promise<CanvasPromotionPreview>
     commitPromotion(threadId: string, payloadHash: string): Promise<LifecycleWorkspaceState>
+    confirmProductSpec(threadId: string): Promise<LifecycleWorkspaceState>
     prepareArtifacts(threadId: string): Promise<LifecycleWorkspaceState>
     regenerateArtifacts(threadId: string, feedback?: string): Promise<LifecycleWorkspaceState>
     approveArtifacts(threadId: string): Promise<ApproveChangeOutput>

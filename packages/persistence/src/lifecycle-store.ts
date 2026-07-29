@@ -211,6 +211,31 @@ export class LifecycleStore {
     return state
   }
 
+  updateCurrentProductSpec(stateInput: RunState): RunState {
+    const state = runStateSchema.parse(stateInput)
+    const current = this.getSpecVersion(state.threadId, state.productSpec.version)
+    if (!current || current.id !== state.productSpec.id) {
+      throw new Error('Current ProductSpec version does not exist')
+    }
+    const transaction = this.db.transaction(() => {
+      this.db.prepare(`
+        UPDATE product_spec_versions
+        SET schema_version = ?, spec_json = ?, created_at = ?
+        WHERE thread_id = ? AND version = ?
+      `).run(
+        state.productSpec.schemaVersion,
+        JSON.stringify(state.productSpec),
+        state.lastCheckpointAt,
+        state.threadId,
+        state.productSpec.version,
+      )
+      this.updateRun(state)
+      this.insertCheckpoint(state, state.lastCheckpointAt)
+    })
+    transaction()
+    return state
+  }
+
   commitPromotedSpec(stateInput: RunState): RunState {
     const state = runStateSchema.parse(stateInput)
     const transaction = this.db.transaction(() => {

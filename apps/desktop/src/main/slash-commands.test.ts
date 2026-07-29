@@ -17,6 +17,12 @@ describe('slash commands', () => {
     })
   })
 
+  it('parses explicit ProductSpec confirmation', () => {
+    expect(parseSlashCommand('/spec confirm')).toEqual({ kind: 'spec_confirm' })
+    expect(parseSlashCommand('/productspec approve')).toEqual({ kind: 'spec_confirm' })
+    expect(parseSlashCommand('/spec chot')).toEqual({ kind: 'spec_confirm' })
+  })
+
   it('parses explicit creative studio modes without guessing from prose', () => {
     expect(parseSlashCommand('/studio explore luồng nhắc backup')).toEqual({
       kind: 'studio_explore',

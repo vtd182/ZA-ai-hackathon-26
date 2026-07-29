@@ -296,7 +296,11 @@ Intent:
 - **Status note 2026-07-30:** first UI polish implemented in `apps/desktop/src/renderer/src/App.tsx`:
   Draft ProductSpec is labeled as source-of-truth state, Delivery copy explains writes still require
   approval, and web/admin/no-ZDS surface is displayed from `FINDING-PRODUCT-SURFACE`. Remaining
-  polish: explicit edit/confirm controls beyond the current inspector + delivery actions.
+  polish: explicit edit controls beyond the current inspector + delivery actions.
+- **Status note 2026-07-30 update:** ProductSpec confirmation is now an explicit checkpoint:
+  `/spec confirm` and the Delivery UI button mark a Draft ProductSpec as `approved`, persist the
+  same ProductSpec version, and block Figma/PRD/backlog artifact planning until this confirmation
+  happens.
 
 ### `P0-SHARP-003` Introduce ArtifactBrief canonical contract
 

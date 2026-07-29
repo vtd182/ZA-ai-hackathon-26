@@ -53,6 +53,49 @@ describe('LifecycleStore', () => {
     history.close()
   })
 
+  it('updates the current ProductSpec version when a draft is confirmed', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pm-agent-lifecycle-confirm-spec-'))
+    cleanup.push(directory)
+    const filename = join(directory, 'app.db')
+    const history = new HistoryStore(filename)
+    const thread = history.createThread()
+    const store = new LifecycleStore(filename)
+    const timestamp = '2026-07-22T02:05:00.000Z'
+    const draft = parseProductSpec({
+      ...createDraftProductSpec(thread.id, timestamp),
+      requirements: [{
+        id: 'REQ-CONFIRM', kind: 'requirement', title: 'Confirm scope', description: 'Review the scope',
+        priority: 'must', status: 'in_scope', acceptanceCriteria: ['Scope is reviewed'], dependsOn: [],
+      }],
+      screens: [{
+        id: 'SCREEN-CONFIRM', kind: 'screen', title: 'Confirm scope', purpose: 'Review the scope',
+        requirementIds: ['REQ-CONFIRM'], designSystemRoles: ['app-header', 'primary-button'],
+      }],
+      stories: [{
+        id: 'STORY-CONFIRM', kind: 'story', title: 'Confirm scope',
+        requirementIds: ['REQ-CONFIRM'], acceptanceCriteria: ['Scope is reviewed'],
+      }],
+      relationships: [
+        { id: 'REL-CONFIRM-SCREEN', type: 'DESIGNED_BY', source: { kind: 'requirement', id: 'REQ-CONFIRM' }, target: { kind: 'screen', id: 'SCREEN-CONFIRM' } },
+        { id: 'REL-CONFIRM-STORY', type: 'IMPLEMENTS', source: { kind: 'requirement', id: 'REQ-CONFIRM' }, target: { kind: 'story', id: 'STORY-CONFIRM' } },
+      ],
+      updatedAt: timestamp,
+    })
+    const initial = store.initializeRun(thread.id, 'RUN-CONFIRM', draft, timestamp, 'DELIVERY')
+    const approvedAt = '2026-07-22T02:06:00.000Z'
+    const confirmed = store.updateCurrentProductSpec({
+      ...initial,
+      productSpec: { ...initial.productSpec, status: 'approved', updatedAt: approvedAt },
+      lastCheckpointAt: approvedAt,
+    })
+
+    expect(confirmed.productSpec.status).toBe('approved')
+    expect(store.getRunState(thread.id)?.productSpec.status).toBe('approved')
+    expect(store.getSpecVersion(thread.id, 1)?.status).toBe('approved')
+    store.close()
+    history.close()
+  })
+
   it('persists ambiguity without a preview, action or ProductSpec mutation', () => {
     const directory = mkdtempSync(join(tmpdir(), 'pm-agent-lifecycle-ambiguity-'))
     cleanup.push(directory)

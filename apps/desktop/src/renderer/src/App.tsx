@@ -69,6 +69,7 @@ const slashCommands = [
   { command: '/canvas state', label: 'State machine', detail: 'Trạng thái + transition', acceptsPrompt: true },
   { command: '/canvas mindmap', label: 'Mind map', detail: 'Phân rã tính năng', acceptsPrompt: true },
   { command: '/canvas er', label: 'ER data model', detail: 'Entity + quan hệ', acceptsPrompt: true },
+  { command: '/spec confirm', label: 'Chốt ProductSpec', detail: 'Khóa source of truth trước artifact' },
   { command: '/figma create', label: 'Tạo Figma', detail: 'Kickoff: Figma + PRD + backlog' },
   { command: '/figma refine', label: 'Sửa Figma', detail: 'Agent sửa bản hiện tại theo feedback', acceptsPrompt: true },
   { command: '/figma regenerate', label: 'Figma bản mới', detail: 'Tạo lại thiết kế, giữ bản cũ' },
@@ -505,6 +506,27 @@ export function App(): React.JSX.Element {
     }
   }
 
+  const confirmProductSpec = async (): Promise<void> => {
+    if (!activeThread || approving) return
+    const requestThreadId = activeThread.id
+    setApproving(true)
+    setRunningThreadId(requestThreadId)
+    setError(null)
+    try {
+      const workspace = await window.pmAgent.lifecycle.confirmProductSpec(requestThreadId)
+      if (activeThreadIdRef.current === requestThreadId) {
+        setLifecycleWorkspace(workspace)
+        setActiveThread(await window.pmAgent.threads.get(requestThreadId))
+      }
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    } finally {
+      setApproving(false)
+      setRunningThreadId((current) => current === requestThreadId ? null : current)
+    }
+  }
+
   const regenerateArtifacts = async (feedback?: string): Promise<void> => {
     if (!activeThread || approving) return
     const requestThreadId = activeThread.id
@@ -780,6 +802,7 @@ export function App(): React.JSX.Element {
         onSelectDecision={selectDecision}
         onCommitPromotion={commitPromotion}
         onCancelPromotion={() => setPromotionPreview(null)}
+        onConfirmProductSpec={confirmProductSpec}
         onPrepareArtifacts={prepareArtifacts}
         onRegenerateArtifacts={regenerateArtifacts}
         onApproveArtifacts={() => decideArtifacts('approve')}
@@ -1157,6 +1180,7 @@ function ChatPanel({
   onSelectDecision,
   onCommitPromotion,
   onCancelPromotion,
+  onConfirmProductSpec,
   onPrepareArtifacts,
   onRegenerateArtifacts,
   onApproveArtifacts,
@@ -1200,6 +1224,7 @@ function ChatPanel({
   onSelectDecision(optionId: string, customTitle?: string): Promise<void>
   onCommitPromotion(): Promise<void>
   onCancelPromotion(): void
+  onConfirmProductSpec(): Promise<void>
   onPrepareArtifacts(): Promise<void>
   onRegenerateArtifacts(feedback?: string): Promise<void>
   onApproveArtifacts(): Promise<void>
@@ -1390,6 +1415,7 @@ function ChatPanel({
           canvasItemCount={canvasItemCount}
           busy={sending || approving || artifactBusy}
           onSend={onSend}
+          onConfirmProductSpec={onConfirmProductSpec}
           onPrepareArtifacts={onPrepareArtifacts}
         />
       )}
@@ -1481,15 +1507,18 @@ function DeliveryGuide({
   canvasItemCount,
   busy,
   onSend,
+  onConfirmProductSpec,
   onPrepareArtifacts,
 }: {
   productSpec: import('@pm-agent/domain').ProductSpec
   canvasItemCount: number
   busy: boolean
   onSend(content: string): Promise<void>
+  onConfirmProductSpec(): Promise<void>
   onPrepareArtifacts(): Promise<void>
 }): React.JSX.Element {
   const requirements = productSpec.requirements.filter((item) => item.status !== 'removed').length
+  const confirmed = productSpec.status === 'approved'
   return (
     <section className="delivery-guide" aria-label="Delivery next steps">
       <header>
@@ -1504,8 +1533,15 @@ function DeliveryGuide({
         <span><b>{productSpec.screens.length}</b> Screen</span>
         <span><b>{canvasItemCount}</b> Canvas</span>
       </div>
-      <p>Đây là truth đang dùng để vẽ flow/prototype và chuẩn bị artifact. Bạn có thể review scope trước khi cho phép Figma/PRD/backlog write.</p>
+      <p>{confirmed
+        ? 'ProductSpec này đã được chốt làm source of truth. Artifact sẽ vẫn cần approval riêng trước khi write.'
+        : 'Đây là draft truth để review. Hãy chốt ProductSpec trước khi tạo Figma/PRD/backlog.'}</p>
       <div className="delivery-actions">
+        {!confirmed && (
+          <button className="delivery-confirm-action" disabled={busy || requirements === 0} onClick={() => void onConfirmProductSpec()}>
+            <ShieldCheck size={16} /><span><strong>Chốt ProductSpec</strong><small>Khóa source of truth</small></span>
+          </button>
+        )}
         <button disabled={busy} onClick={() => void onSend('Vẽ user flow MVP dựa trên phương án đã chọn')}>
           <Route size={16} /><span><strong>User flow</strong><small>Luồng và nhánh chính</small></span>
         </button>
@@ -1515,7 +1551,7 @@ function DeliveryGuide({
         <button disabled={busy} onClick={() => void onSend('Tiếp tục hoàn thiện ProductSpec: chỉ ra scope, giả định và điểm còn thiếu')}>
           <FileText size={16} /><span><strong>ProductSpec</strong><small>Bổ sung scope còn thiếu</small></span>
         </button>
-        <button className="delivery-package-action" disabled={busy || requirements === 0} onClick={() => void onPrepareArtifacts()}>
+        <button className="delivery-package-action" disabled={busy || requirements === 0 || !confirmed} onClick={() => void onPrepareArtifacts()}>
           <FolderOpen size={16} /><span><strong>Tạo kickoff package</strong><small>Figma · PRD.md · backlog mock</small></span>
         </button>
       </div>

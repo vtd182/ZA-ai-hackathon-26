@@ -7,6 +7,7 @@ export type SlashCommand =
   | { kind: 'figma_retry' }
   | { kind: 'figma_regenerate' }
   | { kind: 'figma_refine'; prompt: string }
+  | { kind: 'spec_confirm' }
   | { kind: 'canvas_flow'; prompt: string }
   | { kind: 'canvas_prototype'; prompt: string }
   | { kind: 'canvas_diagram'; diagram: 'sequence' | 'state' | 'mindmap' | 'er'; prompt: string }
@@ -32,6 +33,9 @@ export function parseSlashCommand(input: string): SlashCommand | null {
     if (action === 'retry') return { kind: 'figma_retry' }
     if (action === 'regenerate' || action === 'regen') return { kind: 'figma_regenerate' }
     if (action === 'refine') return { kind: 'figma_refine', prompt }
+  }
+  if (namespace === '/spec' || namespace === '/productspec') {
+    if (action === 'confirm' || action === 'approve' || action === 'chot') return { kind: 'spec_confirm' }
   }
   if (namespace === '/canvas') {
     if (action === 'flow') return { kind: 'canvas_flow', prompt }
@@ -70,6 +74,9 @@ export function slashHelpMessage(): string {
     '  /canvas state — state machine (vòng đời + transition)',
     '  /canvas mindmap — mind map phân rã tính năng',
     '  /canvas er — ER data model',
+    '',
+    '◆ SPEC — source of truth',
+    '  /spec confirm — chốt Draft ProductSpec trước khi tạo artifact',
     '',
     '◆ STUDIO — trao đổi & phác thảo',
     '  /studio explore [chủ đề] — mở rộng ý tưởng, không tự vẽ',

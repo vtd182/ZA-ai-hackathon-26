@@ -2057,6 +2057,12 @@ a:focus-visible,
   background: #f1faf7;
 }
 
+.delivery-actions .delivery-confirm-action {
+  border-color: #79c6aa;
+  color: #107554;
+  background: #ecfbf5;
+}
+
 .delivery-actions button span {
   display: flex;
   min-width: 0;

@@ -39,6 +39,7 @@ const api: DesktopApi = {
     selectDecision: (threadId, optionId, customTitle) => ipcRenderer.invoke('lifecycle:select-decision', threadId, optionId, customTitle),
     previewPromotion: (threadId, canvas) => ipcRenderer.invoke('lifecycle:preview-promotion', threadId, canvas),
     commitPromotion: (threadId, payloadHash) => ipcRenderer.invoke('lifecycle:commit-promotion', threadId, payloadHash),
+    confirmProductSpec: (threadId) => ipcRenderer.invoke('lifecycle:confirm-product-spec', threadId),
     prepareArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:prepare-artifacts', threadId),
     regenerateArtifacts: (threadId, feedback) => ipcRenderer.invoke('lifecycle:regenerate-artifacts', threadId, feedback),
     approveArtifacts: (threadId) => ipcRenderer.invoke('lifecycle:approve-artifacts', threadId),

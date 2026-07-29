@@ -151,7 +151,7 @@ function clearBriefDraftMessage(spec: ProductSpec, brief: ReturnType<typeof extr
       ? `Out of scope: ${spec.decisions.filter((decision) => decision.id.startsWith('DECISION-OUT-OF-SCOPE')).map((decision) => decision.choice).join(' · ')}.`
       : '',
     '',
-    'ProductSpec vẫn đang là draft. Bước tiếp theo hợp lý: vẽ flow để review logic, tạo prototype để review trải nghiệm, hoặc chuẩn bị kickoff package nếu scope đã ổn.',
+    'ProductSpec vẫn đang là draft. Bước tiếp theo hợp lý: vẽ flow để review logic, tạo prototype để review trải nghiệm, hoặc chốt ProductSpec nếu scope đã ổn rồi mới chuẩn bị kickoff package.',
   ].filter(Boolean).join('\n')
 }
 
@@ -159,7 +159,7 @@ function clearBriefSuggestions(): ConversationSuggestion[] {
   return [
     { id: 'draft-flow', label: 'Vẽ user flow', prompt: '/canvas flow luồng MVP từ Draft ProductSpec hiện tại, bao gồm exception và recovery', kind: 'visualize' },
     { id: 'draft-prototype', label: 'Vẽ prototype', prompt: '/canvas prototype các màn hình chính từ Draft ProductSpec hiện tại', kind: 'visualize' },
-    { id: 'draft-artifact', label: 'Tạo kickoff package', prompt: '/figma prepare', kind: 'artifact' },
+    { id: 'draft-confirm', label: 'Chốt ProductSpec', prompt: '/spec confirm', kind: 'commit' },
   ]
 }
 
@@ -1198,7 +1198,43 @@ function figmaPrepareBlockReason(state: RunState): string {
   if (state.productSpec.requirements.length === 0) {
     return 'ProductSpec đang có 0 requirement nên chưa đủ scope cho Figma. Nếu bạn đã vẽ user flow / prototype trên canvas, hãy “Promote” nó thành ProductSpec trước; hoặc hoàn tất Decision để sinh scope, rồi tạo lại.'
   }
+  if (state.productSpec.status !== 'approved') {
+    return 'ProductSpec vẫn là draft. Hãy chốt ProductSpec trước để dùng nó làm source of truth cho Figma, PRD và backlog.'
+  }
   return 'Chưa thể chuẩn bị Figma từ trạng thái hiện tại của thread này.'
+}
+
+function confirmProductSpecForThread(threadId: string): { workspace: LifecycleWorkspaceState; assistantMessage: ChatMessage } {
+  const workspace = workspaceFor(threadId)
+  const state = workspace.runState
+  if (state.phase !== 'DELIVERY' || state.status !== 'ACTIVE') {
+    throw new Error('Chỉ có thể chốt ProductSpec tại Delivery checkpoint')
+  }
+  if (state.productSpec.requirements.length === 0) {
+    throw new Error('ProductSpec chưa có scope để chốt')
+  }
+  if (state.productSpec.status === 'approved') {
+    return {
+      workspace,
+      assistantMessage: history.addMessage(threadId, 'assistant', `ProductSpec v${state.productSpec.version} đã là source of truth. Bạn có thể vẽ flow/prototype hoặc chuẩn bị kickoff package từ bản này.`),
+    }
+  }
+  if (state.productSpec.status !== 'draft') throw new Error(`Không thể chốt ProductSpec ở trạng thái ${state.productSpec.status}`)
+  const at = timestamp()
+  lifecycle.updateCurrentProductSpec({
+    ...state,
+    productSpec: {
+      ...state.productSpec,
+      status: 'approved',
+      updatedAt: at,
+    },
+    lastCheckpointAt: at,
+  })
+  const nextWorkspace = workspaceFor(threadId)
+  return {
+    workspace: nextWorkspace,
+    assistantMessage: history.addMessage(threadId, 'assistant', `Đã chốt ProductSpec v${state.productSpec.version} làm source of truth. Từ giờ Figma, PRD.md và backlog mock sẽ được tạo từ bản đã confirm này; mọi thay đổi scope sẽ đi qua impact preview trước khi sync.`),
+  }
 }
 
 async function prepareArtifactsForThread(
@@ -1218,6 +1254,7 @@ async function prepareArtifactsForThread(
     throw new Error('Kickoff package chỉ có thể chuẩn bị tại Delivery checkpoint')
   }
   if (state.productSpec.requirements.length === 0) throw new Error('ProductSpec chưa có scope để tạo kickoff package')
+  if (state.productSpec.status !== 'approved') throw new Error(figmaPrepareBlockReason(state))
   const startedAt = Date.now()
   const at = timestamp()
   const staged = {
@@ -1585,6 +1622,9 @@ function registerIpc(): void {
     promotionPreviews.delete(threadId)
     return workspaceFor(threadId)
   })
+  ipcMain.handle('lifecycle:confirm-product-spec', (_event, threadId: string) => {
+    return confirmProductSpecForThread(threadId).workspace
+  })
   ipcMain.handle('lifecycle:prepare-artifacts', async (_event, threadId: string) => {
     return (await prepareArtifactsForThread(threadId)).workspace
   })
@@ -1908,6 +1948,23 @@ function registerIpc(): void {
           canvasRequestId: diagramRequestId,
         }
       }
+      if (slashCommand?.kind === 'spec_confirm') {
+        const result = confirmProductSpecForThread(input.threadId)
+        history.completeTurn(turnId, 'completed', [])
+        turnFinished = true
+        return {
+          userMessage,
+          assistantMessage: result.assistantMessage,
+          commands: [],
+          suggestions: [
+            { id: 'confirmed-flow', label: 'Vẽ user flow', prompt: '/canvas flow luồng MVP từ ProductSpec đã chốt', kind: 'visualize' },
+            { id: 'confirmed-figma', label: 'Chuẩn bị Figma', prompt: '/figma prepare', kind: 'artifact' },
+          ],
+          canvasProgram: { schemaVersion: 1, mode: 'none' as const, summary: '', operations: [], script: null },
+          canvasProgramSource: 'none' as const,
+          canvasRequestId: null,
+        }
+      }
       if (slashCommand?.kind === 'figma_status') {
         const status = await figmaStatus()
         const workspace = workspaceFor(input.threadId)
@@ -1971,6 +2028,7 @@ function registerIpc(): void {
         const canPrepare = state.phase === 'DELIVERY'
           && state.status === 'ACTIVE'
           && state.productSpec.requirements.length > 0
+          && state.productSpec.status === 'approved'
         if (!artifactPlanPending(state) && !canPrepare) {
           return appOwnedReply(figmaPrepareBlockReason(state))
         }
@@ -2171,6 +2229,7 @@ function registerIpc(): void {
         const canPrepareArtifacts = artifactWorkspace.runState.phase === 'DELIVERY'
           && artifactWorkspace.runState.status === 'ACTIVE'
           && artifactWorkspace.runState.productSpec.requirements.length > 0
+          && artifactWorkspace.runState.productSpec.status === 'approved'
         if (artifactAction === 'approve' && !artifactPlanPending(artifactWorkspace.runState)) {
           return appOwnedReply(
             'Không có immutable Figma plan đang chờ. Hãy yêu cầu chuẩn bị Figma trước.',
