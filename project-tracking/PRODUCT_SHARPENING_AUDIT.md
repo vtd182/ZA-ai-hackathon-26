@@ -348,6 +348,13 @@ Intent:
 - **Implementation direction:** Normalize progress stage labels around ProductBrief/ProductSpec/ArtifactBrief/Execute/Verify.
 - **Acceptance:** No chat says "done" before read-back; errors mention the failing contract and next action.
 - **Tests:** partial failure fixtures and progress event assertions.
+- **Status note 2026-07-30:** renderer approval/progress language now surfaces the Figma
+  ArtifactBrief directly in the approval panel: mode, surface, output policy, DS policy,
+  verification count and ProductSpec hash are visible before the user approves the write. Execution
+  progress labels now use the Agent Core contract names (`ArtifactBrief + plan`, `Guard preflight`,
+  `Write có approval`, `Read-back`, `Verify read-back`) instead of generic AI/status wording.
+  Remaining polish: add renderer smoke coverage and richer failure cards that classify contract
+  errors by ProductSpec, ArtifactBrief, MCP execution and read-back.
 
 ### `P0-SHARP-007` Demo script and rehearsal matrix
 

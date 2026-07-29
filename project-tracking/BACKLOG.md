@@ -512,6 +512,11 @@
   and free Figma plans accept zero-slot primitive screens. Verification:
   `pnpm exec vitest run packages/domain/src/product-spec.test.ts packages/domain/src/artifact-brief.test.ts packages/agent-core/src/product-spec-synthesis.test.ts packages/connectors/src/figma-artifact-plan.test.ts`,
   `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
+- **Evidence update:** Artifact approval UI now displays the Figma ArtifactBrief before write
+  approval: mode, surface, output policy, DS policy, verification count and ProductSpec hash.
+  Execution progress stage labels now match the governed contract (`ArtifactBrief + plan`, guard
+  preflight, write with approval, read-back, verify). Verification: `./run.sh typecheck`,
+  `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
 
 ## Epic E7 - Change synchronization
 

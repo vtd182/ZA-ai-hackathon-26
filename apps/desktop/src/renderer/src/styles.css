@@ -1528,6 +1528,36 @@ a:focus-visible,
   text-transform: capitalize;
 }
 
+.artifact-brief-card {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #cfe1dc;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.artifact-brief-card strong {
+  color: #204b3e;
+  font-size: 10.5px;
+}
+
+.artifact-brief-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.artifact-brief-facts span {
+  padding: 3px 6px;
+  border: 1px solid #d9e7e3;
+  border-radius: 999px;
+  color: #35594e;
+  background: #f4fbf8;
+  font-size: 9.5px;
+  line-height: 1.2;
+}
+
 .approve-button {
   justify-content: center;
   width: calc(100% - 22px);

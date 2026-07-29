@@ -48,6 +48,7 @@ import type {
   DevBridgeStatus,
   FigmaSetupStatus,
   ExecutionSummary,
+  ArtifactBrief,
   LifecycleWorkspaceState,
   MockJiraPlan,
   MockZdocPlan,
@@ -93,6 +94,48 @@ function relativeTime(value: string): string {
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message.replace(/^Error invoking remote method '[^']+': Error: /, '')
   return 'Đã xảy ra lỗi không xác định'
+}
+
+function actionPayloadObject(action?: PlannedAction): Record<string, unknown> | null {
+  if (!action?.payload || typeof action.payload !== 'object' || Array.isArray(action.payload)) return null
+  return action.payload
+}
+
+function artifactBriefForAction(action?: PlannedAction): ArtifactBrief | null {
+  const payload = actionPayloadObject(action)
+  const brief = payload?.artifactBrief
+  if (!brief || typeof brief !== 'object' || Array.isArray(brief)) return null
+  const candidate = brief as Partial<ArtifactBrief>
+  if (candidate.schemaVersion !== 1 || candidate.target !== 'figma') return null
+  if (!candidate.mode || !candidate.surface || !candidate.outputPolicy || !candidate.designSystemPolicy) return null
+  return candidate as ArtifactBrief
+}
+
+function artifactBriefFacts(brief: ArtifactBrief | null): string[] {
+  if (!brief) return []
+  const modeLabel: Record<ArtifactBrief['mode'], string> = {
+    zds_strict: 'Strict ZDS',
+    zds_reference: 'Reference ZDS',
+    free_adaptive: 'No-ZDS creative',
+    mock: 'Mock preview',
+  }
+  const outputLabel: Record<ArtifactBrief['outputPolicy'], string> = {
+    selected_page: 'Page đang chọn',
+    managed_page: 'Page PM managed',
+    mock_store: 'Mock store',
+  }
+  const dsLabel: Record<ArtifactBrief['designSystemPolicy'], string> = {
+    required: 'DS bắt buộc',
+    reference: 'DS tham chiếu',
+    none: 'Không dùng DS',
+  }
+  return [
+    modeLabel[brief.mode],
+    brief.surface.replace(/_/g, ' '),
+    outputLabel[brief.outputPolicy],
+    dsLabel[brief.designSystemPolicy],
+    `${brief.verificationPolicy.length} bước verify`,
+  ]
 }
 
 function threadModeLabel(thread: ThreadSummary): string {
@@ -1243,6 +1286,8 @@ function ChatPanel({
   const artifactBusy = Object.values(artifactProgress).some((progress) => progress?.status === 'running')
   const canSend = !disabled && !sending && !approving && !artifactBusy && !blockedByOtherThread && draft.trim().length > 0
   const figmaAction = artifactActions.find((action) => action.target === 'figma')
+  const figmaArtifactBrief = artifactBriefForAction(figmaAction)
+  const figmaArtifactFacts = artifactBriefFacts(figmaArtifactBrief)
   const figmaTimeoutMinutes = typeof figmaAction?.payload.timeoutBudgetMs === 'number'
     ? Math.ceil(figmaAction.payload.timeoutBudgetMs / 60_000)
     : null
@@ -1349,6 +1394,17 @@ function ChatPanel({
           <div className="artifact-targets">
             {artifactActions.map((action) => <span key={action.id}>{action.target === 'jira' ? 'Backlog mock' : action.target === 'zdoc' ? 'PRD.md' : 'Figma'}</span>)}
           </div>
+          {figmaArtifactBrief && (
+            <div className="artifact-brief-card" aria-label="Figma artifact brief">
+              <strong>Figma ArtifactBrief</strong>
+              <div className="artifact-brief-facts">
+                {figmaArtifactFacts.map((fact) => <span key={fact}>{fact}</span>)}
+              </div>
+              <small>
+                Source ProductSpec v{figmaArtifactBrief.sourceSpecVersion} · hash {figmaArtifactBrief.sourcePayloadHash.slice(0, 10)} · write chỉ chạy sau approval và read-back.
+              </small>
+            </div>
+          )}
           <small>
             Figma được guard và read-back; ưu tiên Page mới, chỉ dùng lại Page PM cùng sản phẩm khi Figma chạm giới hạn
             {creativeScreens.length > 0 ? ` · guarded scaffold ${creativeScreens.length} màn hình/${creativeLayers} lớp` : ''}
@@ -1862,13 +1918,13 @@ function ExecutionPanel({
 }): React.JSX.Element {
   const labels: Record<PlannedAction['target'], string> = { figma: 'Figma', jira: 'Backlog mock', zdoc: 'PRD Markdown' }
   const stageLabels: Record<ArtifactProgressEvent['stage'], string> = {
-    planning: 'AI thiết kế',
+    planning: 'ArtifactBrief + plan',
     availability: 'Kiểm tra kết nối',
-    preflight: 'Xác minh plan',
-    write: 'Đang ghi',
-    read_back: 'Đọc lại',
-    verify: 'Xác minh',
-    complete: 'Hoàn tất',
+    preflight: 'Guard preflight',
+    write: 'Write có approval',
+    read_back: 'Read-back',
+    verify: 'Verify read-back',
+    complete: 'Verified complete',
   }
   const actions = execution?.actions ?? (Object.keys(progress) as PlannedAction['target'][]).map((target) => ({
     actionId: `progress:${target}`,
