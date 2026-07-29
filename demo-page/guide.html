@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="vi" data-lang="vi" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Hướng dẫn sử dụng ZSpector.">
+    <title>Hướng dẫn Sử dụng | ZSpector</title>
+    <link rel="stylesheet" href="css/style.css">
+    
+    <script>
+        (function() {
+            try {
+                var localTheme = localStorage.getItem('theme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = localTheme || (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+                var lang = localStorage.getItem('lang') || 'vi';
+                document.documentElement.setAttribute('data-lang', lang);
+            } catch (e) {}
+        })();
+    </script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="index.html" class="logo">ZSpector</a>
+        <div class="nav-links">
+            <a href="index.html#features">
+                <span class="lang-en">Features</span>
+                <span class="lang-vi">Tính năng</span>
+            </a>
+            <a href="project.html">
+                <span class="lang-en">Deep Dive</span>
+                <span class="lang-vi">Chi tiết Dự án</span>
+            </a>
+            <a href="guide.html" class="active">
+                <span class="lang-en">User Guide</span>
+                <span class="lang-vi">Hướng dẫn</span>
+            </a>
+            <a href="https://github.com/vtd182/ZA-ai-hackathon-26" target="_blank" rel="noopener noreferrer" class="btn-nav">GitHub</a>
+            
+            <div class="controls">
+                <button id="theme-toggle" class="btn-icon" aria-label="Toggle Theme">☀️</button>
+                <button id="lang-toggle" class="btn-icon" aria-label="Toggle Language">🇺🇸 EN</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="article-page">
+        <article class="deep-dive-content">
+            <header class="article-header reveal-on-scroll">
+                <p class="eyebrow">
+                    <span class="lang-en">GETTING STARTED</span>
+                    <span class="lang-vi">BẮT ĐẦU NHANH</span>
+                </p>
+                <h1>
+                    <span class="lang-en">How to Setup & Use ZSpector</span>
+                    <span class="lang-vi">Hướng dẫn Cài đặt & Sử dụng ZSpector</span>
+                </h1>
+                <p class="subtitle">
+                    <span class="lang-en">Everything you need to compile, run, and connect the agent to Figma.</span>
+                    <span class="lang-vi">Mọi bước cần thiết để biên dịch, khởi chạy và kết nối Agent trực tiếp vào Figma.</span>
+                </p>
+            </header>
+
+            <section class="article-section reveal-on-scroll">
+                <h2>
+                    <span class="lang-en">1. Prerequisites & First-time setup</span>
+                    <span class="lang-vi">1. Môi trường & Khởi tạo ban đầu</span>
+                </h2>
+                <p>
+                    <span class="lang-en">To run ZSpector locally from the source, ensure you have macOS with Figma Desktop, Node.js 22+, Go 1.24+, and Bun 1.3+. Run the following commands from the repository root:</span>
+                    <span class="lang-vi">Để biên dịch ZSpector từ mã nguồn, máy của bạn cần có macOS với Figma Desktop, Node.js 22+, Go 1.24+ và Bun 1.3+. Hãy mở Terminal tại thư mục gốc của dự án và chạy:</span>
+                </p>
+                <pre style="background: var(--surface-color); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); overflow-x: auto; margin-bottom: 1.5rem;"><code>./run.sh setup
+./run.sh</code></pre>
+                <p>
+                    <span class="lang-en">The `setup` command automatically installs workspace dependencies, rebuilds the native SQLite module, builds the local Go runtime, and compiles the Figma plugin bundle.</span>
+                    <span class="lang-vi">Lệnh `setup` sẽ tự động tải các thư viện cần thiết, build lại module SQLite, build Go runtime nội bộ và đóng gói plugin Figma.</span>
+                </p>
+            </section>
+
+            <section class="article-section reveal-on-scroll">
+                <h2>
+                    <span class="lang-en">2. Connect the Figma Plugin</span>
+                    <span class="lang-vi">2. Kết nối Plugin Figma</span>
+                </h2>
+                <p>
+                    <span class="lang-en">To allow the agent to read and draw in your Figma workspace, you must bridge it using our local plugin. No REST tokens required!</span>
+                    <span class="lang-vi">Để Agent có quyền "đọc hiểu" và tự động vẽ giao diện vào không gian làm việc của bạn, hãy làm theo các bước sau (không cần cung cấp API token nguy hiểm):</span>
+                </p>
+                <ol style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.8; color: var(--text-secondary);">
+                    <li>Trong ZSpector, click vào tab <strong>Figma</strong> trên thanh công cụ.</li>
+                    <li>Xác nhận rằng <strong>Runtime local</strong> và <strong>Plugin build</strong> đang ở trạng thái sẵn sàng (ready).</li>
+                    <li>Bấm vào <strong>Open manifest</strong>.</li>
+                    <li>Mở app Figma Desktop, chọn <strong>Plugins → Development → Import plugin from manifest…</strong></li>
+                    <li>Trỏ tới file `manifest.json` vừa được mở ra ở bước 3.</li>
+                    <li>Khởi chạy plugin <strong>ZA Talk To Figma</strong> ngay trong màn hình Figma của bạn.</li>
+                    <li>Quay lại ZSpector và bấm nút <strong>Use this page</strong> để cấp quyền ghi cụ thể cho page này.</li>
+                </ol>
+                <p>
+                    <span class="lang-en">Once the plugin is connected, the UI will change to "Ready for preflight". If you switch Figma pages, you must re-allowlist the target to ensure the agent never overwrites the wrong file.</span>
+                    <span class="lang-vi">Sau khi kết nối thành công, ZSpector sẽ báo "Ready for preflight". Xin lưu ý: Mỗi khi bạn chuyển sang file hoặc page Figma khác, bạn phải bấm cấp quyền lại. Điều này đảm bảo Agent <strong>tuyệt đối không bao giờ ghi đè nhầm</strong> vào dữ liệu quan trọng của team.</span>
+                </p>
+            </section>
+
+            <section class="article-section reveal-on-scroll">
+                <h2>
+                    <span class="lang-en">3. Troubleshooting</span>
+                    <span class="lang-vi">3. Xử lý sự cố thường gặp</span>
+                </h2>
+                <ul style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.8; color: var(--text-secondary);">
+                    <li><strong>Lỗi "Runtime missing":</strong> Chạy lại lệnh `./run.sh setup` và kiểm tra xem Go / Bun đã được thêm vào biến môi trường PATH chưa.</li>
+                    <li><strong>Mãi kẹt ở "Waiting for plugin":</strong> Đảm bảo bạn đang chạy plugin "ZA Talk To Figma" ở cùng một cửa sổ Figma chứa file sandbox cần tương tác.</li>
+                    <li><strong>Lỗi cổng 1802 bị chiếm:</strong> Mở "Runtime console" từ hộp thoại setup, hệ thống có thể tái sử dụng một tiến trình cũ đang hoạt động ổn định trên cổng đó.</li>
+                    <li><strong>Electron hiển thị màn hình trắng:</strong> Tắt app, chạy `./run.sh build` sau đó chạy `./run.sh smoke`. Đảm bảo kết quả smoke test hiển thị `passed: true`.</li>
+                </ul>
+            </section>
+        </article>
+        
+        <div class="back-home text-center reveal-on-scroll">
+            <a href="index.html" class="btn-primary">
+                <span class="lang-en">Return to Homepage</span>
+                <span class="lang-vi">Trở về Trang chủ</span>
+            </a>
+        </div>
+    </main>
+
+    <footer class="site-footer">
+        <p>
+            <span class="lang-en">&copy; 2026 ZA AI Hackathon - Team 3. Crafted with precision.</span>
+            <span class="lang-vi">&copy; 2026 ZA AI Hackathon - Đội 3. Xây dựng bằng sự tỉ mỉ.</span>
+        </p>
+    </footer>
+
+    <script src="js/script.js"></script>
+</body>
+</html>
