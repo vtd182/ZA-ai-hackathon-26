@@ -1,8 +1,8 @@
 {
   "name": "@pm-agent/desktop",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
-  "author": "ZSpector",
+  "author": "DualMind",
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
@@ -12,8 +12,8 @@
     "dist": "node ../../scripts/prepare-package-assets.mjs --strict-figma && electron-vite build && electron-builder"
   },
   "build": {
-    "appId": "com.zspector.desktop",
-    "productName": "ZSpector",
+    "appId": "com.dualmind.desktop",
+    "productName": "DualMind",
     "directories": { "output": "release", "buildResources": "build" },
     "asarUnpack": ["**/*.node"],
     "files": ["out/main/**/*", "out/preload/**/*", "out/renderer/**/*", "package.json"],

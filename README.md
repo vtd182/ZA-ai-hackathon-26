@@ -1,6 +1,6 @@
 <div align="center">
 
-# ZSpector
+# DualMind
 
 **Biến một ý tưởng sản phẩm thô thành thiết kế Zalo Mini App chuẩn‑ship — có agent dẫn dắt bằng lựa chọn, canvas tự phản biện, và Figma craft thật.**
 
@@ -13,7 +13,7 @@
 
 ## Mục lục
 
-- [ZSpector là gì](#zspector-là-gì)
+- [DualMind là gì](#dualmind-là-gì)
 - [Tính năng chính](#tính-năng-chính)
 - [Kiến trúc tổng quan](#kiến-trúc-tổng-quan)
 - [Yêu cầu môi trường](#yêu-cầu-môi-trường)
@@ -30,9 +30,9 @@
 
 ---
 
-## ZSpector là gì
+## DualMind là gì
 
-ZSpector là workspace PM chạy hoàn toàn **trên máy** (dữ liệu lưu SQLite local). Bạn mô tả một ý tưởng, agent dẫn bạn qua **Discovery → Decision → Delivery** bằng các bước có **lựa chọn bấm được** (không phải chatbot hỏi mở), dựng **user‑flow trên canvas** và **tự phản biện** tính đầy đủ của flow, rồi sinh **gói kickoff**: thiết kế **Figma chuẩn ZDS + prototype**, **backlog Jira**, **tài liệu Confluence**, và **PRD Markdown** — mọi thao tác ghi ra ngoài đều **qua duyệt + hash bất biến**.
+DualMind là workspace PM chạy hoàn toàn **trên máy** (dữ liệu lưu SQLite local). Bạn mô tả một ý tưởng, agent dẫn bạn qua **Discovery → Decision → Delivery** bằng các bước có **lựa chọn bấm được** (không phải chatbot hỏi mở), dựng **user‑flow trên canvas** và **tự phản biện** tính đầy đủ của flow, rồi sinh **gói kickoff**: thiết kế **Figma chuẩn ZDS + prototype**, **backlog Jira**, **tài liệu Confluence**, và **PRD Markdown** — mọi thao tác ghi ra ngoài đều **qua duyệt + hash bất biến**.
 
 Tên gọi = **Z** (Zalo) + **inspector** (soi/kiểm) — biểu tượng là chiếc kính lúp.
 
@@ -159,7 +159,7 @@ Mở **Settings** trong app → chọn provider → nhập API key (mã hóa b�
 
 1. Mở **Figma desktop** → import plugin: `Plugins → Development → Import plugin from manifest` → chọn `mcp-tool/za-talk-to-figma/plugin/manifest.json`.
 2. Chạy plugin **ZA Talk To Figma** (kết nối runtime local `127.0.0.1:1802`).
-3. Trong app → mở **Page chứa component ZDS** (không phải Page output `ZSpector · …`) → bấm **“Dùng Page đang mở”** để allowlist nguồn.
+3. Trong app → mở **Page chứa component ZDS** (không phải Page output `DualMind · …`) → bấm **“Dùng Page đang mở”** để allowlist nguồn.
 4. Panel hiện **“Live Design System · N components · M icons”** → sẵn sàng generate.
 
 > Không kết nối Figma **vẫn dùng được**: gói kickoff tự hạ Figma xuống mock, vẫn ra Jira + Confluence + PRD.
@@ -192,12 +192,12 @@ Build cho **hệ điều hành hiện tại** (electron‑builder tự nhận OS
 ./run.sh dist
 ```
 
-- macOS → `apps/desktop/release/ZSpector-<version>-arm64.dmg`
-- Windows → `apps/desktop/release/ZSpector-Setup-<version>.exe`
+- macOS → `apps/desktop/release/DualMind-<version>-arm64.dmg`
+- Windows → `apps/desktop/release/DualMind-Setup-<version>.exe`
 - Standalone Figma plugin bundle → `za-talk-to-figma-plugin.zip` in CI
 - Standalone Figma runtime bundle → `za-talk-to-figma-runtime-<os>-<arch>.zip` in CI
 
-**Cài trên macOS:** mở `.dmg` → kéo **ZSpector** vào Applications. App **chưa ký** → lần đầu **chuột phải → Open** (Gatekeeper).
+**Cài trên macOS:** mở `.dmg` → kéo **DualMind** vào Applications. App **chưa ký** → lần đầu **chuột phải → Open** (Gatekeeper).
 
 Đóng gói gồm: app bundle + native `better-sqlite3` (asar‑unpack) + `resources/skill-packs` + `resources/figma-runtime` (binary Go + plugin minimal: `manifest.json`, `dist/code.js`, `dist/index.html`, đúng theo OS). Icon lấy từ `build/icon.icns` (mac) / `build/icon.png` → `.ico` (win).
 

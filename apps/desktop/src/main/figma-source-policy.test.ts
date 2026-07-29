@@ -5,6 +5,7 @@ import { isManagedFigmaArtifactPage, missingFigmaRoles } from './figma-source-po
 
 describe('Figma source policy', () => {
   it('recognizes only agent-owned artifact page names', () => {
+    expect(isManagedFigmaArtifactPage('DualMind · Mini App đặt xe · v1')).toBe(true)
     expect(isManagedFigmaArtifactPage('ZSpector · Mini App đặt xe · v1')).toBe(true)
     expect(isManagedFigmaArtifactPage('PM · Mini App đặt xe · v1')).toBe(true)
     expect(isManagedFigmaArtifactPage('PM Lifecycle · SPEC-1 · v1')).toBe(true)

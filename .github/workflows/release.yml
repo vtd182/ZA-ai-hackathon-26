@@ -1,6 +1,6 @@
 name: release
 
-# Push a version tag (e.g. v0.1.0) to build ZSpector for macOS + Windows and publish a
+# Push a version tag (e.g. v0.1.0) to build DualMind for macOS + Windows and publish a
 # GitHub Release with the .dmg and .exe installers. The app version comes from
 # apps/desktop/package.json — bump it before tagging so the tag matches.
 on:
@@ -111,7 +111,7 @@ jobs:
             (cd apps/desktop/out/package-resources && zip -qr "$GITHUB_WORKSPACE/apps/desktop/release/za-talk-to-figma-runtime-${RUNNER_OS}-${RUNNER_ARCH}.zip" figma-runtime)
           fi
 
-      - name: Build ZSpector
+      - name: Build DualMind
         working-directory: apps/desktop
         shell: bash
         run: |

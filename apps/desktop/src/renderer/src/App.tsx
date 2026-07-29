@@ -577,7 +577,7 @@ export function App(): React.JSX.Element {
         <div className="brand-row">
           <div className="brand-mark">ZS</div>
           <div className="brand-copy">
-            <strong>ZSpector</strong>
+            <strong>DualMind</strong>
             <span>Local workspace</span>
           </div>
           <button className="icon-button reset-demo-button" title="Reset demo" onClick={() => setResetOpen(true)}>
@@ -619,7 +619,7 @@ export function App(): React.JSX.Element {
             </button>
           )}
           <div className="thread-heading">
-            <strong>{activeThread?.title ?? 'ZSpector'}</strong>
+            <strong>{activeThread?.title ?? 'DualMind'}</strong>
             <span>{activeThread ? (activeThread.collaborationMode === 'studio' ? 'Studio · tự do khám phá' : `Phase · ${activeThread.phase}`) : 'Tạo thread để bắt đầu'}</span>
           </div>
           <div className="provider-controls">

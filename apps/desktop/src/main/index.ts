@@ -365,7 +365,7 @@ function mockFigmaExecutionContext(): FigmaExecutionContext {
       sessionId: 'mock:figma:offline',
       fileName: 'Mock Figma sandbox',
       pageId: '0:1',
-      pageName: 'ZSpector Demo',
+      pageName: 'DualMind Demo',
       allowedAt: mealOrderingProductSpec.createdAt,
     },
     manifest: syntheticZaloDesignSystem,
@@ -2204,7 +2204,7 @@ function createWindow(): void {
     minWidth: 1040,
     minHeight: 680,
     show: false,
-    title: 'ZSpector',
+    title: 'DualMind',
     backgroundColor: '#f5f7f8',
     titleBarStyle: 'hiddenInset',
     webPreferences: {
