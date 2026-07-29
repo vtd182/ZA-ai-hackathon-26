@@ -6,6 +6,20 @@
     <meta name="description" content="Zalo Product Kickoff Agent - Automate your product lifecycle.">
     <title>Zalo Product Kickoff Agent | ZA AI Hackathon</title>
     <link rel="stylesheet" href="css/style.css">
+    <script>
+        // Prevent FOUC by setting theme and lang immediately
+        (function() {
+            try {
+                var localTheme = localStorage.getItem('theme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = localTheme || (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+                
+                var lang = localStorage.getItem('lang') || 'vi';
+                document.documentElement.setAttribute('data-lang', lang);
+            } catch (e) {}
+        })();
+    </script>
 </head>
 <body>
     <nav class="navbar">
@@ -33,12 +47,12 @@
         <section class="hero reveal-on-scroll">
             <div class="hero-content">
                 <h1>
-                    <span class="lang-en">Bridging the gap between Idea and Execution.</span>
-                    <span class="lang-vi">Xóa bỏ khoảng cách giữa Ý tưởng và Thực thi.</span>
+                    <span class="lang-en">From Idea to Zalo Mini App in minutes.</span>
+                    <span class="lang-vi">Biến Ý tưởng thành Zalo Mini App trong phút chốc.</span>
                 </h1>
                 <p>
-                    <span class="lang-en">An intelligent, local-first workflow agent that translates raw ideas into verified product specifications, syncing seamlessly across Figma and Jira.</span>
-                    <span class="lang-vi">Một trợ lý ảo tiên phong vận hành hoàn toàn tại máy tính cá nhân. Biến những ý tưởng thô sơ thành tài liệu đặc tả hoàn chỉnh và đồng bộ xuyên suốt từ Figma sang Jira chỉ trong chớp mắt.</span>
+                    <span class="lang-en">An intelligent PM Lifecycle Agent that turns your product idea into a central ProductSpec, automatically generating PRDs, Zalo DS-compliant Figma flows, and Jira backlogs.</span>
+                    <span class="lang-vi">Một trợ lý Product Manager ảo. Biến ý tưởng của bạn thành một ProductSpec trung tâm, tự động tạo PRD, thiết kế giao diện Figma chuẩn Zalo DS và lên danh sách công việc trên Jira.</span>
                 </p>
                 <div class="cta-group">
                     <a href="https://github.com/vtd182/ZA-ai-hackathon-26" target="_blank" rel="noopener noreferrer" class="btn-primary">
@@ -70,7 +84,7 @@
         <section class="trusted-by reveal-on-scroll">
             <p class="trust-label">
                 <span class="lang-en">INTEGRATES DIRECTLY INTO YOUR WORKSPACE</span>
-                <span class="lang-vi">TÍCH HỢP TRỰC TIẾP VÀO KHÔNG GIAN LÀM VIỆC CỦA BẠN</span>
+                <span class="lang-vi">TÍCH HỢP TRỰC TIẾP VÀO HỆ SINH THÁI</span>
             </p>
             <div class="logo-wall">
                 <img src="https://cdn.simpleicons.org/jira/ffffff" alt="Jira">
@@ -84,49 +98,49 @@
             <div class="section-header">
                 <h2>
                     <span class="lang-en">Not just a chat UI. A true workflow partner.</span>
-                    <span class="lang-vi">Vượt qua giới hạn của Chatbot. Đây là một đối tác làm việc thực thụ.</span>
+                    <span class="lang-vi">Vượt qua giới hạn của Chatbot. Đây là một quản lý dự án thực thụ.</span>
                 </h2>
             </div>
             
             <div class="bento-grid">
                 <div class="bento-cell cell-large dark-surface">
                     <h3>
-                        <span class="lang-en">Figma to Jira Pipeline</span>
-                        <span class="lang-vi">Luồng đồng bộ Figma - Jira</span>
+                        <span class="lang-en">ProductSpec as Source of Truth</span>
+                        <span class="lang-vi">ProductSpec là Trung tâm Sự thật</span>
                     </h3>
                     <p>
-                        <span class="lang-en">Stop manually copying specs. The agent reads your Figma frames via MCP and drafts comprehensive Jira tickets, ensuring the design source-of-truth matches the engineering backlog.</span>
-                        <span class="lang-vi">Tạm biệt thao tác sao chép thủ công. Kickoff Agent đọc hiểu trực tiếp bản thiết kế Figma thông qua MCP và tự động khởi tạo ticket Jira chi tiết. Bản thiết kế và backlog kỹ thuật giờ đây luôn là một.</span>
+                        <span class="lang-en">The agent establishes a business source of truth. When the scope changes (e.g., "Remove payment from MVP"), it automatically triggers impact analysis, requests your approval, and syncs the changes to both Figma designs and Jira tickets.</span>
+                        <span class="lang-vi">Mọi thứ bắt đầu từ ProductSpec. Khi có thay đổi yêu cầu (VD: "Bỏ thanh toán khỏi MVP"), Agent sẽ tự động phân tích tác động, xin phê duyệt và cập nhật đồng bộ ra cả thiết kế Figma lẫn danh sách việc trên Jira.</span>
                     </p>
                 </div>
                 <div class="bento-cell accent-surface">
                     <h3>
-                        <span class="lang-en">Multi-Agent Infinity Canvas</span>
-                        <span class="lang-vi">Bảng vẽ Vô cực Đa tác vụ</span>
+                        <span class="lang-en">Read-back Verification</span>
+                        <span class="lang-vi">Kiểm chứng Ngược (Read-back)</span>
                     </h3>
                     <p>
-                        <span class="lang-en">Interact with multiple specialized agents on a spatial infinity canvas. Brainstorm, map architectures, and generate specs visually.</span>
-                        <span class="lang-vi">Tương tác với hàng loạt Agent chuyên biệt trên cùng một bảng vẽ vô cực (Infinity Canvas). Nơi để team tự do brainstorm, vẽ sơ đồ khối và xuất tài liệu đặc tả trực quan nhất.</span>
+                        <span class="lang-en">Tool success is not enough. The agent explicitly reads back the state from Figma and Jira to guarantee that the artifacts actually match the current ProductSpec.</span>
+                        <span class="lang-vi">Không chỉ "gọi API xong là thôi". Agent trực tiếp đọc lại dữ liệu từ Figma và Jira để kiểm chứng rằng các bản vẽ và công việc đã thực sự khớp với yêu cầu sản phẩm.</span>
                     </p>
                 </div>
                 <div class="bento-cell dark-surface">
                     <h3>
-                        <span class="lang-en">Local-First Security</span>
-                        <span class="lang-vi">Bảo mật Dữ liệu Tuyệt đối</span>
+                        <span class="lang-en">Local-First Execution</span>
+                        <span class="lang-vi">Thực thi Local-First</span>
                     </h3>
                     <p>
-                        <span class="lang-en">Your intellectual property stays on your machine. Using an SQLite outbox, all external writes require explicit human approval via Payload Hash.</span>
-                        <span class="lang-vi">Tài sản trí tuệ của doanh nghiệp luôn được giữ an toàn trên máy của bạn. Kiến trúc SQLite Outbox đảm bảo mọi thay đổi đẩy lên hệ thống ngoài đều phải qua bước kiểm duyệt mã băm (Payload Hash) bởi chính bạn.</span>
+                        <span class="lang-en">Powered by a local SQLite outbox. No external writes happen without an immutable payload hash and explicit human approval.</span>
+                        <span class="lang-vi">Vận hành bằng SQLite Outbox tại máy cá nhân. Không có bất kỳ thay đổi nào được đẩy ra ngoài nếu thiếu mã băm (Payload Hash) và sự phê duyệt từ con người.</span>
                     </p>
                 </div>
                 <div class="bento-cell dark-surface">
                     <h3>
-                        <span class="lang-en">Provider-Agnostic</span>
-                        <span class="lang-vi">Nền tảng AI Độc lập</span>
+                        <span class="lang-en">Figma MCP with Zalo DS</span>
+                        <span class="lang-vi">Figma MCP & Zalo DS</span>
                     </h3>
                     <p>
-                        <span class="lang-en">Don't be locked into one AI model. Switch between Codex, Gemini, or Anthropic instantly depending on the task's complexity.</span>
-                        <span class="lang-vi">Không bị bó buộc vào bất kỳ AI nào. Tùy ý chuyển đổi linh hoạt giữa OpenAI, Gemini hay Anthropic tùy thuộc vào bài toán mà bạn đang giải quyết.</span>
+                        <span class="lang-en">Our custom Figma Model Context Protocol ensures generated designs strict adherence to the Zalo Design System guidelines.</span>
+                        <span class="lang-vi">Tích hợp giao thức Figma MCP đặc chế, đảm bảo mọi giao diện Agent tạo ra hoặc chỉnh sửa đều tuân thủ nghiêm ngặt Zalo Design System.</span>
                     </p>
                 </div>
             </div>

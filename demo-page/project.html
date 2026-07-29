@@ -7,6 +7,21 @@
     <title>Deep Dive | Zalo Product Kickoff Agent</title>
     <link rel="stylesheet" href="css/style.css">
     
+    <script>
+        // Prevent FOUC by setting theme and lang immediately
+        (function() {
+            try {
+                var localTheme = localStorage.getItem('theme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var theme = localTheme || (prefersDark ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+                
+                var lang = localStorage.getItem('lang') || 'vi';
+                document.documentElement.setAttribute('data-lang', lang);
+            } catch (e) {}
+        })();
+    </script>
+    
     <!-- Mermaid Diagram script -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <script>
@@ -55,100 +70,102 @@
                     <span class="lang-vi">PHÂN TÍCH CHUYÊN SÂU</span>
                 </p>
                 <h1>
-                    <span class="lang-en">How the Kickoff Agent transforms your product lifecycle.</span>
-                    <span class="lang-vi">Cách Kickoff Agent định hình lại vòng đời sản phẩm của bạn.</span>
+                    <span class="lang-en">How the PM Lifecycle Agent transforms your workflow.</span>
+                    <span class="lang-vi">Cách Lifecycle Agent định hình lại quy trình làm việc.</span>
                 </h1>
                 <p class="subtitle">
-                    <span class="lang-en">An in-depth look at the architecture, workflow, and engineering decisions behind the Zalo Product Kickoff Agent.</span>
-                    <span class="lang-vi">Một góc nhìn sâu sắc hơn về kiến trúc hệ thống, luồng công việc và các quyết định kỹ thuật đằng sau Zalo Product Kickoff Agent.</span>
+                    <span class="lang-en">An in-depth look at the architecture and engineering decisions behind the Zalo Product Kickoff Agent.</span>
+                    <span class="lang-vi">Góc nhìn sâu sắc về kiến trúc hệ thống và các quyết định kỹ thuật đằng sau Zalo Product Kickoff Agent.</span>
                 </p>
             </header>
 
             <section class="article-section reveal-on-scroll">
                 <h2>
-                    <span class="lang-en">1. The Context Switching Problem</span>
-                    <span class="lang-vi">1. Vấn nạn Chuyển đổi Ngữ cảnh</span>
+                    <span class="lang-en">1. The Synchronization Nightmare</span>
+                    <span class="lang-vi">1. Ác mộng Đồng bộ Hóa</span>
                 </h2>
                 <p>
-                    <span class="lang-en">In modern product development, information is highly fragmented. Product Managers write requirements in Docs. Designers create visuals in Figma. Developers track tasks in Jira. When it's time to "kick off" a sprint, ensuring all these platforms are perfectly synchronized is a manual, error-prone nightmare.</span>
-                    <span class="lang-vi">Trong quy trình phát triển sản phẩm hiện đại, thông tin thường xuyên bị phân mảnh. Product Manager viết Requirement trên Docs. Designer vẽ giao diện trên Figma. Developer quản lý Task trên Jira. Mỗi lần khởi động (kick-off) một tính năng mới, việc giữ cho tất cả các nền tảng này đồng bộ là một cơn ác mộng thủ công và đầy rẫy sai sót.</span>
+                    <span class="lang-en">When building a Zalo Mini App, a PM writes a PRD, a Designer creates Figma mockups, and Devs read Jira tickets. If the scope changes—like "Remove payment from MVP"—updating all three places is manual and error-prone. Artifacts easily fall out of sync, and teams lose their single source of truth.</span>
+                    <span class="lang-vi">Khi làm một Zalo Mini App, PM viết PRD, Designer vẽ Figma, và Dev theo dõi Jira. Nếu yêu cầu thay đổi—chẳng hạn "Bỏ chức năng thanh toán khỏi MVP"—việc cập nhật ở cả ba nơi hoàn toàn thủ công và dễ sai sót. Các tài liệu nhanh chóng bị lệch pha, và team không còn biết đâu là chân lý.</span>
                 </p>
                 
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
                     <div class="media-overlay">
-                        <span class="lang-en">[ PROBLEM VISUALIZATION / MEME GIF ]<br>Show the pain of jumping between Jira and Figma</span>
-                        <span class="lang-vi">[ ẢNH CHẾ HOẶC MINH HỌA VẤN ĐỀ ]<br>Thể hiện sự ức chế khi phải copy qua lại giữa Jira và Figma</span>
+                        <span class="lang-en">[ PROBLEM VISUALIZATION / MEME GIF ]<br>Show the pain of out-of-sync documents</span>
+                        <span class="lang-vi">[ MINH HỌA VẤN ĐỀ ]<br>Thể hiện sự ức chế khi tài liệu không đồng bộ</span>
                     </div>
                 </div>
             </section>
 
             <section class="article-section reveal-on-scroll">
                 <h2>
-                    <span class="lang-en">2. The Infinity Canvas Solution</span>
-                    <span class="lang-vi">2. Giải pháp Bảng vẽ Vô cực</span>
+                    <span class="lang-en">2. ProductSpec: The Business Source of Truth</span>
+                    <span class="lang-vi">2. ProductSpec: Cốt lõi của Sản phẩm</span>
                 </h2>
                 <p>
-                    <span class="lang-en">Instead of building another chatbot sidebar, we built a <strong>Spatial Infinity Canvas</strong>. You interact with AI agents visually. You drop a Figma link onto the canvas, ask the agent to extract the UI components, and the agent visually maps out the Jira tickets right in front of you.</span>
-                    <span class="lang-vi">Thay vì đóng khung trong một thanh Chatbot chật hẹp, chúng tôi mang đến một <strong>Bảng vẽ Vô cực (Infinity Canvas)</strong>. Tại đây, bạn tương tác trực quan với các Agent AI. Chỉ cần thả một đường dẫn Figma vào bảng vẽ, ra lệnh bóc tách component, và chiêm ngưỡng các thẻ Jira được Agent sắp xếp tự động ngay trước mắt.</span>
+                    <span class="lang-en">The Kickoff Agent flips the script. Instead of treating Figma or Jira as the source of truth, the agent maintains a central <strong>ProductSpec</strong> in its local SQLite memory. When you supply an idea, the agent drafts the Spec. From this Spec, it projects updates into Figma (using Zalo Design System) and Jira. If the idea changes, the agent recalculates the impact and syncs all artifacts.</span>
+                    <span class="lang-vi">Kickoff Agent lật ngược thế cờ. Thay vì coi Figma hay Jira là nguồn chuẩn, Agent duy trì một <strong>ProductSpec</strong> tập trung ngay trong cơ sở dữ liệu SQLite. Từ ý tưởng ban đầu, Agent tự tạo Spec. Dựa trên Spec, nó phóng chiếu (project) thay đổi ra bản vẽ Figma (theo chuẩn Zalo DS) và ticket Jira. Khi ý tưởng thay đổi, Agent tự phân tích tác động và đồng bộ lại toàn bộ tài liệu.</span>
                 </p>
                 
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
                     <div class="media-overlay">
-                        <span class="lang-en">[ DEMO: MULTI-AGENT CANVAS ]<br>Show agents drawing on the Infinity Canvas</span>
-                        <span class="lang-vi">[ DEMO: BẢNG VẼ ĐA AGENT ]<br>Hiển thị cảnh các agent đang tự vẽ lên Canvas</span>
+                        <span class="lang-en">[ DEMO: PRODUCT SPEC GENERATION ]<br>Show the agent updating ProductSpec and syncing</span>
+                        <span class="lang-vi">[ DEMO: KHỞI TẠO PRODUCT SPEC ]<br>Cảnh Agent phân tích ý tưởng và đồng bộ ra Figma/Jira</span>
                     </div>
                 </div>
             </section>
 
             <section class="article-section reveal-on-scroll">
                 <h2>
-                    <span class="lang-en">3. Secure, Local-First Architecture</span>
-                    <span class="lang-vi">3. Kiến trúc Bảo mật & Dữ liệu Cục bộ (Local-First)</span>
+                    <span class="lang-en">3. Strict Approval & Read-back Verification</span>
+                    <span class="lang-vi">3. Phê duyệt Nghiêm ngặt & Kiểm chứng Ngược</span>
                 </h2>
                 <p>
-                    <span class="lang-en">Enterprise data is sensitive. The Kickoff Agent operates as a local Electron desktop application. We use a <strong>Local SQLite Outbox</strong> pattern for all state management. When the agent proposes creating 15 Jira tickets, it doesn't just fire API calls blindly. It prepares the payloads and pauses for <strong>Human Approval</strong>.</span>
-                    <span class="lang-vi">Dữ liệu doanh nghiệp là tài sản vô giá. Vì vậy, Kickoff Agent được thiết kế dưới dạng ứng dụng Desktop vận hành hoàn toàn độc lập. Chúng tôi ứng dụng kiến trúc <strong>SQLite Outbox</strong> cho mọi trạng thái hệ thống. Khi Agent đề xuất tạo 15 thẻ Jira mới, nó không gọi API ngay lập tức, mà chuẩn bị sẵn toàn bộ dữ liệu (Payload) và đợi <strong>Bạn trực tiếp phê duyệt</strong>.</span>
+                    <span class="lang-en">AI hallucinations shouldn't break your workspace. The agent uses a <strong>Local SQLite Outbox</strong>. When syncing changes to Jira or Figma, it prepares an immutable payload hash and waits for your approval. After execution, it performs <strong>Read-back Verification</strong>—it re-reads the artifacts to prove the sync succeeded.</span>
+                    <span class="lang-vi">Sự "ảo giác" của AI không được phép làm hỏng dữ liệu. Agent dùng cơ chế <strong>SQLite Outbox</strong>. Mọi thay đổi dự kiến đẩy lên Jira hay Figma đều được khóa thành một mã băm (Payload Hash) để chờ bạn duyệt. Sau khi chạy, nó thực hiện <strong>Kiểm chứng Ngược (Read-back Verification)</strong>—đọc lại dữ liệu thực tế để đảm bảo thay đổi đã thực sự áp dụng thành công.</span>
                 </p>
 
                 <!-- Mermaid Diagram -->
                 <div class="mermaid-wrapper">
                     <div class="mermaid">
                         graph TD
-                            A[Figma / Infinity Canvas] -->|Figma MCP / UI Agent| B(Kickoff Agent Core)
-                            B -->|Draft Specs| C[(SQLite Local Outbox)]
-                            C -->|Wait for Human Approval| D{Payload Hash Verified?}
-                            D -->|Approved| E[Jira API]
-                            D -->|Approved| F[Other Integrations]
-                            D -->|Rejected| B
+                            Idea[Idea / Scope Change] --> A(Kickoff Agent)
+                            A -->|Update| B[(ProductSpec in SQLite)]
+                            B -->|Analyze Impact| C[Prepare Sync Payloads]
+                            C -->|Wait for Human| D{Payload Hash Verified?}
+                            D -->|Approved| E[Figma API / MCP]
+                            D -->|Approved| F[Jira API]
+                            E -.->|Read-back Verify| A
+                            F -.->|Read-back Verify| A
                     </div>
                 </div>
                 
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
                     <div class="media-overlay">
-                        <span class="lang-en">[ DEMO: APPROVAL WORKFLOW ]<br>Show the SQLite Outbox UI and Approval button</span>
-                        <span class="lang-vi">[ DEMO: LUỒNG PHÊ DUYỆT ]<br>Hiển thị giao diện Outbox nơi con người duyệt thay đổi</span>
+                        <span class="lang-en">[ DEMO: APPROVAL & READ-BACK ]<br>Show the Outbox UI and verification log</span>
+                        <span class="lang-vi">[ DEMO: PHÊ DUYỆT & KIỂM CHỨNG ]<br>Hiển thị màn hình Outbox và log kiểm chứng</span>
                     </div>
                 </div>
             </section>
 
             <section class="article-section reveal-on-scroll">
                 <h2>
-                    <span class="lang-en">4. Figma MCP Integration</span>
-                    <span class="lang-vi">4. Sức mạnh của Figma MCP</span>
+                    <span class="lang-en">4. Provider Agnostic Execution</span>
+                    <span class="lang-vi">4. Kiến trúc Đa nền tảng (Provider Agnostic)</span>
                 </h2>
                 <p>
-                    <span class="lang-en">Our custom Figma Model Context Protocol (MCP) server bridges the gap between raw pixel data and semantic meaning. The agent doesn't just "look at an image" – it deeply inspects the Figma node tree to understand the design system tokens, text styles, and layout structures to generate pixel-perfect specifications.</span>
-                    <span class="lang-vi">Máy chủ Figma MCP (Model Context Protocol) do chúng tôi phát triển là cầu nối hoàn hảo giữa dữ liệu điểm ảnh thô và ngữ nghĩa thiết kế. AI không chỉ "nhìn lướt qua một bức ảnh" - nó đi sâu vào phân tích cây cấu trúc của Figma để hiểu cặn kẽ về Design System, Text Styles, từ đó xuất ra tài liệu chuẩn xác đến từng chi tiết.</span>
+                    <span class="lang-en">We don't depend on provider-native hidden state (like OpenAI Threads). Because the execution memory and checkpoints are managed locally by our app, you can seamlessly switch from Codex to Gemini or Anthropic right in the middle of a session without losing any context.</span>
+                    <span class="lang-vi">Chúng tôi không phụ thuộc vào trạng thái ẩn của các nền tảng (như OpenAI Threads). Vì bộ nhớ thực thi và các điểm lưu (checkpoints) được quản lý cục bộ bởi ứng dụng, bạn có thể dễ dàng chuyển đổi từ Codex sang Gemini hay Anthropic ngay giữa phiên làm việc mà không làm đứt gãy luồng ngữ cảnh.</span>
                 </p>
                 
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
                     <div class="media-overlay">
-                        <span class="lang-en">[ DEMO: FIGMA MCP ]<br>Show the agent reading a Figma file and outputting specs</span>
-                        <span class="lang-vi">[ DEMO: FIGMA MCP ]<br>Hiển thị cảnh Agent bóc tách cấu trúc trực tiếp từ file Figma</span>
+                        <span class="lang-en">[ DEMO: PROVIDER SWITCHING ]<br>Show seamlessly changing LLMs during a session</span>
+                        <span class="lang-vi">[ DEMO: ĐỔI MÔ HÌNH AI ]<br>Cảnh chuyển đổi qua lại giữa các LLM mượt mà</span>
                     </div>
                 </div>
             </section>
