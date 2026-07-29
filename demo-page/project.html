@@ -3,26 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Project Deep Dive: Zalo Product Kickoff Agent.">
-    <title>Deep Dive | Zalo Product Kickoff Agent</title>
+    <meta name="description" content="Project Deep Dive: ZSpector.">
+    <title>Deep Dive | ZSpector</title>
     <link rel="stylesheet" href="css/style.css">
     
     <script>
-        // Prevent FOUC by setting theme and lang immediately
         (function() {
             try {
                 var localTheme = localStorage.getItem('theme');
                 var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
                 var theme = localTheme || (prefersDark ? 'dark' : 'light');
                 document.documentElement.setAttribute('data-theme', theme);
-                
                 var lang = localStorage.getItem('lang') || 'vi';
                 document.documentElement.setAttribute('data-lang', lang);
             } catch (e) {}
         })();
     </script>
     
-    <!-- Mermaid Diagram script -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
@@ -43,7 +40,7 @@
 </head>
 <body>
     <nav class="navbar">
-        <a href="index.html" class="logo">Zalo Kickoff Agent</a>
+        <a href="index.html" class="logo">ZSpector</a>
         <div class="nav-links">
             <a href="index.html#features">
                 <span class="lang-en">Features</span>
@@ -70,102 +67,101 @@
                     <span class="lang-vi">PHÂN TÍCH CHUYÊN SÂU</span>
                 </p>
                 <h1>
-                    <span class="lang-en">How the PM Lifecycle Agent transforms your workflow.</span>
-                    <span class="lang-vi">Cách Lifecycle Agent định hình lại quy trình làm việc.</span>
+                    <span class="lang-en">How ZSpector orchestrates the Product Lifecycle.</span>
+                    <span class="lang-vi">Cách ZSpector điều phối toàn bộ vòng đời Sản phẩm.</span>
                 </h1>
                 <p class="subtitle">
-                    <span class="lang-en">An in-depth look at the architecture and engineering decisions behind the Zalo Product Kickoff Agent.</span>
-                    <span class="lang-vi">Góc nhìn sâu sắc về kiến trúc hệ thống và các quyết định kỹ thuật đằng sau Zalo Product Kickoff Agent.</span>
+                    <span class="lang-en">An in-depth look at the architecture, the local-first execution model, and the Figma Crafting worker behind ZSpector.</span>
+                    <span class="lang-vi">Góc nhìn sâu sắc về kiến trúc ứng dụng cục bộ (local-first) và hệ thống Agentic Figma Crafting phía sau ZSpector.</span>
                 </p>
             </header>
 
             <section class="article-section reveal-on-scroll">
                 <h2>
-                    <span class="lang-en">1. The Synchronization Nightmare</span>
-                    <span class="lang-vi">1. Ác mộng Đồng bộ Hóa</span>
+                    <span class="lang-en">1. Idea → Discovery → Decision → Delivery</span>
+                    <span class="lang-vi">1. Từ Ý tưởng đến Thực thi</span>
                 </h2>
                 <p>
-                    <span class="lang-en">When building a Zalo Mini App, a PM writes a PRD, a Designer creates Figma mockups, and Devs read Jira tickets. If the scope changes—like "Remove payment from MVP"—updating all three places is manual and error-prone. Artifacts easily fall out of sync, and teams lose their single source of truth.</span>
-                    <span class="lang-vi">Khi làm một Zalo Mini App, PM viết PRD, Designer vẽ Figma, và Dev theo dõi Jira. Nếu yêu cầu thay đổi—chẳng hạn "Bỏ chức năng thanh toán khỏi MVP"—việc cập nhật ở cả ba nơi hoàn toàn thủ công và dễ sai sót. Các tài liệu nhanh chóng bị lệch pha, và team không còn biết đâu là chân lý.</span>
+                    <span class="lang-en">ZSpector is not an open-ended chatbot. It relies on a controlled lifecycle state machine. When a PM inputs an idea, the agent triggers a guided flow. Instead of chatting aimlessly, it presents 3 selectable clarification paths leading directly to an MVP proposal. Once decided, it generates a comprehensive ProductSpec on the Infinity Canvas.</span>
+                    <span class="lang-vi">ZSpector không phải là một con Chatbot mở mông lung. Nó được kiểm soát bởi một cỗ máy trạng thái (State Machine) chặt chẽ. Khi PM nhập ý tưởng, Agent sẽ kích hoạt luồng "Discovery". Thay vì chat tự do, nó đưa ra 3 hướng khai thác có sẵn (lựa chọn bấm được) để dẫn dắt ra phương án MVP tối ưu. Sau khi chốt phương án, nó dựng toàn bộ bản ProductSpec lên Bảng vẽ Vô cực.</span>
                 </p>
                 
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
                     <div class="media-overlay">
-                        <span class="lang-en">[ PROBLEM VISUALIZATION / MEME GIF ]<br>Show the pain of out-of-sync documents</span>
-                        <span class="lang-vi">[ MINH HỌA VẤN ĐỀ ]<br>Thể hiện sự ức chế khi tài liệu không đồng bộ</span>
+                        <span class="lang-en">[ DEMO: GUIDED DISCOVERY FLOW ]<br>Show the agent giving clickable choices instead of chat</span>
+                        <span class="lang-vi">[ DEMO: LUỒNG DISCOVERY ]<br>Cảnh Agent đưa ra các nút bấm lựa chọn thay vì chat tự do</span>
                     </div>
                 </div>
             </section>
 
             <section class="article-section reveal-on-scroll">
                 <h2>
-                    <span class="lang-en">2. ProductSpec: The Business Source of Truth</span>
-                    <span class="lang-vi">2. ProductSpec: Cốt lõi của Sản phẩm</span>
+                    <span class="lang-en">2. Infinity Canvas & Self-Critique</span>
+                    <span class="lang-vi">2. Bảng vẽ Vô cực và Linter Logic</span>
                 </h2>
                 <p>
-                    <span class="lang-en">The Kickoff Agent flips the script. Instead of treating Figma or Jira as the source of truth, the agent maintains a central <strong>ProductSpec</strong> in its local SQLite memory. When you supply an idea, the agent drafts the Spec. From this Spec, it projects updates into Figma (using Zalo Design System) and Jira. If the idea changes, the agent recalculates the impact and syncs all artifacts.</span>
-                    <span class="lang-vi">Kickoff Agent lật ngược thế cờ. Thay vì coi Figma hay Jira là nguồn chuẩn, Agent duy trì một <strong>ProductSpec</strong> tập trung ngay trong cơ sở dữ liệu SQLite. Từ ý tưởng ban đầu, Agent tự tạo Spec. Dựa trên Spec, nó phóng chiếu (project) thay đổi ra bản vẽ Figma (theo chuẩn Zalo DS) và ticket Jira. Khi ý tưởng thay đổi, Agent tự phân tích tác động và đồng bộ lại toàn bộ tài liệu.</span>
+                    <span class="lang-en">ZSpector visualizes the user flow using a semantic dagre layout. But it goes further: it treats your workflow as a directed graph and runs a <strong>Logical Flow Linter</strong>. It actively flags dead ends, branches without decisions, or infinite loops directly on the canvas, ensuring the logic is bulletproof before any design or code is written.</span>
+                    <span class="lang-vi">ZSpector trình bày luồng người dùng (User Flow) bằng thuật toán layout dagre có định hướng ngữ nghĩa. Hơn thế nữa, nó coi toàn bộ luồng làm việc của bạn như một đồ thị có hướng và chạy <strong>Logical Flow Linter</strong>. Nó sẽ tự động tô đỏ các ngõ cụt, các nhánh thiếu điều kiện, hay những vòng lặp vô tận ngay trên Bảng vẽ. Mọi lỗ hổng logic đều được bít kín trước khi chuyển qua thiết kế và code.</span>
                 </p>
                 
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
                     <div class="media-overlay">
-                        <span class="lang-en">[ DEMO: PRODUCT SPEC GENERATION ]<br>Show the agent updating ProductSpec and syncing</span>
-                        <span class="lang-vi">[ DEMO: KHỞI TẠO PRODUCT SPEC ]<br>Cảnh Agent phân tích ý tưởng và đồng bộ ra Figma/Jira</span>
+                        <span class="lang-en">[ DEMO: CANVAS LINTER ]<br>Show the canvas highlighting a logical error in the flow</span>
+                        <span class="lang-vi">[ DEMO: CANVAS LINTER ]<br>Cảnh Bảng vẽ tự động báo lỗi một luồng người dùng bị cụt</span>
                     </div>
                 </div>
             </section>
 
             <section class="article-section reveal-on-scroll">
                 <h2>
-                    <span class="lang-en">3. Strict Approval & Read-back Verification</span>
-                    <span class="lang-vi">3. Phê duyệt Nghiêm ngặt & Kiểm chứng Ngược</span>
+                    <span class="lang-en">3. Figma Crafting Worker</span>
+                    <span class="lang-vi">3. Sức mạnh Vẽ Giao diện (Figma Crafting)</span>
                 </h2>
                 <p>
-                    <span class="lang-en">AI hallucinations shouldn't break your workspace. The agent uses a <strong>Local SQLite Outbox</strong>. When syncing changes to Jira or Figma, it prepares an immutable payload hash and waits for your approval. After execution, it performs <strong>Read-back Verification</strong>—it re-reads the artifacts to prove the sync succeeded.</span>
-                    <span class="lang-vi">Sự "ảo giác" của AI không được phép làm hỏng dữ liệu. Agent dùng cơ chế <strong>SQLite Outbox</strong>. Mọi thay đổi dự kiến đẩy lên Jira hay Figma đều được khóa thành một mã băm (Payload Hash) để chờ bạn duyệt. Sau khi chạy, nó thực hiện <strong>Kiểm chứng Ngược (Read-back Verification)</strong>—đọc lại dữ liệu thực tế để đảm bảo thay đổi đã thực sự áp dụng thành công.</span>
+                    <span class="lang-en">Once the ProductSpec is approved, ZSpector doesn't just stop at text. Powered by an Agentic Craft Worker (via Codex CLI) and a custom Figma MCP runtime, it reads Zalo Design System (ZDS) reference components and generates <strong>real, clickable Figma prototypes</strong> perfectly matching the ZDS guidelines. If you don't have Figma connected, it seamlessly gracefully degrades to Jira + PRD mocks.</span>
+                    <span class="lang-vi">Khi ProductSpec đã được chốt, ZSpector không dừng lại ở văn bản. Với sức mạnh của Agentic Craft Worker và runtime Figma MCP nội bộ, nó sẽ nạp các component của Zalo Design System (ZDS) và <strong>tự động vẽ ra các Prototype có thể bấm được trên Figma</strong>. Bản vẽ tuân thủ 100% chuẩn ZDS. Nếu bạn chưa kết nối Figma, hệ thống vẫn tự động xuất đủ Backlog Jira và PRD Markdown.</span>
                 </p>
 
                 <!-- Mermaid Diagram -->
                 <div class="mermaid-wrapper">
                     <div class="mermaid">
                         graph TD
-                            Idea[Idea / Scope Change] --> A(Kickoff Agent)
-                            A -->|Update| B[(ProductSpec in SQLite)]
-                            B -->|Analyze Impact| C[Prepare Sync Payloads]
-                            C -->|Wait for Human| D{Payload Hash Verified?}
-                            D -->|Approved| E[Figma API / MCP]
-                            D -->|Approved| F[Jira API]
-                            E -.->|Read-back Verify| A
-                            F -.->|Read-back Verify| A
+                            Idea[Idea / Scope Change] --> A(ZSpector Lifecycle Agent)
+                            A -->|Guided Discovery| B[(Local SQLite ProductSpec)]
+                            B -->|Logical Linter Pass| C[Execution Outbox]
+                            C -->|Immutable Payload Hash| D{Human Approval}
+                            D -->|Approve| E[Figma Craft Worker]
+                            D -->|Approve| F[Jira Mock / Confluence]
+                            E -->|Zalo Design System| G(Clickable Figma Prototypes)
                     </div>
                 </div>
                 
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
                     <div class="media-overlay">
-                        <span class="lang-en">[ DEMO: APPROVAL & READ-BACK ]<br>Show the Outbox UI and verification log</span>
-                        <span class="lang-vi">[ DEMO: PHÊ DUYỆT & KIỂM CHỨNG ]<br>Hiển thị màn hình Outbox và log kiểm chứng</span>
+                        <span class="lang-en">[ DEMO: FIGMA CRAFT WORKER ]<br>Show the agent automatically drawing components in Figma</span>
+                        <span class="lang-vi">[ DEMO: FIGMA CRAFT ]<br>Cảnh Agent tự động gọi component ZDS và vẽ màn hình trên Figma</span>
                     </div>
                 </div>
             </section>
 
             <section class="article-section reveal-on-scroll">
                 <h2>
-                    <span class="lang-en">4. Provider Agnostic Execution</span>
-                    <span class="lang-vi">4. Kiến trúc Đa nền tảng (Provider Agnostic)</span>
+                    <span class="lang-en">4. Local-First & Provider Agnostic</span>
+                    <span class="lang-vi">4. Local-First & Đa Nền tảng (Provider Agnostic)</span>
                 </h2>
                 <p>
-                    <span class="lang-en">We don't depend on provider-native hidden state (like OpenAI Threads). Because the execution memory and checkpoints are managed locally by our app, you can seamlessly switch from Codex to Gemini or Anthropic right in the middle of a session without losing any context.</span>
-                    <span class="lang-vi">Chúng tôi không phụ thuộc vào trạng thái ẩn của các nền tảng (như OpenAI Threads). Vì bộ nhớ thực thi và các điểm lưu (checkpoints) được quản lý cục bộ bởi ứng dụng, bạn có thể dễ dàng chuyển đổi từ Codex sang Gemini hay Anthropic ngay giữa phiên làm việc mà không làm đứt gãy luồng ngữ cảnh.</span>
+                    <span class="lang-en">Enterprise data is secure. ZSpector is an Electron desktop app storing all execution memory in SQLite. Furthermore, it integrates an AgentRouter gateway, allowing you to instantly switch between OpenAI, Gemini, Claude, or local offline mocks seamlessly without losing session context. Every external action requires an immutable Payload Hash approval.</span>
+                    <span class="lang-vi">Bảo mật dữ liệu là ưu tiên số một. ZSpector là một ứng dụng Desktop (Electron), lưu trữ toàn bộ lịch sử chạy trong SQLite. Khủng hơn nữa, nhờ tích hợp AgentRouter, bạn có thể chuyển đổi mượt mà giữa OpenAI, Gemini, Claude, hoặc thậm chí là mô hình offline ngay giữa phiên làm việc mà không hề gián đoạn. Mọi thao tác đẩy ra ngoài đều cần một mã băm không thể thay đổi (Payload Hash) để bạn duyệt.</span>
                 </p>
                 
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
                     <div class="media-overlay">
-                        <span class="lang-en">[ DEMO: PROVIDER SWITCHING ]<br>Show seamlessly changing LLMs during a session</span>
-                        <span class="lang-vi">[ DEMO: ĐỔI MÔ HÌNH AI ]<br>Cảnh chuyển đổi qua lại giữa các LLM mượt mà</span>
+                        <span class="lang-en">[ DEMO: PROVIDER SWITCHING & APPROVAL ]<br>Show seamless LLM switching and payload approval</span>
+                        <span class="lang-vi">[ DEMO: ĐỔI MODEL & DUYỆT PAYLOAD ]<br>Cảnh đổi model AI và bấm nút duyệt gửi lên hệ thống ngoài</span>
                     </div>
                 </div>
             </section>

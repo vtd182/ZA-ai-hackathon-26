@@ -3,18 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Zalo Product Kickoff Agent - Automate your product lifecycle.">
-    <title>Zalo Product Kickoff Agent | ZA AI Hackathon</title>
+    <meta name="description" content="ZSpector - Biến ý tưởng thành Zalo Mini App chuẩn-ship.">
+    <title>ZSpector | ZA AI Hackathon</title>
     <link rel="stylesheet" href="css/style.css">
+    
     <script>
-        // Prevent FOUC by setting theme and lang immediately
         (function() {
             try {
                 var localTheme = localStorage.getItem('theme');
                 var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
                 var theme = localTheme || (prefersDark ? 'dark' : 'light');
                 document.documentElement.setAttribute('data-theme', theme);
-                
                 var lang = localStorage.getItem('lang') || 'vi';
                 document.documentElement.setAttribute('data-lang', lang);
             } catch (e) {}
@@ -23,7 +22,7 @@
 </head>
 <body>
     <nav class="navbar">
-        <a href="index.html" class="logo">Zalo Kickoff Agent</a>
+        <a href="index.html" class="logo">ZSpector</a>
         <div class="nav-links">
             <a href="index.html#features">
                 <span class="lang-en">Features</span>
@@ -47,22 +46,22 @@
         <section class="hero reveal-on-scroll">
             <div class="hero-content">
                 <h1>
-                    <span class="lang-en">From Idea to Zalo Mini App in minutes.</span>
-                    <span class="lang-vi">Biến Ý tưởng thành Zalo Mini App trong phút chốc.</span>
+                    <span class="lang-en">Turn raw ideas into ship-ready Zalo Mini Apps.</span>
+                    <span class="lang-vi">Biến ý tưởng thô thành Zalo Mini App chuẩn-ship.</span>
                 </h1>
                 <p>
-                    <span class="lang-en">An intelligent PM Lifecycle Agent that turns your product idea into a central ProductSpec, automatically generating PRDs, Zalo DS-compliant Figma flows, and Jira backlogs.</span>
-                    <span class="lang-vi">Một trợ lý Product Manager ảo. Biến ý tưởng của bạn thành một ProductSpec trung tâm, tự động tạo PRD, thiết kế giao diện Figma chuẩn Zalo DS và lên danh sách công việc trên Jira.</span>
+                    <span class="lang-en">Meet <strong>ZSpector</strong>, the local-first PM workspace. Guided by interactive choices, self-critiquing Infinity Canvas, and automated Figma crafting.</span>
+                    <span class="lang-vi">Khám phá <strong>ZSpector</strong>, không gian làm việc cục bộ của Product Manager. Agent dẫn dắt bằng lựa chọn, tự động phản biện trên Bảng vẽ Vô cực và sinh bản thiết kế Figma thực thụ.</span>
                 </p>
                 <div class="cta-group">
-                    <a href="https://github.com/vtd182/ZA-ai-hackathon-26" target="_blank" rel="noopener noreferrer" class="btn-primary">
-                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-github"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
-                        <span class="lang-en">Source Code</span>
-                        <span class="lang-vi">Mã nguồn</span>
+                    <a href="https://github.com/vtd182/ZA-ai-hackathon-26/releases/latest" target="_blank" rel="noopener noreferrer" class="btn-primary">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <span class="lang-en">Download App</span>
+                        <span class="lang-vi">Tải Ứng dụng</span>
                     </a>
                     <a href="project.html" class="btn-secondary">
-                        <span class="lang-en">How it works</span>
-                        <span class="lang-vi">Cách hoạt động</span>
+                        <span class="lang-en">Read Deep Dive</span>
+                        <span class="lang-vi">Xem phân tích kỹ thuật</span>
                     </a>
                 </div>
             </div>
@@ -73,8 +72,8 @@
                         <source src="" type="video/mp4">
                     </video>
                     <div class="media-overlay">
-                        <span class="lang-en">[ HERO DEMO VIDEO / GIF ]<br>Showcase the Agent Canvas here</span>
-                        <span class="lang-vi">[ DEMO VIDEO / GIF ]<br>Chèn video minh họa Agent Canvas tại đây</span>
+                        <span class="lang-en">[ HERO DEMO VIDEO / GIF ]<br>Showcase the ZSpector App</span>
+                        <span class="lang-vi">[ DEMO VIDEO / GIF ]<br>Chèn video minh họa giao diện ZSpector</span>
                     </div>
                 </div>
             </div>
@@ -83,12 +82,13 @@
         <!-- TRUSTED BY -->
         <section class="trusted-by reveal-on-scroll">
             <p class="trust-label">
-                <span class="lang-en">INTEGRATES DIRECTLY INTO YOUR WORKSPACE</span>
-                <span class="lang-vi">TÍCH HỢP TRỰC TIẾP VÀO HỆ SINH THÁI</span>
+                <span class="lang-en">GENERATES A COMPLETE KICKOFF PACKAGE FOR</span>
+                <span class="lang-vi">TỰ ĐỘNG KHỞI TẠO BỘ TÀI LIỆU KHỞI ĐỘNG CHO</span>
             </p>
             <div class="logo-wall">
                 <img src="https://cdn.simpleicons.org/jira/ffffff" alt="Jira">
                 <img src="https://cdn.simpleicons.org/figma/ffffff" alt="Figma">
+                <img src="https://cdn.simpleicons.org/confluence/ffffff" alt="Confluence">
                 <img src="https://cdn.simpleicons.org/zalo/ffffff" alt="Zalo">
             </div>
         </section>
@@ -97,58 +97,58 @@
         <section class="features reveal-on-scroll" id="features">
             <div class="section-header">
                 <h2>
-                    <span class="lang-en">Not just a chat UI. A true workflow partner.</span>
-                    <span class="lang-vi">Vượt qua giới hạn của Chatbot. Đây là một quản lý dự án thực thụ.</span>
+                    <span class="lang-en">Guided product discovery, from Idea to Delivery.</span>
+                    <span class="lang-vi">Dẫn dắt quy trình phát triển, từ Ý tưởng đến Thực thi.</span>
                 </h2>
             </div>
             
             <div class="bento-grid">
                 <div class="bento-cell cell-large dark-surface">
                     <h3>
-                        <span class="lang-en">ProductSpec as Source of Truth</span>
-                        <span class="lang-vi">ProductSpec là Trung tâm Sự thật</span>
+                        <span class="lang-en">Automated Figma Crafting</span>
+                        <span class="lang-vi">Tự động hóa Vẽ giao diện Figma</span>
                     </h3>
                     <p>
-                        <span class="lang-en">The agent establishes a business source of truth. When the scope changes (e.g., "Remove payment from MVP"), it automatically triggers impact analysis, requests your approval, and syncs the changes to both Figma designs and Jira tickets.</span>
-                        <span class="lang-vi">Mọi thứ bắt đầu từ ProductSpec. Khi có thay đổi yêu cầu (VD: "Bỏ thanh toán khỏi MVP"), Agent sẽ tự động phân tích tác động, xin phê duyệt và cập nhật đồng bộ ra cả thiết kế Figma lẫn danh sách việc trên Jira.</span>
+                        <span class="lang-en">Connect to a Zalo Design System (ZDS) reference file, and our Agentic Craft Worker will generate real, clickable prototypes directly inside Figma, strictly following ZDS guidelines.</span>
+                        <span class="lang-vi">Chỉ cần nối với file chuẩn Zalo Design System (ZDS), Agent sẽ tự động vẽ ra các bản thiết kế thực thụ trên Figma, thậm chí tự tạo prototype điều hướng có thể bấm được với các component chuẩn chỉnh của Zalo.</span>
                     </p>
                 </div>
                 <div class="bento-cell accent-surface">
                     <h3>
-                        <span class="lang-en">Read-back Verification</span>
-                        <span class="lang-vi">Kiểm chứng Ngược (Read-back)</span>
+                        <span class="lang-en">Self-Critiquing Canvas</span>
+                        <span class="lang-vi">Bảng vẽ Vô cực Tự Phản biện</span>
                     </h3>
                     <p>
-                        <span class="lang-en">Tool success is not enough. The agent explicitly reads back the state from Figma and Jira to guarantee that the artifacts actually match the current ProductSpec.</span>
-                        <span class="lang-vi">Không chỉ "gọi API xong là thôi". Agent trực tiếp đọc lại dữ liệu từ Figma và Jira để kiểm chứng rằng các bản vẽ và công việc đã thực sự khớp với yêu cầu sản phẩm.</span>
+                        <span class="lang-en">The logical flow linter analyzes your user journey on the Infinity Canvas. It automatically flags dead ends, missing decision branches, and infinite loops.</span>
+                        <span class="lang-vi">Tính năng linter logic chạy ngầm trên Bảng vẽ Vô cực sẽ soi xét biểu đồ người dùng của bạn, tự động gắn cờ cảnh báo các ngõ cụt, nhánh thiếu logic, hay vòng lặp vô tận.</span>
                     </p>
                 </div>
                 <div class="bento-cell dark-surface">
                     <h3>
-                        <span class="lang-en">Local-First Execution</span>
-                        <span class="lang-vi">Thực thi Local-First</span>
+                        <span class="lang-en">Interactive Choices</span>
+                        <span class="lang-vi">Dẫn dắt bằng Lựa chọn</span>
                     </h3>
                     <p>
-                        <span class="lang-en">Powered by a local SQLite outbox. No external writes happen without an immutable payload hash and explicit human approval.</span>
-                        <span class="lang-vi">Vận hành bằng SQLite Outbox tại máy cá nhân. Không có bất kỳ thay đổi nào được đẩy ra ngoài nếu thiếu mã băm (Payload Hash) và sự phê duyệt từ con người.</span>
+                        <span class="lang-en">No open-ended chatbot fatigue. The agent guides you through the Discovery phase using actionable, clickable choices to build the MVP efficiently.</span>
+                        <span class="lang-vi">Không còn cảnh mệt mỏi với Chatbot hỏi mở. Agent dẫn dắt bạn qua các giai đoạn Khám phá (Discovery) bằng những lựa chọn có sẵn, giúp chốt phương án MVP một cách cực kỳ nhanh chóng.</span>
                     </p>
                 </div>
                 <div class="bento-cell dark-surface">
                     <h3>
-                        <span class="lang-en">Figma MCP with Zalo DS</span>
-                        <span class="lang-vi">Figma MCP & Zalo DS</span>
+                        <span class="lang-en">Multi-Artifact Output</span>
+                        <span class="lang-vi">Khởi tạo Đa Tài liệu</span>
                     </h3>
                     <p>
-                        <span class="lang-en">Our custom Figma Model Context Protocol ensures generated designs strict adherence to the Zalo Design System guidelines.</span>
-                        <span class="lang-vi">Tích hợp giao thức Figma MCP đặc chế, đảm bảo mọi giao diện Agent tạo ra hoặc chỉnh sửa đều tuân thủ nghiêm ngặt Zalo Design System.</span>
+                        <span class="lang-en">From a single ProductSpec, ZSpector generates a complete kickoff package: Figma designs, Jira backlogs, Confluence docs, and Markdown PRDs.</span>
+                        <span class="lang-vi">Chỉ từ một ProductSpec duy nhất, ZSpector sinh ra trọn bộ gói khởi động dự án: Thiết kế Figma, Backlog Jira, Tài liệu Confluence, và bản PRD Markdown sắc nét.</span>
                     </p>
                 </div>
             </div>
             
             <div class="features-footer">
                 <a href="project.html" class="link-arrow">
-                    <span class="lang-en">Read the full technical deep dive &rarr;</span>
-                    <span class="lang-vi">Đọc bài viết phân tích kỹ thuật chuyên sâu &rarr;</span>
+                    <span class="lang-en">Read the full architectural deep dive &rarr;</span>
+                    <span class="lang-vi">Khám phá chi tiết cấu trúc kiến trúc kỹ thuật của ZSpector &rarr;</span>
                 </a>
             </div>
         </section>
@@ -157,13 +157,16 @@
         <section class="final-cta reveal-on-scroll">
             <div class="cta-box">
                 <h2>
-                    <span class="lang-en">Experience the Kickoff Agent.</span>
-                    <span class="lang-vi">Trải nghiệm ngay Kickoff Agent.</span>
+                    <span class="lang-en">Install ZSpector today.</span>
+                    <span class="lang-vi">Tải và cài đặt ZSpector ngay hôm nay.</span>
                 </h2>
-                <a href="https://github.com/vtd182/ZA-ai-hackathon-26" target="_blank" rel="noopener noreferrer" class="btn-primary btn-large">
-                    <span class="lang-en">View on GitHub</span>
-                    <span class="lang-vi">Xem trên GitHub</span>
-                </a>
+                <div class="cta-group">
+                    <a href="https://github.com/vtd182/ZA-ai-hackathon-26/releases/latest" target="_blank" rel="noopener noreferrer" class="btn-primary btn-large">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <span class="lang-en">Download App (.dmg / .exe)</span>
+                        <span class="lang-vi">Tải Ứng dụng (.dmg / .exe)</span>
+                    </a>
+                </div>
             </div>
         </section>
     </main>
