@@ -56,9 +56,11 @@ describe('decision to ProductSpec synthesis', () => {
 
     expect(spec.status).toBe('draft')
     expect(spec.title).toContain('Admin web dashboard')
+    expect(spec.idea.productType).toBe('admin_dashboard')
     expect(spec.idea.summary).toContain('Out of scope: Analytics')
     expect(spec.requirements.map((item) => item.id)).toContain('REQ-EXCEPTION-QUEUE')
     expect(spec.screens.map((item) => item.title)).toContain('Hàng đợi exception')
+    expect(spec.screens.every((screen) => screen.designSystemRoles.length === 0)).toBe(true)
     expect(spec.decisions.map((item) => item.id)).toContain('DECISION-CLEAR-BRIEF-DRAFT')
     expect(validateProductSpecInvariants(spec)).toEqual([])
   })

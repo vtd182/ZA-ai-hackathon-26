@@ -66,6 +66,9 @@ function normalized(value: string): string {
 export function inferProductSurface(spec: ProductSpec): ProductSurface {
   const explicit = spec.findings.find((finding) => finding.id === 'FINDING-PRODUCT-SURFACE')?.evidence
   if (explicit && productSurfaceSchema.safeParse(explicit).success) return explicit as ProductSurface
+  if (spec.idea.productType !== 'mini_app' && spec.idea.productType !== 'oa' && spec.idea.productType !== 'bot') {
+    return spec.idea.productType
+  }
   const text = normalized([
     spec.title,
     spec.idea.title,
@@ -79,8 +82,7 @@ export function inferProductSurface(spec: ProductSpec): ProductSurface {
   if (/\b(desktop|tool|console)\b/.test(text)) return 'desktop_tool'
   if (spec.idea.productType === 'oa') return 'oa'
   if (spec.idea.productType === 'bot') return 'bot'
-  if (spec.idea.productType === 'mini_app') return 'mini_app'
-  return 'adaptive'
+  return spec.idea.productType
 }
 
 function figmaMode(planMode: ArtifactPlanMode, connectorMode: 'live' | 'mock'): ArtifactBriefMode {

@@ -92,7 +92,7 @@ export const designScreenRecipeSchema = z.object({
   layout: z.enum(['vertical', 'horizontal', 'flow']),
   sequence: z.number().int().nonnegative(),
   presentation: designScreenPresentationSchema,
-  slots: z.array(designSlotSchema).min(1),
+  slots: z.array(designSlotSchema).default([]),
   prototypeEdges: z.array(prototypeEdgeIntentSchema),
 })
 export type DesignScreenRecipe = z.infer<typeof designScreenRecipeSchema>

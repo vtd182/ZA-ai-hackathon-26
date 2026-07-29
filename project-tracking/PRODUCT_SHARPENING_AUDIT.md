@@ -71,7 +71,7 @@ Current schema lives in `packages/domain/src/product-spec.ts`.
 
 Current contents:
 
-- `idea`: title, summary, product type, target users.
+- `idea`: title, summary, product type/surface, target users.
 - `goals`: measurable product goals.
 - `findings`: evidence or assumptions.
 - `requirements`: scoped product capabilities with AC and status.
@@ -196,11 +196,11 @@ This fragmentation causes contradictory instructions and repeated fixes.
 Mode, surface, fidelity, output page policy and DS policy are inferred in multiple places. They
 should be normalized once before provider/worker/connector execution.
 
-5. ProductSpec schema is too Mini App/ZDS biased.
+5. ProductSpec schema was too Mini App/ZDS biased.
 
-`productType` only supports `mini_app | oa | bot`, and every screen requires
-`designSystemRoles`. Free web/admin/landing mode has to ignore these fields instead of modeling
-them cleanly.
+`productType` used to only support `mini_app | oa | bot`, and every screen required
+`designSystemRoles`. This is now relaxed so web/admin/landing/adaptive specs can be modeled without
+fake ZDS roles. Remaining work is renderer/editor polish for these richer surfaces.
 
 6. Canvas value is present but under-explained.
 
@@ -333,6 +333,13 @@ Intent:
 - **Implementation direction:** Extend `productType`; add `surface` or `screen.surface`; make `designSystemRoles` optional or policy-driven in v2 schema.
 - **Acceptance:** A web dashboard ProductSpec parses without fake ZDS roles.
 - **Tests:** invariant tests for web/admin specs and backward compatibility for v1.
+- **Status note 2026-07-30:** implemented in `packages/domain/src/product-spec.ts` and
+  `packages/agent-core/src/product-spec-synthesis.ts`. ProductSpec `idea.productType` now accepts
+  `web_app`, `admin_dashboard`, `landing_page`, `desktop_tool` and `adaptive`; screen
+  `designSystemRoles` defaults to `[]`. Clear admin dashboard briefs now synthesize
+  `productType: admin_dashboard` and zero fake ZDS roles, while Mini App flows keep their ZDS role
+  hints. Figma plan schema now allows zero-slot free/adaptive screens so no-ZDS artifacts can rely
+  on primitives and ArtifactBrief policy instead of component-role placeholders.
 
 ### `P0-SHARP-006` Improve progress and failure language
 

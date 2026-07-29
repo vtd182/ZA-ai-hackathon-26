@@ -41,6 +41,51 @@ describe('ProductSpec schema', () => {
     expect(parseProductSpec(validSpec()).schemaVersion).toBe(1)
   })
 
+  it('accepts non-ZDS web/admin ProductSpecs without fake component roles', () => {
+    const spec = validSpec()
+    spec.idea = {
+      id: 'IDEA-TEST',
+      kind: 'idea',
+      title: 'Ops dashboard',
+      summary: 'Admin dashboard for booking operations.',
+      productType: 'admin_dashboard',
+      targetUsers: ['Ops'],
+    }
+    spec.screens = [{
+      id: 'SCREEN-ONE',
+      kind: 'screen',
+      title: 'Booking queue',
+      purpose: 'Review and filter bookings',
+      requirementIds: ['REQ-ONE'],
+      designSystemRoles: [],
+    }]
+
+    const parsed = parseProductSpec(spec)
+    expect(parsed.idea.productType).toBe('admin_dashboard')
+    expect(parsed.screens[0]?.designSystemRoles).toEqual([])
+  })
+
+  it('defaults omitted designSystemRoles to an empty list for free/adaptive surfaces', () => {
+    const spec = validSpec()
+    spec.idea = {
+      id: 'IDEA-TEST',
+      kind: 'idea',
+      title: 'Web portal',
+      summary: 'Web app portal.',
+      productType: 'web_app',
+      targetUsers: ['Ops'],
+    }
+    spec.screens = [{
+      id: 'SCREEN-ONE',
+      kind: 'screen',
+      title: 'Portal home',
+      purpose: 'Show overview',
+      requirementIds: ['REQ-ONE'],
+    }]
+
+    expect(parseProductSpec(spec).screens[0]?.designSystemRoles).toEqual([])
+  })
+
   it('rejects unsupported schema versions', () => {
     expect(() => parseProductSpec({ ...validSpec(), schemaVersion: 2 })).toThrow()
   })

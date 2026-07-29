@@ -56,6 +56,10 @@ interface JourneyStep {
   roles: string[]
 }
 
+function rolesForSurface(surface: ProductSurface, roles: string[]): string[] {
+  return surface === 'mini_app' || surface === 'oa' || surface === 'bot' ? roles : []
+}
+
 function normalized(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase()
 }
@@ -258,24 +262,25 @@ function journeyForBrief(brief: ProductBrief): JourneyStep[] {
   const text = normalized(`${brief.userGoal} ${brief.mvpScope.join(' ')}`)
   if (brief.productSurface === 'admin_dashboard' || /(dashboard|admin|backoffice|ops|van hanh|booking)/.test(text)) {
     const steps: JourneyStep[] = [
-      { key: 'OPS-OVERVIEW', title: 'Tổng quan vận hành', purpose: 'Theo dõi trạng thái chính, việc cần xử lý và cảnh báo mới nhất', acceptanceCriteria: ['Hiển thị số liệu trọng yếu', 'Có trạng thái loading/empty/error'], roles: ['app-header', 'status-message', 'data-card'] },
-      { key: 'WORK-QUEUE', title: 'Danh sách booking', purpose: 'Xem, lọc và tìm các booking/yêu cầu cần xử lý', acceptanceCriteria: ['Lọc được theo trạng thái', 'Tìm được theo mã hoặc người phụ trách'], roles: ['app-header', 'search-input', 'list-item', 'filter'] },
-      { key: 'EXCEPTION-QUEUE', title: 'Hàng đợi exception', purpose: 'Ưu tiên lỗi, bất thường và booking cần can thiệp thủ công', acceptanceCriteria: ['Nêu rõ lý do exception', 'Có hành động assign, retry hoặc dismiss'], roles: ['app-header', 'status-message', 'list-item', 'primary-button'] },
-      { key: 'DETAIL-ACTION', title: 'Chi tiết và xử lý', purpose: 'Review dữ liệu, lịch sử và thực hiện hành động vận hành', acceptanceCriteria: ['Hiển thị đủ lịch sử thay đổi', 'Ghi nhận được quyết định xử lý'], roles: ['app-header', 'order-summary', 'primary-button', 'secondary-button'] },
+      { key: 'OPS-OVERVIEW', title: 'Tổng quan vận hành', purpose: 'Theo dõi trạng thái chính, việc cần xử lý và cảnh báo mới nhất', acceptanceCriteria: ['Hiển thị số liệu trọng yếu', 'Có trạng thái loading/empty/error'], roles: [] },
+      { key: 'WORK-QUEUE', title: 'Danh sách booking', purpose: 'Xem, lọc và tìm các booking/yêu cầu cần xử lý', acceptanceCriteria: ['Lọc được theo trạng thái', 'Tìm được theo mã hoặc người phụ trách'], roles: [] },
+      { key: 'EXCEPTION-QUEUE', title: 'Hàng đợi exception', purpose: 'Ưu tiên lỗi, bất thường và booking cần can thiệp thủ công', acceptanceCriteria: ['Nêu rõ lý do exception', 'Có hành động assign, retry hoặc dismiss'], roles: [] },
+      { key: 'DETAIL-ACTION', title: 'Chi tiết và xử lý', purpose: 'Review dữ liệu, lịch sử và thực hiện hành động vận hành', acceptanceCriteria: ['Hiển thị đủ lịch sử thay đổi', 'Ghi nhận được quyết định xử lý'], roles: [] },
     ]
     if (/(phan quyen|role|permission|admin|staff)/.test(text)) {
-      steps.push({ key: 'ACCESS-CONTROL', title: 'Phân quyền truy cập', purpose: 'Quản lý quyền xem, sửa và duyệt theo vai trò', acceptanceCriteria: ['Phân biệt được admin và staff', 'Không cho thao tác ngoài quyền'], roles: ['app-header', 'list-item', 'switch', 'primary-button'] })
+      steps.push({ key: 'ACCESS-CONTROL', title: 'Phân quyền truy cập', purpose: 'Quản lý quyền xem, sửa và duyệt theo vai trò', acceptanceCriteria: ['Phân biệt được admin và staff', 'Không cho thao tác ngoài quyền'], roles: [] })
     }
     return steps
   }
   if (brief.productSurface === 'landing_page') {
     return [
-      { key: 'LANDING-HERO', title: 'Hero và offer chính', purpose: 'Truyền đạt lời hứa sản phẩm và CTA đầu tiên', acceptanceCriteria: ['Có headline rõ offer', 'CTA chính nổi bật'], roles: ['app-header', 'primary-button', 'status-message'] },
-      { key: 'VALUE-PROOF', title: 'Giá trị và bằng chứng', purpose: 'Giải thích lợi ích, use cases và bằng chứng tin cậy', acceptanceCriteria: ['Nêu được 3 lợi ích chính', 'Có proof point hoặc metric'], roles: ['list-item', 'status-message'] },
-      { key: 'CONVERSION', title: 'Chuyển đổi người dùng', purpose: 'Thu lead hoặc đưa người dùng sang bước tiếp theo', acceptanceCriteria: ['Form/CTA có validation', 'Có trạng thái success/error'], roles: ['text-input', 'primary-button', 'status-message'] },
+      { key: 'LANDING-HERO', title: 'Hero và offer chính', purpose: 'Truyền đạt lời hứa sản phẩm và CTA đầu tiên', acceptanceCriteria: ['Có headline rõ offer', 'CTA chính nổi bật'], roles: [] },
+      { key: 'VALUE-PROOF', title: 'Giá trị và bằng chứng', purpose: 'Giải thích lợi ích, use cases và bằng chứng tin cậy', acceptanceCriteria: ['Nêu được 3 lợi ích chính', 'Có proof point hoặc metric'], roles: [] },
+      { key: 'CONVERSION', title: 'Chuyển đổi người dùng', purpose: 'Thu lead hoặc đưa người dùng sang bước tiếp theo', acceptanceCriteria: ['Form/CTA có validation', 'Có trạng thái success/error'], roles: [] },
     ]
   }
   return journeyForIdea(`${brief.userGoal} ${brief.mvpScope.join(' ')}`)
+    .map((step) => ({ ...step, roles: rolesForSurface(brief.productSurface, step.roles) }))
 }
 
 export function synthesizeProductSpecFromBrief(input: ProductSpecFromBriefInput): ProductSpec {
@@ -289,7 +294,6 @@ export function synthesizeProductSpecFromBrief(input: ProductSpecFromBriefInput)
     ? 'DEP-WEB-RUNTIME'
     : 'DEP-ZALO-MINI-APP'
   const title = input.threadTitle === 'Ý tưởng chưa đặt tên' ? brief.userGoal : input.threadTitle
-  const productType = brief.productSurface === 'oa' ? 'oa' : brief.productSurface === 'bot' ? 'bot' : 'mini_app'
   const spec = parseProductSpec({
     ...input.current,
     title,
@@ -298,7 +302,7 @@ export function synthesizeProductSpecFromBrief(input: ProductSpecFromBriefInput)
       ...input.current.idea,
       title,
       summary: `${brief.userGoal}. MVP scope: ${brief.mvpScope.join('; ')}${brief.outOfScope.length ? `. Out of scope: ${brief.outOfScope.join('; ')}` : ''}.`,
-      productType,
+      productType: brief.productSurface,
       targetUsers: brief.targetUsers,
     },
     goals: [{

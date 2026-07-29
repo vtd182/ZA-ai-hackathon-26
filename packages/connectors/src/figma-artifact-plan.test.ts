@@ -249,6 +249,44 @@ describe('semantic Figma artifact planner', () => {
     expect(result.issues.map((issue) => issue.code)).not.toContain('CREATIVE_ZDS_CONTROL_MISSING')
   })
 
+  it('allows free adaptive ProductSpecs with no design-system role slots', () => {
+    const primitiveManifest = { ...syntheticZaloDesignSystem, components: [] }
+    const webSpec = structuredClone(mealOrderingProductSpec)
+    webSpec.idea.productType = 'admin_dashboard'
+    webSpec.screens = webSpec.screens.map((screen) => ({ ...screen, designSystemRoles: [] }))
+    const blueprint = creativeBlueprint()
+    blueprint.screens = blueprint.screens.map((screen) => ({
+      ...screen,
+      elements: screen.elements.map((element) => element.kind === 'component'
+        ? {
+            ...element,
+            kind: 'rectangle' as const,
+            name: `Primitive ${element.name}`,
+            componentRole: null,
+            componentText: null,
+            fill: '#FFFFFF',
+            stroke: '#D0D5DD',
+            strokeWidth: 1,
+            radius: 14,
+          }
+        : element),
+    }))
+    const plan = createFigmaArtifactPlan(
+      webSpec,
+      { ...target, creativeMode: 'free' },
+      primitiveManifest,
+      { ...metadata, pageStrategy: 'use_target_page' },
+      'free',
+      blueprint,
+    )
+    const result = preflightFigmaArtifactPlan(plan, primitiveManifest, { ...target, creativeMode: 'free' })
+
+    expect(plan.screens.every((screen) => screen.slots.length === 0)).toBe(true)
+    expect(result.allowed).toBe(true)
+    expect(result.plan.resolvedSlots).toEqual([])
+    expect(result.issues.map((issue) => issue.code)).not.toContain('MISSING_COMPONENT_ROLE')
+  })
+
   it('strict mode still hard-blocks when the ref lacks a required component', () => {
     const thinManifest = { ...syntheticZaloDesignSystem, components: syntheticZaloDesignSystem.components.slice(0, 1) }
     const plan = createFigmaArtifactPlan(mealOrderingProductSpec, target, thinManifest, metadata, 'strict')

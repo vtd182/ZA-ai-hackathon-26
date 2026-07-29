@@ -506,6 +506,12 @@
   and preserve adaptive web/admin surface policy. Verification:
   `pnpm exec vitest run packages/domain/src/artifact-brief.test.ts apps/desktop/src/main/figma-design-worker.test.ts`,
   `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
+- **Evidence update:** ProductSpec schema no longer forces web/admin/landing ideas into Mini App or
+  fake ZDS slots. `productType` supports richer surfaces, `screen.designSystemRoles` defaults to
+  `[]`, clear admin dashboard synthesis emits `productType: admin_dashboard` with zero DS roles,
+  and free Figma plans accept zero-slot primitive screens. Verification:
+  `pnpm exec vitest run packages/domain/src/product-spec.test.ts packages/domain/src/artifact-brief.test.ts packages/agent-core/src/product-spec-synthesis.test.ts packages/connectors/src/figma-artifact-plan.test.ts`,
+  `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
 
 ## Epic E7 - Change synchronization
 

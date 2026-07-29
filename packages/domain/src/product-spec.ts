@@ -2,7 +2,16 @@ import { z } from 'zod'
 
 export const productSpecSchemaVersion = 1 as const
 
-export const productTypeSchema = z.enum(['mini_app', 'oa', 'bot'])
+export const productTypeSchema = z.enum([
+  'mini_app',
+  'oa',
+  'bot',
+  'web_app',
+  'admin_dashboard',
+  'landing_page',
+  'desktop_tool',
+  'adaptive',
+])
 export type ProductType = z.infer<typeof productTypeSchema>
 
 export const entityKindSchema = z.enum([
@@ -51,7 +60,7 @@ export const screenSchema = titledEntitySchema.extend({
   kind: z.literal('screen'),
   purpose: z.string().min(1),
   requirementIds: z.array(stableIdSchema).min(1),
-  designSystemRoles: z.array(z.string().min(1)).min(1),
+  designSystemRoles: z.array(z.string().min(1)).default([]),
 })
 
 export const storySchema = titledEntitySchema.extend({
