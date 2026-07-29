@@ -323,6 +323,10 @@ Intent:
 - **Status note 2026-07-30 UI update:** approval UI now shows package-wide `Kickoff contracts`
   instead of a Figma-only brief. Figma, Backlog mock and PRD.md each display target, mode, surface,
   output policy, design-system policy, verification count and the ProductSpec hash before approval.
+- **Status note 2026-07-30 export update:** review bundle export now writes
+  `artifact-contracts.md/json` and embeds the same summary in `review-bundle.json`. It captures
+  per-target ArtifactBriefs, payload/plan hashes, receipts, verification state and whether the
+  package shares one ProductSpec source hash.
 
 ### `P0-SHARP-004` Split prompt packs by task
 
@@ -384,6 +388,9 @@ Intent:
   selected-page Figma plan with zero component roles and no `MISSING_COMPONENT_ROLE` preflight
   issue. The same command also checks that AgentRouter advertises resume through the managed Codex
   bridge and that Figma blueprint prompts stay ProductSpec-first.
+- **Status note 2026-07-30 update:** the Export button now produces review material suitable for
+  demo handoff: `artifact-contracts.md/json` plus `review-bundle.json` make ProductSpec hash
+  alignment and per-target verification auditable outside the running app.
 
 ### `P0-SHARP-008` Context Budgeter and task context packs
 

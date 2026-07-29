@@ -527,6 +527,12 @@
   mode/surface/output/DS/verification count and ProductSpec hash before approval. Verification:
   `pnpm exec vitest run apps/desktop/src/renderer/src/artifact-brief-copy.test.ts`,
   `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
+- **Evidence update:** Review exports now include `artifact-contracts.md` and
+  `artifact-contracts.json`, and `review-bundle.json` embeds the same package contract summary.
+  The summary records per-target ArtifactBrief, payload/plan hashes, execution receipt, verification
+  state and whether all artifacts share one ProductSpec hash. Verification:
+  `pnpm exec vitest run apps/desktop/src/main/export-bundle.test.ts`, `./run.sh typecheck`,
+  `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
 - **Evidence update:** Renderer error toasts now classify failures by contract (`ProductSpec`,
   `ArtifactBrief`, `Figma MCP`, `Figma craft`, `Read-back verification`, `Provider`, `Canvas`,
   `Runtime`) and show a next action instead of only a raw error string. Verification:

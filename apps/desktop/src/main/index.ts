@@ -83,6 +83,7 @@ import { parseSlashCommand, slashHelpMessage } from './slash-commands'
 import { mapFreeformDiscoveryAnswers } from './workflow-intent'
 import { isManagedFigmaArtifactPage, missingFigmaRoles } from './figma-source-policy'
 import { CodexFigmaDesignWorker, type FigmaDesignWorkerStage, type FigmaDesignWorkerTask } from './figma-design-worker'
+import { buildArtifactContractExport, renderArtifactContractsMarkdown } from './export-bundle'
 import { loadFigmaCraftSkillPack } from './skill-packs'
 import { CANVAS_SKILL_ID, CANVAS_SKILL_VERSION, installCanvasSkill } from './skill-installer'
 
@@ -629,14 +630,19 @@ function exportThreadBundle(threadId: string): import('@pm-agent/domain').Thread
     'product-spec.md',
     'productspec.json',
     'canvas.json',
+    'artifact-contracts.md',
+    'artifact-contracts.json',
     'workspace.json',
     'review-bundle.json',
   ]
+  const artifactContracts = buildArtifactContractExport(workspace.runState.pendingActions, workspace.execution)
   writeFileSync(join(directoryPath, 'README.md'), [
     '# PM Lifecycle review bundle',
     '',
-    'Bundle này chứa transcript, ProductSpec, canvas snapshot và trạng thái workflow tại thời điểm export.',
+    'Bundle này chứa transcript, ProductSpec, canvas snapshot, ArtifactBrief contracts và trạng thái workflow tại thời điểm export.',
     'Có thể gửi toàn bộ thư mục này để tái hiện và kiểm chứng hành vi.',
+    '',
+    `- ProductSpec hash alignment: ${artifactContracts.sourceHashAligned ? 'aligned' : 'mixed/unavailable'}`,
     '',
     ...files.slice(1).map((file) => `- ${file}`),
   ].join('\n'), 'utf8')
@@ -644,6 +650,8 @@ function exportThreadBundle(threadId: string): import('@pm-agent/domain').Thread
   writeFileSync(join(directoryPath, 'product-spec.md'), renderProductSpecMarkdown(workspace.runState.productSpec), 'utf8')
   writeFileSync(join(directoryPath, 'productspec.json'), JSON.stringify(workspace.runState.productSpec, null, 2), 'utf8')
   writeFileSync(join(directoryPath, 'canvas.json'), JSON.stringify(thread.canvasSnapshot, null, 2), 'utf8')
+  writeFileSync(join(directoryPath, 'artifact-contracts.md'), renderArtifactContractsMarkdown(artifactContracts), 'utf8')
+  writeFileSync(join(directoryPath, 'artifact-contracts.json'), JSON.stringify(artifactContracts, null, 2), 'utf8')
   const workspaceExport = {
     exportedAt,
     thread: {
@@ -658,6 +666,7 @@ function exportThreadBundle(threadId: string): import('@pm-agent/domain').Thread
     preview: workspace.preview,
     execution: workspace.execution,
     reasoning: workspace.reasoning,
+    artifactContracts,
   }
   writeFileSync(join(directoryPath, 'workspace.json'), JSON.stringify(workspaceExport, null, 2), 'utf8')
   writeFileSync(join(directoryPath, 'review-bundle.json'), JSON.stringify({
