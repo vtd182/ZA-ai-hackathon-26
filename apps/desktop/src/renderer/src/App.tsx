@@ -63,6 +63,7 @@ import { canvasCollaborationCopy, type CanvasCollaborationAction } from './canva
 import { classifyErrorText } from './error-classifier'
 import { productSpecReadiness, productSurfaceLabel } from './productspec-readiness'
 import { providerRuntimeCopy } from './provider-runtime-copy'
+import { workflowStateReceipt, type WorkflowStateReceipt } from './workflow-state-receipt'
 
 const noCanvasProgram: CanvasProgram = { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null }
 // Curated set surfaced in the "/" menu — draw first, then the Figma artifact.
@@ -1282,6 +1283,15 @@ function ChatPanel({
     productSpecStatus: productSpec?.status,
     canPromote: canvasItemCount > 0 && (!productSpec || productSpec.requirements.filter((item) => item.status !== 'removed').length === 0),
   })
+  const stateReceipt = workflowStateReceipt({
+    productSpec,
+    preview,
+    execution,
+    artifactActions,
+    canvasItemCount,
+    sending,
+    artifactBusy,
+  })
 
   const chooseSlashCommand = (item: typeof slashCommands[number]): void => {
     setDraft(`${item.command}${item.acceptsPrompt ? ' ' : ''}`)
@@ -1321,6 +1331,7 @@ function ChatPanel({
       {productSpec && (productSpec.requirements.length > 0 || productSpec.screens.length > 0 || productSpec.stories.length > 0) && (
         <ProductSpecInspector productSpec={productSpec} selection={selection} onOpen={() => setSpecOverviewOpen(true)} />
       )}
+      <WorkflowStateReceiptPanel receipt={stateReceipt} />
       {specOverviewOpen && productSpec && (
         <ProductSpecOverview productSpec={productSpec} onClose={() => setSpecOverviewOpen(false)} />
       )}
@@ -1540,6 +1551,26 @@ function ChatPanel({
         )}
       </div>
     </aside>
+  )
+}
+
+function WorkflowStateReceiptPanel({ receipt }: { receipt: WorkflowStateReceipt }): React.JSX.Element {
+  return (
+    <section className={`workflow-state-receipt ${receipt.tone}`} aria-label="Workflow state receipt">
+      <header>
+        <ListChecks size={15} />
+        <div>
+          <strong>{receipt.title}</strong>
+          <span>{receipt.status}</span>
+        </div>
+      </header>
+      <div className="workflow-state-facts">
+        {receipt.facts.slice(0, 2).map((fact) => <span key={fact}>{fact}</span>)}
+      </div>
+      <div className="workflow-state-next">
+        {receipt.nextActions.slice(0, 2).map((action) => <small key={action}>{action}</small>)}
+      </div>
+    </section>
   )
 }
 

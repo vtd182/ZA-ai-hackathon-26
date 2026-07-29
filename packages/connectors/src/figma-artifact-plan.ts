@@ -272,7 +272,7 @@ function recipesFor(spec: ProductSpec, creativeBlueprint?: FigmaCreativeBlueprin
     const creativeScreen = creativeBlueprint?.screens.find((candidate) => candidate.screenId === screen.id)
     const creativeSlots = creativeScreen?.elements
       .filter((element) => element.kind === 'component' && element.componentRole)
-      .map((element) => ({
+      .map((element): DesignSlot => ({
         key: element.id,
         label: element.name,
         required: true,

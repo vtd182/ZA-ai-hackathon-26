@@ -1178,6 +1178,83 @@ a:focus-visible,
   box-shadow: 0 0 0 3px var(--brand-ring), var(--shadow-1);
 }
 
+.workflow-state-receipt {
+  flex: 0 0 auto;
+  margin: 0 14px 8px;
+  padding: 10px;
+  border: 1px solid #d6e1e6;
+  border-left-width: 3px;
+  border-radius: 7px;
+  background: #fbfcfd;
+  box-shadow: var(--shadow-1);
+}
+
+.workflow-state-receipt.neutral { border-left-color: #7c8d95; }
+.workflow-state-receipt.active { border-left-color: var(--brand); background: #f7fbff; }
+.workflow-state-receipt.verified { border-left-color: var(--ok); background: #f5fbf8; }
+.workflow-state-receipt.warning { border-left-color: var(--warn); background: #fffaf0; }
+
+.workflow-state-receipt header {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 7px;
+}
+
+.workflow-state-receipt svg {
+  margin-top: 1px;
+  color: #58727d;
+}
+
+.workflow-state-receipt.active svg { color: var(--brand); }
+.workflow-state-receipt.verified svg { color: var(--ok); }
+.workflow-state-receipt.warning svg { color: var(--warn); }
+
+.workflow-state-receipt header div {
+  min-width: 0;
+}
+
+.workflow-state-receipt strong {
+  display: block;
+  overflow: hidden;
+  color: #25333a;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-state-receipt header span,
+.workflow-state-facts span,
+.workflow-state-next small {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #66777f;
+  font-size: 9.5px;
+  line-height: 13px;
+}
+
+.workflow-state-facts {
+  display: grid;
+  gap: 3px;
+  margin-top: 7px;
+}
+
+.workflow-state-next {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.workflow-state-next small {
+  min-height: 20px;
+  padding: 3px 6px;
+  border: 1px solid #dce6ea;
+  border-radius: 5px;
+  background: #ffffff;
+  font-weight: 650;
+}
+
 .spec-open-hint {
   display: inline-flex !important;
   align-items: center;

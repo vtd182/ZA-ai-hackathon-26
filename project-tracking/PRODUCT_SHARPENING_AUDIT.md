@@ -306,6 +306,10 @@ Intent:
   ProductSpec modal and compact inspector show Draft/Confirmed truth, product surface, artifact
   readiness, traceability blockers and next actions. This clarifies that AgentRouter/Codex may
   craft Figma blueprints, while Agent Core still owns approval, MCP write and read-back.
+- **Status note 2026-07-30 state receipt update:** chat now includes a compact
+  `Workflow state receipt` generated from canonical app state. It makes the current truth boundary
+  visible across conversation-only, canvas draft, Draft ProductSpec, Confirmed ProductSpec,
+  immutable kickoff approval, change preview, partial failure and verified kickoff states.
 
 ### `P0-SHARP-003` Introduce ArtifactBrief canonical contract
 
@@ -378,6 +382,9 @@ Intent:
 - **Status note 2026-07-30 update:** artifact approval no longer hides the non-Figma contracts.
   The panel names all kickoff briefs before write approval, helping the user see PRD/backlog are
   governed outputs too, not unchecked side effects.
+- **Status note 2026-07-30 state receipt update:** the same progress language is now visible even
+  outside the artifact panel through the chat `Workflow state receipt`, so users can tell whether
+  the app is reasoning, awaiting approval, verifying, retrying or already read-back verified.
 - **Status note 2026-07-30 canvas update:** chat now surfaces a `Canvas collaboration loop` panel
   whenever the thread has canvas content. With a selection, the panel offers `Hỏi vùng này`,
   `Sửa vùng này` and `Sync vùng chọn`; without a selection it explains canvas as exploration/review
