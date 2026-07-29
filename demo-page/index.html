@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Zalo Product Kickoff Agent. The workflow automation agent for the Zalo ecosystem.">
+    <meta name="description" content="Zalo Product Kickoff Agent - Automate your product lifecycle.">
     <title>Zalo Product Kickoff Agent | ZA AI Hackathon</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,11 +12,11 @@
 </head>
 <body>
     <nav class="navbar">
-        <div class="logo">Zalo Kickoff Agent</div>
+        <a href="index.html" class="logo">Zalo Kickoff Agent</a>
         <div class="nav-links">
-            <a href="#features">Features</a>
-            <a href="#architecture">Architecture</a>
-            <a href="https://github.com/zah19-team3/ZA-ai-hackathon-26" target="_blank" rel="noopener noreferrer" class="btn-nav">View on GitHub</a>
+            <a href="index.html#features">Features</a>
+            <a href="project.html">Deep Dive</a>
+            <a href="https://github.com/vtd182/ZA-ai-hackathon-26" target="_blank" rel="noopener noreferrer" class="btn-nav">GitHub</a>
         </div>
     </nav>
 
@@ -24,24 +24,34 @@
         <!-- HERO SECTION -->
         <section class="hero reveal-on-scroll">
             <div class="hero-content">
-                <h1>From raw idea to verified kickoff package.</h1>
-                <p>Automate your product lifecycle with traceability, human approval, and guaranteed sync across Figma and Jira. Stop syncing artifacts manually.</p>
+                <h1>Bridging the gap between Idea and Execution.</h1>
+                <p>An intelligent, local-first workflow agent that translates raw ideas into verified product specifications, syncing seamlessly across Figma and Jira.</p>
                 <div class="cta-group">
-                    <a href="https://github.com/zah19-team3/ZA-ai-hackathon-26/releases/latest" target="_blank" rel="noopener noreferrer" class="btn-primary">
+                    <a href="https://github.com/vtd182/ZA-ai-hackathon-26" target="_blank" rel="noopener noreferrer" class="btn-primary">
                         <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-github"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
-                        Download for macOS
+                        Source Code
                     </a>
-                    <a href="#manifesto" class="btn-secondary">Read the manifesto</a>
+                    <a href="project.html" class="btn-secondary">How it works</a>
                 </div>
             </div>
+            
             <div class="hero-visual">
-                <img src="https://picsum.photos/seed/zalo-agent-app/1200/900" alt="Agent dashboard generating product specifications" class="hero-image">
+                <div class="media-placeholder">
+                    <!-- TODO: Replace poster with actual hero GIF/Video thumbnail -->
+                    <video autoplay loop muted playsinline class="media-content">
+                        <!-- TODO: Put real demo video src here -->
+                        <source src="" type="video/mp4">
+                    </video>
+                    <div class="media-overlay">
+                        <span>[ HERO DEMO VIDEO / GIF ]<br>Showcase the Agent Canvas here</span>
+                    </div>
+                </div>
             </div>
         </section>
 
         <!-- TRUSTED BY -->
         <section class="trusted-by reveal-on-scroll">
-            <p class="trust-label">BUILT TO INTEGRATE SEAMLESSLY WITH</p>
+            <p class="trust-label">INTEGRATES DIRECTLY INTO YOUR WORKSPACE</p>
             <div class="logo-wall">
                 <img src="https://cdn.simpleicons.org/jira/ffffff" alt="Jira">
                 <img src="https://cdn.simpleicons.org/figma/ffffff" alt="Figma">
@@ -49,81 +59,49 @@
             </div>
         </section>
 
-        <!-- MANIFESTO / PROBLEM -->
-        <section class="manifesto reveal-on-scroll" id="manifesto">
-            <div class="manifesto-grid">
-                <div class="manifesto-text">
-                    <h2>The context switch is killing your momentum.</h2>
-                    <p>Designers are in Figma. PMs are in Jira. Developers are in Git. Product specs get lost in chat threads, and no one knows what the source of truth is when the sprint starts.</p>
-                    <p>We built the Kickoff Agent to sit in the middle. It reads your raw ideas, generates structured specs, and syncs them across your ecosystem—all from a local-first desktop app.</p>
-                </div>
-                <div class="manifesto-visual">
-                    <img src="https://picsum.photos/seed/zalo-chaos-order/800/800" alt="Chaos vs Order" class="image-sharp">
-                </div>
-            </div>
-        </section>
-
         <!-- FEATURES BENTO GRID -->
         <section class="features reveal-on-scroll" id="features">
             <div class="section-header">
-                <h2>Workflow automation, not just a chatbot.</h2>
+                <h2>Not just a chat UI. A true workflow partner.</h2>
             </div>
             
             <div class="bento-grid">
                 <div class="bento-cell cell-large dark-surface">
-                    <h3>Verified Change Loop</h3>
-                    <p>Scope changes trigger impact analysis, before/after previews, and read-back verified syncs. We don't just generate text; we verify the impact.</p>
+                    <h3>Figma to Jira Pipeline</h3>
+                    <p>Stop manually copying specs. The agent reads your Figma frames via MCP and drafts comprehensive Jira tickets, ensuring the design source-of-truth matches the engineering backlog.</p>
                 </div>
                 <div class="bento-cell accent-surface">
-                    <h3>Multi-agent Canvas</h3>
-                    <p>Terminal agents and UI agents collaborating on the same visual tldraw canvas in real-time.</p>
+                    <h3>Multi-Agent Canvas</h3>
+                    <p>Interact with multiple specialized agents on a spatial tldraw canvas. Brainstorm, map architectures, and generate specs visually.</p>
                 </div>
                 <div class="bento-cell dark-surface">
-                    <h3>Figma MCP</h3>
-                    <p>Direct integration with Figma through our specialized MCP tool. Read designs and map them to product specs instantly.</p>
+                    <h3>Local-First Security</h3>
+                    <p>Your intellectual property stays on your machine. Using an SQLite outbox, all external writes (like Jira) require explicit human approval via Payload Hash.</p>
                 </div>
                 <div class="bento-cell dark-surface">
-                    <h3>Local-first Security</h3>
-                    <p>SQLite outbox. All external writes require payload-hash approval. Your IP stays on your machine.</p>
+                    <h3>Provider-Agnostic</h3>
+                    <p>Don't be locked into one AI model. Switch between Codex, Gemini, or Anthropic instantly depending on the task's complexity.</p>
                 </div>
             </div>
-        </section>
-
-        <!-- ARCHITECTURE / TECH SPECS -->
-        <section class="architecture reveal-on-scroll" id="architecture">
-            <div class="arch-content">
-                <p class="trust-label">ENGINEERING PRINCIPLES</p>
-                <h2>Built for scale and security.</h2>
-                <div class="spec-grid">
-                    <div class="spec-card">
-                        <div class="spec-value">Provider-Agnostic</div>
-                        <div class="spec-desc">Switch between Codex, Gemini, or Anthropic at any safe checkpoint without losing context.</div>
-                    </div>
-                    <div class="spec-card">
-                        <div class="spec-value">SQLite State</div>
-                        <div class="spec-desc">The local execution, history, and checkpoint store. Never depend on provider-native hidden state.</div>
-                    </div>
-                    <div class="spec-card">
-                        <div class="spec-value">Strict Approval</div>
-                        <div class="spec-desc">Every external write to Jira or Figma requires explicit approval tied to an immutable payload hash.</div>
-                    </div>
-                </div>
+            
+            <div class="features-footer">
+                <a href="project.html" class="link-arrow">Read the full technical deep dive &rarr;</a>
             </div>
         </section>
 
         <!-- FINAL CTA -->
         <section class="final-cta reveal-on-scroll">
             <div class="cta-box">
-                <h2>Ready to regain your momentum?</h2>
-                <a href="https://github.com/zah19-team3/ZA-ai-hackathon-26/releases/latest" target="_blank" rel="noopener noreferrer" class="btn-primary btn-large">
-                    Download the Desktop App
+                <h2>Experience the Kickoff Agent.</h2>
+                <a href="https://github.com/vtd182/ZA-ai-hackathon-26" target="_blank" rel="noopener noreferrer" class="btn-primary btn-large">
+                    View on GitHub
                 </a>
             </div>
         </section>
     </main>
 
     <footer class="site-footer">
-        <p>&copy; 2026 ZA AI Hackathon - Team 3. Built with anti-slop principles.</p>
+        <p>&copy; 2026 ZA AI Hackathon - Team 3. Crafted with precision.</p>
     </footer>
 
     <script src="js/script.js"></script>
