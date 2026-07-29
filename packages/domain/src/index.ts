@@ -8,6 +8,7 @@ import { canvasProgramJsonSchema, canvasProgramSchema, emptyCanvasProgram, norma
 import { figmaCreativeBlueprintJsonSchema, figmaCreativeBlueprintSchema } from './figma-creative'
 
 export * from './design-system'
+export * from './artifact-brief'
 export * from './artifact-plan'
 export * from './figma-integration'
 export * from './figma-setup'

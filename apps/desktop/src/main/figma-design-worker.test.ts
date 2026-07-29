@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FigmaDesignWorkerTask } from './figma-design-worker'
 import type { SkillPackBundle } from './skill-packs'
+import type { ArtifactBrief } from '@pm-agent/domain'
 import {
   approveFigmaWorkerElicitation,
   buildFigmaDesignWorkerPrompt,
@@ -28,6 +29,34 @@ const skillPack: SkillPackBundle = {
     content: '# PM Lifecycle Figma critic\n\nCritique the rendered artifact.',
   }],
 }
+
+const zdsArtifactBrief = {
+  schemaVersion: 1,
+  id: 'artifact:SPEC-LOGIN:v1:figma:zds_reference:aaaaaaaaaaaa',
+  sourceSpecId: 'SPEC-LOGIN',
+  sourceSpecVersion: 1,
+  sourcePayloadHash: 'a'.repeat(64),
+  target: 'figma',
+  mode: 'zds_reference',
+  surface: 'mini_app',
+  fidelity: 'product_grade',
+  outputPolicy: 'managed_page',
+  designSystemPolicy: 'reference',
+  verificationPolicy: ['preflight', 'approval_payload_hash', 'write_receipt', 'read_back', 'postflight_audit'],
+  notes: ['ZDS mode: provider may use allowed semantic roles for interaction controls.'],
+  createdAt: '2026-07-30T00:00:00.000Z',
+} satisfies ArtifactBrief
+
+const freeArtifactBrief = {
+  ...zdsArtifactBrief,
+  id: 'artifact:SPEC-LOGIN:v1:figma:free_adaptive:aaaaaaaaaaaa',
+  mode: 'free_adaptive',
+  surface: 'admin_dashboard',
+  outputPolicy: 'selected_page',
+  designSystemPolicy: 'none',
+  verificationPolicy: ['preflight', 'approval_payload_hash', 'write_receipt', 'read_back', 'postflight_audit', 'primitive_composition_allowed'],
+  notes: ['No-ZDS/free mode: provider and worker should not receive component roles.'],
+} satisfies ArtifactBrief
 
 describe('Figma design worker', () => {
   it('only approves writes while the approved output Page is active', () => {
@@ -222,6 +251,7 @@ describe('Figma design worker', () => {
         resolvedTokens: [],
         estimatedOperations: 12,
       },
+      artifactBrief: zdsArtifactBrief,
       manifest: {
         schemaVersion: 1,
         id: 'zds',
@@ -281,8 +311,25 @@ describe('Figma design worker', () => {
     expect(prompt).toContain('Password login')
     expect(prompt).toContain('removed requirements are forbidden')
     expect(prompt).toContain('call audit_product_craft')
+    expect(prompt).toContain('"artifactBrief"')
     // No configured icon library → no icon instruction leaks into the brief.
     expect(prompt).not.toContain('iconLibrary')
+
+    const noZdsPrompt = buildFigmaDesignWorkerPrompt({
+      ...loginTask,
+      artifactBrief: freeArtifactBrief,
+      plan: {
+        ...loginTask.plan,
+        source: {
+          ...loginTask.plan.source,
+          mode: 'free',
+        },
+        resolvedSlots: [],
+      },
+    })
+    expect(noZdsPrompt).toContain('ArtifactBrief surface is admin_dashboard')
+    expect(noZdsPrompt).toContain('no-ZDS task has no source ZDS Page contract')
+    expect(noZdsPrompt).not.toContain('read-only ZDS source is "Page 1"')
 
     // With a captured ZDS icon library, the worker is told to instantiate real icons.
     const withIcons = buildFigmaDesignWorkerPrompt({

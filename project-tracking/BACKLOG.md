@@ -500,6 +500,12 @@
   blueprint prompts remain ProductSpec-first while MCP/plugin execution stays in Agent Core.
   Verification: `pnpm exec vitest run packages/reasoning/src/index.test.ts`, `./run.sh typecheck`,
   `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
+- **Evidence update:** Figma planning now creates a canonical ArtifactBrief with mode, surface,
+  fidelity, output policy, DS policy and ProductSpec payload hash. The brief is included in the
+  approved action payload and Figma craft worker task; no-ZDS/free briefs send no component roles
+  and preserve adaptive web/admin surface policy. Verification:
+  `pnpm exec vitest run packages/domain/src/artifact-brief.test.ts apps/desktop/src/main/figma-design-worker.test.ts`,
+  `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
 
 ## Epic E7 - Change synchronization
 

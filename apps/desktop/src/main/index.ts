@@ -61,8 +61,11 @@ import {
   figmaPreflightResultSchema,
   mockJiraPlanSchema,
   mockZdocPlanSchema,
+  createArtifactBrief,
+  artifactBriefSchema,
   summarizeFigmaDesignSystemContext,
   transitionRunState,
+  type ArtifactBrief,
   type DesignSystemManifest,
   type FigmaSetupStatus,
   type FigmaTargetBinding,
@@ -694,6 +697,7 @@ async function createCreativeFigmaBlueprint(
   state: RunState,
   spec: ProductSpec,
   manifest: DesignSystemManifest,
+  artifactBrief: ArtifactBrief,
   feedback?: string,
 ): Promise<FigmaCreativeBlueprint> {
   const thread = history.getThread(state.threadId)
@@ -711,14 +715,14 @@ async function createCreativeFigmaBlueprint(
       phase: 'deliver',
       message: feedback
         ? `Hãy sửa Creative Figma Blueprint theo lỗi preflight sau rồi trả lại toàn bộ blueprint: ${feedback}`
-        : 'Thiết kế một kickoff Figma gần sản phẩm thật từ ProductSpec. Dùng ZDS cho controls nhưng tự do sáng tạo composition và visual language.',
+        : artifactBrief.designSystemPolicy === 'none'
+          ? `Thiết kế một kickoff Figma gần sản phẩm thật từ ProductSpec. ArtifactBrief đã chốt mode ${artifactBrief.mode}, surface ${artifactBrief.surface}, không dùng ZDS/component roles; hãy tự do sáng tạo composition và visual language phù hợp surface.`
+          : `Thiết kế một kickoff Figma gần sản phẩm thật từ ProductSpec. ArtifactBrief đã chốt mode ${artifactBrief.mode}, surface ${artifactBrief.surface}; dùng ZDS cho controls nhưng tự do sáng tạo composition và visual language.`,
       recentMessages: history.recentMessages(state.threadId),
       responseMode: 'figma',
       intentHint: { kind: 'artifact', target: null, artifactAction: 'prepare' },
       productSpec: spec,
-      figmaComponentRoles: [...new Set(manifest.components
-        .filter((component) => !component.deprecated)
-        .map((component) => component.semanticRole))],
+      figmaComponentRoles: figmaComponentRolesForBrief(manifest, artifactBrief),
       remoteRef: null,
     }, {
       modelId: profile.modelId,
@@ -731,6 +735,18 @@ async function createCreativeFigmaBlueprint(
     clearTimeout(timeout)
     if (ownedController) activeRuns.delete(state.threadId)
   }
+}
+
+function figmaComponentRolesForBrief(manifest: DesignSystemManifest, artifactBrief: ArtifactBrief): string[] {
+  if (artifactBrief.designSystemPolicy === 'none') return []
+  return [...new Set(manifest.components
+    .filter((component) => !component.deprecated)
+    .map((component) => component.semanticRole))]
+}
+
+function artifactBriefUsesAdaptiveSurface(artifactBrief: ArtifactBrief): boolean {
+  if (artifactBrief.designSystemPolicy !== 'none') return false
+  return artifactBrief.surface !== 'mini_app' && artifactBrief.surface !== 'oa' && artifactBrief.surface !== 'bot'
 }
 
 async function prepareExecutableActions(
@@ -767,6 +783,19 @@ async function prepareExecutableActions(
   const liveFreeTarget = figmaContext.connectorMode === 'live'
     && figmaContext.planMode === 'free'
     && figmaContext.target.creativeMode === 'free'
+  const sourcePayloadHash = hashConnectorPayload(spec as unknown as Record<string, unknown>)
+  const initialPageStrategy = liveFreeTarget ? 'use_target_page' as const : 'create_or_reuse_managed' as const
+  let artifactBrief = createArtifactBrief({
+    spec,
+    target: 'figma',
+    sourcePayloadHash,
+    createdAt: timestamp(),
+    figma: {
+      connectorMode: figmaContext.connectorMode,
+      planMode: figmaContext.planMode,
+      pageStrategy: initialPageStrategy,
+    },
+  })
   const thread = history.getThread(state.threadId)
   const threadProfile = history.getProfile(thread.providerId)
   // When the thread runs on AgentRouter, route the Figma craft worker through the same Codex→
@@ -781,18 +810,16 @@ async function prepareExecutableActions(
     stageElapsedMs: Date.now() - planningStartedAt,
     totalElapsedMs: Date.now() - planningStartedAt,
     message: useAgenticWorker
-      ? `Đang chuẩn bị guarded scaffold; craft worker ${workerProbe.detail} sẽ thiết kế sau approval`
-      : 'Design agent đang tạo art direction, screen composition và ZDS placements',
+      ? `Đang chuẩn bị ${artifactBrief.mode}/${artifactBrief.surface}; craft worker ${workerProbe.detail} sẽ thiết kế sau approval`
+      : `Design agent đang tạo ${artifactBrief.mode}/${artifactBrief.surface} art direction và screen composition`,
   })
   let creativeBlueprint: FigmaCreativeBlueprint
   const metadataBase = {
     runId: state.id,
     threadId: state.threadId,
     actionId: figmaAction.id,
-    pageStrategy: liveFreeTarget ? 'use_target_page' as const : 'create_or_reuse_managed' as const,
+    pageStrategy: artifactBrief.outputPolicy === 'selected_page' ? 'use_target_page' as const : 'create_or_reuse_managed' as const,
   }
-  const uniqueRoles = (manifest: DesignSystemManifest): string[] =>
-    [...new Set(manifest.components.filter((component) => !component.deprecated).map((component) => component.semanticRole))]
   // Refine-in-place vs new sibling. A refine (feedback present) reuses the base idempotency key
   // — with the deterministic sparse scaffold this matches the existing artifact root, so the
   // scaffold apply is an idempotent no-op and the craft worker RESUMES and edits the already
@@ -805,13 +832,13 @@ async function prepareExecutableActions(
     // PRIMARY Figma pipeline: blueprint → immutable plan → preflight. Any failure degrades to the
     // offline mock below so a Figma problem never aborts the Jira + Confluence + PRD package.
     creativeBlueprint = useAgenticWorker
-      ? createScaffoldFigmaBlueprint(spec, uniqueRoles(figmaContext.manifest), {
+      ? createScaffoldFigmaBlueprint(spec, figmaComponentRolesForBrief(figmaContext.manifest, artifactBrief), {
           sparse: true,
-          ...(liveFreeTarget ? { surface: 'adaptive' as const } : {}),
+          ...(artifactBriefUsesAdaptiveSurface(artifactBrief) ? { surface: 'adaptive' as const } : {}),
         })
-      : liveFreeTarget
+      : artifactBrief.designSystemPolicy === 'none'
         ? createScaffoldFigmaBlueprint(spec, [], { sparse: false, surface: 'adaptive' })
-        : await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest, refineNote)
+        : await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest, artifactBrief, refineNote)
     const metadata = {
       ...metadataBase,
       idempotencyKey: `figma:${state.id}:spec-v${spec.version}${revisionLabel && !editInPlace ? `:${revisionLabel}` : ''}:${useAgenticWorker ? 'craft' : 'creative'}-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}:${figmaContext.target.targetHash.slice(0, 12)}`,
@@ -822,7 +849,7 @@ async function prepareExecutableActions(
       if (useAgenticWorker) throw error
       const feedback = error instanceof Error ? error.message : 'Creative blueprint failed preflight'
       emitArtifactProgress(state.threadId, { target: 'figma', stage: 'planning', status: 'running', stageElapsedMs: Date.now() - planningStartedAt, totalElapsedMs: Date.now() - planningStartedAt, message: `Design agent đang refine blueprint: ${feedback}` })
-      creativeBlueprint = await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest, feedback)
+      creativeBlueprint = await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest, artifactBrief, feedback)
       const refinedMetadata = { ...metadataBase, idempotencyKey: `figma:${state.id}:spec-v${spec.version}:creative-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}` }
       figmaPlan = createFigmaArtifactPlan(spec, figmaContext.target, figmaContext.manifest, refinedMetadata, figmaContext.planMode, creativeBlueprint)
     }
@@ -852,7 +879,21 @@ async function prepareExecutableActions(
     emitArtifactProgress(state.threadId, { target: 'figma', stage: 'planning', status: 'running', stageElapsedMs: Date.now() - planningStartedAt, totalElapsedMs: Date.now() - planningStartedAt, message: `Figma chưa sẵn sàng (${reason}) — chuyển sang bản mock; gói vẫn tạo Jira + Confluence + PRD.` })
     figmaContext = mockFigmaExecutionContext()
     useAgenticWorker = false
-    creativeBlueprint = createScaffoldFigmaBlueprint(spec, uniqueRoles(figmaContext.manifest), { sparse: true })
+    artifactBrief = createArtifactBrief({
+      spec,
+      target: 'figma',
+      sourcePayloadHash,
+      createdAt: timestamp(),
+      figma: {
+        connectorMode: figmaContext.connectorMode,
+        planMode: figmaContext.planMode,
+        pageStrategy: 'create_or_reuse_managed',
+      },
+    })
+    creativeBlueprint = createScaffoldFigmaBlueprint(spec, figmaComponentRolesForBrief(figmaContext.manifest, artifactBrief), {
+      sparse: true,
+      ...(artifactBriefUsesAdaptiveSurface(artifactBrief) ? { surface: 'adaptive' as const } : {}),
+    })
     const mockMetadata = { ...metadataBase, idempotencyKey: `figma:${state.id}:spec-v${spec.version}${revisionLabel && !editInPlace ? `:${revisionLabel}` : ''}:mock-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}:${figmaContext.target.targetHash.slice(0, 12)}` }
     figmaPlan = createFigmaArtifactPlan(spec, figmaContext.target, figmaContext.manifest, mockMetadata, figmaContext.planMode, creativeBlueprint)
     figmaPreflight = await new MockFigmaArtifactConnector(figmaContext.manifest, figmaContext.target, { store: mockFigmaStore }).preflight(figmaPlan)
@@ -874,8 +915,8 @@ async function prepareExecutableActions(
     stageElapsedMs: Date.now() - planningStartedAt,
     totalElapsedMs: Date.now() - planningStartedAt,
     message: useAgenticWorker
-      ? `Guarded scaffold sẵn sàng: ${creativeBlueprint.screens.length} màn hình; craft + screenshot/refine sẽ chạy sau approval`
-      : `Plan sẵn sàng: ${creativeBlueprint.screens.length} màn hình (${figmaContext.connectorMode})`,
+      ? `ArtifactBrief sẵn sàng (${artifactBrief.mode}/${artifactBrief.surface}): ${creativeBlueprint.screens.length} màn hình; craft + screenshot/refine sẽ chạy sau approval`
+      : `ArtifactBrief sẵn sàng (${artifactBrief.mode}/${artifactBrief.surface}): ${creativeBlueprint.screens.length} màn hình`,
   })
   // Only Jira + Confluence can block the kickoff. Figma is already guaranteed valid (primary
   // success, or degraded to the always-valid mock), so a Figma issue never fails the package.
@@ -903,6 +944,7 @@ async function prepareExecutableActions(
     executable(figmaAction, 'figma_design_system_plan', figmaPreflight.planHash, figmaPlan, {
       connectorMode: figmaContext.connectorMode,
       guardMode: figmaContext.planMode,
+      artifactBrief,
       manifest: figmaContext.manifest,
       preflight: figmaPreflight,
       estimatedOperations: figmaPreflight.plan.estimatedOperations,
@@ -913,6 +955,7 @@ async function prepareExecutableActions(
         mode: 'codex_mcp',
         modelId: designWorkerModelId,
         skill: 'pm-lifecycle-figma-design',
+        artifactBrief,
         maxReviewPasses: 3,
         timeoutBudgetMs: craftTimeoutBudgetMs,
         ...(routeCraftViaAgentRouter ? { craftProvider: 'agentrouter', providerProfileId: threadProfile.id } : {}),
@@ -995,6 +1038,10 @@ function withFigmaDesignWorker(
       const typedProductTruth = productTruth as FigmaDesignWorkerTask['productTruth']
       const parsedIconCatalog = figmaIconCatalogSchema.nullable().safeParse(workerConfig.iconCatalog ?? null)
       const workerIconCatalog = parsedIconCatalog.success ? parsedIconCatalog.data : null
+      const parsedArtifactBrief = artifactBriefSchema.safeParse(workerConfig.artifactBrief)
+      if (!parsedArtifactBrief.success) {
+        throw new Error('Approved design task has no immutable ArtifactBrief')
+      }
       const maxReviewPasses = Math.max(1, Math.min(3, typeof workerConfig.maxReviewPasses === 'number'
         ? Math.floor(workerConfig.maxReviewPasses)
         : 2))
@@ -1041,6 +1088,7 @@ function withFigmaDesignWorker(
           rootNodeId: receipt.externalId,
           idempotencyKey: receipt.idempotencyKey,
           plan: preflight.plan,
+          artifactBrief: parsedArtifactBrief.data,
           manifest,
           productTruth: typedProductTruth,
           ...(workerIconCatalog ? { iconCatalog: workerIconCatalog } : {}),

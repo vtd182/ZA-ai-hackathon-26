@@ -309,6 +309,14 @@ Intent:
 - **Implementation direction:** Create `artifact-brief.ts`; build from ProductSpec + Figma setup; include payload hash.
 - **Acceptance:** Figma provider prompt, scaffold, worker and audit all read the same ArtifactBrief.
 - **Tests:** ZDS Mini App brief and no-ZDS web brief produce different, deterministic policies.
+- **Status note 2026-07-30:** first canonical ArtifactBrief contract implemented in
+  `packages/domain/src/artifact-brief.ts` and wired into Figma planning in
+  `apps/desktop/src/main/index.ts`. The app now builds one Figma ArtifactBrief from ProductSpec,
+  Figma connector mode, plan mode, output page strategy and ProductSpec payload hash; the brief is
+  stored in the approval payload and passed to the Figma craft worker. No-ZDS/free briefs send zero
+  component roles to providers/workers and carry adaptive surface policy; ZDS reference/strict
+  briefs keep DS policy explicit. Remaining polish: make Jira/Zdoc consume ArtifactBriefs too and
+  surface the brief in the renderer approval panel.
 
 ### `P0-SHARP-004` Split prompt packs by task
 

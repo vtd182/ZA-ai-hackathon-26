@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { DesignSystemManifest, FigmaIconCatalog, FigmaPreflightPlan } from '@pm-agent/domain'
+import type { ArtifactBrief, DesignSystemManifest, FigmaIconCatalog, FigmaPreflightPlan } from '@pm-agent/domain'
 import type { SkillPackBundle } from './skill-packs'
 import { renderSkillPackForPrompt } from './skill-packs'
 
@@ -68,6 +68,7 @@ export interface FigmaDesignWorkerTask {
   rootNodeId: string
   idempotencyKey: string
   plan: FigmaPreflightPlan
+  artifactBrief: ArtifactBrief
   manifest: DesignSystemManifest
   iconCatalog?: FigmaIconCatalog | null
   productTruth: FigmaProductTruth
@@ -246,6 +247,7 @@ export function buildFigmaDesignWorkerPrompt(task: FigmaDesignWorkerTask): strin
       idempotencyKey: task.idempotencyKey,
     },
     designDirection: task.plan.source.designDirection,
+    artifactBrief: task.artifactBrief,
     productTruth: task.productTruth,
     productScreens: task.plan.source.screens,
     creativeStartingPoint: task.plan.source.creativeBlueprint ?? null,
@@ -261,11 +263,11 @@ export function buildFigmaDesignWorkerPrompt(task: FigmaDesignWorkerTask): strin
   const repairContext = task.qaFeedback?.length
     ? `\nIndependent Agent Core audit rejected the previous pass. Resume the existing artifact; do not rebuild it. Fix every issue below, then repeat screenshot/refine/audit:\n${task.qaFeedback.map((issue) => `- ${issue}`).join('\n')}\n`
     : ''
-  const freeMode = task.plan.source.mode === 'free'
+  const freeMode = task.artifactBrief.designSystemPolicy === 'none'
   const surfaceGuidance = freeMode
     ? `This approved task is Figma free-creative / no-ZDS mode.
 - Do NOT force the artifact into mobile Mini App format.
-- Choose the surface from ProductSpec: desktop web app, admin dashboard, landing page, tablet flow or mobile app are all valid.
+- The ArtifactBrief surface is ${task.artifactBrief.surface}; use it unless the inspected product content strongly contradicts it.
 - If the brief says web/admin/dashboard/landing/CRM/SaaS/portal/backoffice, use a desktop-sized composition (roughly 1280-1440px wide) with navigation, grids, tables/forms/filters/hero sections as appropriate.
 - ZDS instances are optional and normally absent. Use primitives, typography, custom components and product-specific visual systems. Report zdsInstanceCount as 0 if no real instances are used.`
     : `This approved task is ZDS/reference Mini App mode.
