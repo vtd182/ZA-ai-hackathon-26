@@ -42,6 +42,7 @@ export const figmaTargetBindingSchema = z.object({
   fileName: z.string().min(1),
   pageId: z.string().min(1),
   pageName: z.string().min(1),
+  creativeMode: z.enum(['zds', 'free']).optional(),
   allowedAt: z.string().datetime(),
 })
 export type FigmaTargetBinding = z.infer<typeof figmaTargetBindingSchema>

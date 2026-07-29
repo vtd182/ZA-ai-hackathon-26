@@ -19,7 +19,7 @@
     "artifactPageName": { "type": "string" },
     "rootNodeId": { "type": "string" },
     "screenCount": { "type": "integer", "minimum": 1 },
-    "zdsInstanceCount": { "type": "integer", "minimum": 1 },
+    "zdsInstanceCount": { "type": "integer", "minimum": 0 },
     "prototypeLinkCount": { "type": "integer", "minimum": 0 },
     "screenshotsReviewed": { "type": "integer", "minimum": 2 },
     "refinementPasses": { "type": "integer", "minimum": 1 },

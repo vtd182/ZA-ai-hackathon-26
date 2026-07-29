@@ -22,13 +22,13 @@ Write at least one real correction after this screenshot. Moving a node by one p
 
 - No visible placeholder/default component copy.
 - No removed or forbidden ProductSpec concept.
-- No text outside a mobile screen.
+- No text outside its product screen/frame, whether mobile, web, dashboard or landing page.
 - No visible text below usable opacity.
-- No ZDS instance extends outside its mobile screen or immediate parent.
+- In ZDS/reference mode, no ZDS instance extends outside its mobile screen or immediate parent.
 - No two top-level ZDS controls visibly overlap unless one is intentionally decorative and named as such.
 - Interactive ZDS controls keep usable touch targets; do not shrink buttons, inputs, tabs, chips or list items below 32x32.
 - Expected screen count is exact.
-- At least one real ZDS instance exists and all required controls remain instance-backed.
+- In ZDS/reference mode, at least one real ZDS instance exists and all required controls remain instance-backed. In no-ZDS/free mode, ZDS instance count may be 0.
 - Expected prototype links are present on real interaction nodes.
 - Final screenshot is taken after the last correction.
 - `audit_product_craft` returns `passed: true`.

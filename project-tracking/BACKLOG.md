@@ -446,6 +446,38 @@
 - **Acceptance:** a visually misaligned component artifact cannot pass `audit_product_craft`; audit output contains actionable repair codes; creative worker remains free to compose product-specific screens; future skill import UX has an accepted architecture note.
 - **Evidence:** `audit_product_craft` now blocks visible top-level ZDS instances outside a mobile screen/parent, overlapping non-decorative ZDS controls and undersized interactive controls, with metrics for drift/overlap/touch-target issues. `pm-lifecycle-figma-design` visual QA and ZDS craft references tell workers how to repair those defects. ADR-022 records importable PM Agent skill packs. Targeted plugin test, full plugin test/typecheck/build, Go suite and workspace typecheck/test pass.
 
+### `P0-FIG-011` Explicit no-ZDS live target mode
+
+- **Status:** DONE (2026-07-29)
+- **Depends on:** P0-FIG-009, P0-CRE-001
+- **Deliver:** Figma setup exposes an explicit "Không dùng ZDS" choice; no-ZDS targets remain live drawing destinations instead of degrading to mock, and ZDS target behavior stays guarded.
+- **Acceptance:** choosing no-ZDS on the current/new Figma Page produces a live free-creative Figma action against that Page; choosing ZDS still captures component context and uses reference mode; status/read-back labels honestly distinguish `Figma live · free creative` from `Figma live · reference ZDS`; tests cover persisted target mode and plan context.
+- **Evidence:** Figma target bindings now carry optional `creativeMode`; explicit free targets get a distinct hash and a live-primitives manifest with no fake component keys. Artifact plans use `pageStrategy: use_target_page`, and the Figma plugin appends the artifact root directly to the selected target Page without renaming or deleting it. UI setup exposes separate `Dùng ZDS` and `Không dùng ZDS` buttons. `./run.sh typecheck`, targeted connector/reasoning/persistence tests and plugin lifecycle artifact tests pass.
+
+### `P0-FIG-012` No-ZDS live retry and mock-fallback hardening
+
+- **Status:** DONE (2026-07-29)
+- **Depends on:** P0-FIG-011
+- **Deliver:** explicit no-ZDS targets never silently create Mock Figma plans; stale mock/live target retries reprepare a fresh Figma-only approval without duplicate idempotency conflicts or repeated handler errors.
+- **Acceptance:** a blank selected Figma Page in no-ZDS mode prepares a live `use_target_page` action or fails loudly with an actionable live-target error; retrying a partial Figma failure after target/mode change preserves verified Jira/Zdoc, creates one pending Figma approval, and repeated retry clicks do not throw.
+- **Evidence:** Runtime DB trace confirmed active target `Page 7 · free` while failed action payload was `connectorMode=mock`, `targetHash=ffffffff...`, `pageName=DualMind Demo`. Fix keeps `creativeMode: free` live even if the saved context is missing, disables silent mock fallback for explicit no-ZDS, lets the worker craft on the selected target Page, makes mock regenerate keys revision-aware, and supports Figma reprepare from both Delivery and Change partial failures. `./run.sh typecheck`, targeted transition/Figma/reasoning tests, full `./run.sh test` (205 pass, 3 skip), `./run.sh build`, and plugin `bun test src/lifecycle-artifact.test.ts` pass.
+
+### `P0-FIG-013` Free-mode blueprint guard separation
+
+- **Status:** DONE (2026-07-29)
+- **Depends on:** P0-FIG-012
+- **Deliver:** free/no-ZDS Figma plans do not require ZDS component roles, while reference/strict ZDS plans retain component adoption checks.
+- **Acceptance:** no-ZDS live target can prepare primitive-only screens; reference/strict plans still reject screens with no ZDS-backed interaction control.
+- **Evidence:** `createFigmaArtifactPlan` now skips required ZDS role matching only in `free` mode, and preflight suppresses `CREATIVE_ZDS_CONTROL_MISSING` only for free/no-ZDS plans. Regression test `allows a no-ZDS creative blueprint with no component roles` covers primitive-only creative screens on a live free target. `pnpm vitest run packages/connectors/src/figma-artifact-plan.test.ts`, `./run.sh typecheck`, `./run.sh test` (206 pass, 3 skip), and `./run.sh build` pass.
+
+### `P0-FIG-014` Adaptive no-ZDS surface design
+
+- **Status:** DONE (2026-07-29)
+- **Depends on:** P0-FIG-013
+- **Deliver:** no-ZDS/free Figma mode stops forcing mobile Mini App dimensions and design language; it can create web/admin/dashboard/landing-sized experiences when the brief calls for them.
+- **Acceptance:** free mode prompts and fallback scaffolds describe adaptive surface freedom; web-like ProductSpecs produce desktop-sized creative screens; ZDS/reference mode remains mobile Mini App focused.
+- **Evidence:** No-ZDS provider policy now tells the model to choose web/admin/dashboard/landing/tablet/mobile by ProductSpec instead of forcing Mini App. Free fallback scaffold uses adaptive desktop frames for web/admin briefs while Mini App/Zalo briefs remain mobile. Figma craft worker prompt, skill pack and visual QA references now distinguish ZDS/reference mobile from no-ZDS adaptive mode; report/audit allow `zdsInstanceCount: 0` only for free mode. Plugin craft audit counts metadata/adaptive product frames instead of only 390x844 mobile frames. Targeted reasoning/worker/connector/plugin tests, `./run.sh test` (208 pass, 3 skip), plugin typecheck/build, `./run.sh build`, and final `./run.sh typecheck` pass.
+
 ### `P0-PKG-001` Package-safe global skill packs
 
 - **Status:** DONE (2026-07-26)

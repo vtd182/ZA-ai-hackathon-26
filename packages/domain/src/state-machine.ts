@@ -45,6 +45,7 @@ const transitions: Record<string, StateKey> = {
   'CHANGE_IMPACT:VERIFYING:VERIFY_SUCCESS': { phase: 'DELIVERY', status: 'COMPLETED' },
   'CHANGE_IMPACT:EXECUTING:PARTIAL_FAILURE': { phase: 'CHANGE_IMPACT', status: 'PARTIAL_FAILURE' },
   'CHANGE_IMPACT:PARTIAL_FAILURE:RETRY_EXECUTION': { phase: 'CHANGE_IMPACT', status: 'EXECUTING' },
+  'CHANGE_IMPACT:PARTIAL_FAILURE:REPREPARE_ARTIFACT': { phase: 'CHANGE_IMPACT', status: 'WAITING_FOR_APPROVAL' },
 }
 
 export class InvalidWorkflowTransitionError extends Error {

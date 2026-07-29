@@ -219,6 +219,7 @@ export class FigmaMcpAdapter {
     pageId: string,
     allowedAt: string,
     requireCurrentPage: boolean,
+    creativeMode: FigmaTargetBinding['creativeMode'] = 'zds',
   ): Promise<FigmaTargetBinding> {
     const health = await this.health()
     if (!health.pluginConnected) throw new FigmaMcpError('Figma plugin chưa kết nối.', 'PLUGIN_NOT_CONNECTED', true)
@@ -232,7 +233,13 @@ export class FigmaMcpAdapter {
       throw new FigmaMcpError('Hãy mở đúng page cần allowlist trong Figma rồi thử lại.', 'VALIDATION_ERROR', false)
     }
 
-    const target = { sessionId, fileName: session.fileName, pageId: page.id, pageName: page.name }
+    const target = {
+      sessionId,
+      fileName: session.fileName,
+      pageId: page.id,
+      pageName: page.name,
+      ...(creativeMode === 'free' ? { creativeMode } : {}),
+    }
     return figmaTargetBindingSchema.parse({
       schemaVersion: 1,
       ...target,
@@ -241,14 +248,19 @@ export class FigmaMcpAdapter {
     })
   }
 
-  async pinTarget(sessionId: string, pageId: string, allowedAt = new Date().toISOString()): Promise<FigmaTargetBinding> {
-    return this.resolveTarget(sessionId, pageId, allowedAt, true)
+  async pinTarget(
+    sessionId: string,
+    pageId: string,
+    allowedAt = new Date().toISOString(),
+    creativeMode: FigmaTargetBinding['creativeMode'] = 'zds',
+  ): Promise<FigmaTargetBinding> {
+    return this.resolveTarget(sessionId, pageId, allowedAt, true, creativeMode)
   }
 
   async verifyTarget(target: FigmaTargetBinding): Promise<FigmaTargetBinding> {
     const verifiedAt = this.verifiedTargets.get(target.targetHash)
     if (verifiedAt && Date.now() - verifiedAt < 10_000) return target
-    const verified = await this.resolveTarget(target.sessionId, target.pageId, target.allowedAt, false)
+    const verified = await this.resolveTarget(target.sessionId, target.pageId, target.allowedAt, false, target.creativeMode ?? 'zds')
     if (verified.targetHash !== target.targetHash || verified.fileName !== target.fileName || verified.pageName !== target.pageName) {
       throw new FigmaMcpError('Figma target không còn khớp allowlist đã duyệt.', 'VALIDATION_ERROR', false)
     }
@@ -373,6 +385,8 @@ export class FigmaMcpAdapter {
     expectedPrototypeLinks: number
     forbiddenTerms: string[]
     placeholderTerms?: string[]
+    requireZdsInstances?: boolean
+    surfaceMode?: 'mobile' | 'adaptive'
   }): Promise<FigmaCraftAudit> {
     await this.verifyTarget(input.target)
     return this.call('audit_product_craft', {
@@ -381,6 +395,8 @@ export class FigmaMcpAdapter {
       expectedScreenCount: input.expectedScreenCount,
       expectedPrototypeLinks: input.expectedPrototypeLinks,
       forbiddenTerms: input.forbiddenTerms,
+      ...(input.requireZdsInstances !== undefined ? { requireZdsInstances: input.requireZdsInstances } : {}),
+      ...(input.surfaceMode ? { surfaceMode: input.surfaceMode } : {}),
       ...(input.placeholderTerms ? { placeholderTerms: input.placeholderTerms } : {}),
     }, figmaCraftAuditSchema, 60_000)
   }

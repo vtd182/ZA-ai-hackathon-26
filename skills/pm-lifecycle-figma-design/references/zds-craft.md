@@ -1,5 +1,7 @@
 # ZDS craft
 
+Use this reference only for ZDS/reference tasks. In no-ZDS/free mode, there may be no ZDS catalog and the output Page is a free creative workspace.
+
 Use the source Page as a catalog and the output Page as the only writable surface.
 
 ## Choosing instances
@@ -33,8 +35,8 @@ Use `apply_craft_patch` to clone, place and override related controls in one rou
 
 ## Layout hygiene
 
-- Keep mobile screens at `390x844`.
-- Respect Mini App header and bottom safe areas.
+- For ZDS/reference tasks, keep mobile screens at `390x844` and respect Mini App header and bottom safe areas.
+- For no-ZDS/free tasks, do not apply mobile-only dimensions unless the ProductSpec explicitly calls for mobile or Mini App.
 - Size controls to their intended width before composing surrounding text.
 - Do not stretch a component until internal labels clip or become visually sparse.
 - Keep controls aligned to a consistent content grid, but let signature compositions break the grid deliberately.

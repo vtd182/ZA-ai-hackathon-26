@@ -1,6 +1,6 @@
 ---
 name: pm-lifecycle-figma-design
-description: Craft and visually refine product-grade Zalo Mini App Figma journeys from a PM Lifecycle ProductSpec through the allowlisted ZA Talk To Figma MCP.
+description: Craft and visually refine product-grade PM Lifecycle Figma journeys from a ProductSpec through the allowlisted ZA Talk To Figma MCP, with ZDS Mini App mode and no-ZDS adaptive surface mode.
 ---
 
 # PM Lifecycle Figma design
@@ -22,9 +22,9 @@ Read these references before writing:
 ## Boundaries
 
 - Work only in the exact Figma session and output Page named in the task.
-- Treat the provided source Page as a read-only ZDS catalog.
+- Treat the provided source Page as a read-only ZDS catalog only when the task is in ZDS/reference mode. In no-ZDS/free mode, the approved output Page is the creative workspace and ZDS instances are optional.
 - Preserve the scaffold root, screen frames and lifecycle metadata. The sparse scaffold is an execution anchor, not a wireframe or visual suggestion.
-- Use real ZDS instances for controls. Use custom frames, text, shapes, imagery and composition for product identity.
+- In ZDS/reference mode, use real ZDS instances for controls. In no-ZDS/free mode, use primitives, typography, custom components and product-specific visual systems; do not force ZDS adoption.
 - Do not access files, pages, connectors or MCP servers outside the approved task.
 
 ## Craft loop
@@ -33,7 +33,7 @@ Read these references before writing:
    Active requirements and each screen's purpose are authoritative. Never reintroduce a removed requirement from stale historical copy, an old decision or a broad idea summary.
 2. Define one clear experience promise and a visual direction appropriate to the product.
 3. Author the information architecture and composition from scratch. Make every screen serve a distinct user moment, state and decision. Avoid repeated card stacks, generic rectangles and placeholder copy.
-4. Compose mobile screens at `390x844`. Keep readable hierarchy, stable spacing, realistic sample data and accessible touch targets. Use `apply_craft_patch` for coherent groups of dependent create/clone/style operations; keep each patch inside the approved root and read back after a partial failure.
+4. Choose the surface from the approved task. ZDS/reference tasks are Mini App mobile screens at `390x844`. No-ZDS/free tasks are adaptive: web app, admin dashboard, landing page, desktop tool, tablet flow or mobile app are all valid when ProductSpec calls for them. Keep readable hierarchy, stable spacing, realistic sample data and accessible controls. Use `apply_craft_patch` for coherent groups of dependent create/clone/style operations; keep each patch inside the approved root and read back after a partial failure.
 5. Connect real CTA instances to their destination screens.
 6. Capture an initial screenshot of the complete journey and individual screens where needed.
 7. Use the Figma critic skill to inspect hierarchy, product fidelity, clipping, overlap, contrast, density, repetition, narrative continuity and ZDS fit.

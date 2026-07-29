@@ -24,7 +24,7 @@ export interface FigmaPlanMetadataInput {
   threadId: string
   actionId: string
   idempotencyKey: string
-  pageStrategy?: 'create_new' | 'create_or_recover_incomplete' | 'create_or_reuse_managed'
+  pageStrategy?: 'create_new' | 'create_or_recover_incomplete' | 'create_or_reuse_managed' | 'use_target_page'
 }
 
 function slug(value: string): string {
@@ -331,10 +331,12 @@ export function createFigmaArtifactPlan(
     for (const screen of spec.screens.filter((item) => item.requirementIds.some((id) => activeRequirementIds.has(id)))) {
       const creativeScreen = creativeBlueprint.screens.find((candidate) => candidate.screenId === screen.id)
       if (!creativeScreen) throw new Error(`Creative blueprint is missing ProductSpec screen ${screen.id}`)
-      const creativeRoles = new Set(creativeScreen.elements.flatMap((element) => element.componentRole ? [element.componentRole] : []))
-      const missingRoles = screen.designSystemRoles.filter((role) => !creativeRoles.has(role))
-      if (missingRoles.length > 0) {
-        throw new Error(`Creative screen ${screen.id} is missing required ZDS roles: ${missingRoles.join(', ')}`)
+      if (mode !== 'free') {
+        const creativeRoles = new Set(creativeScreen.elements.flatMap((element) => element.componentRole ? [element.componentRole] : []))
+        const missingRoles = screen.designSystemRoles.filter((role) => !creativeRoles.has(role))
+        if (missingRoles.length > 0) {
+          throw new Error(`Creative screen ${screen.id} is missing required ZDS roles: ${missingRoles.join(', ')}`)
+        }
       }
     }
     for (const screen of creativeBlueprint.screens) {
@@ -456,7 +458,7 @@ export function preflightFigmaArtifactPlan(
           entityId: screen.screenId,
         })
       }
-      if (!screen.elements.some((element) => element.kind === 'component')) {
+      if (plan.mode !== 'free' && !screen.elements.some((element) => element.kind === 'component')) {
         issues.push({
           code: 'CREATIVE_ZDS_CONTROL_MISSING',
           severity: plan.mode === 'strict' ? 'error' : 'warning',

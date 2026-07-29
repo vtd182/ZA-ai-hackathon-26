@@ -806,7 +806,7 @@ export function App(): React.JSX.Element {
           status={figmaStatus}
           onClose={() => setFigmaSetupOpen(false)}
           onStart={async () => setFigmaStatus(await window.pmAgent.figma.start())}
-          onAllowTarget={async (sessionId) => setFigmaStatus(await window.pmAgent.figma.allowTarget(sessionId))}
+          onAllowTarget={async (sessionId, useDesignSystem) => setFigmaStatus(await window.pmAgent.figma.allowTarget(sessionId, useDesignSystem))}
           onRefreshDesignSystem={async () => setFigmaStatus(await window.pmAgent.figma.refreshDesignSystem())}
           onShowManifest={() => window.pmAgent.figma.showManifest()}
           onOpenControlPlane={() => window.pmAgent.figma.openControlPlane()}
@@ -854,7 +854,7 @@ function FigmaSetupDialog({
   status: FigmaSetupStatus | null
   onClose(): void
   onStart(): Promise<void>
-  onAllowTarget(sessionId: string): Promise<void>
+  onAllowTarget(sessionId: string, useDesignSystem: boolean): Promise<void>
   onRefreshDesignSystem(): Promise<void>
   onShowManifest(): Promise<void>
   onOpenControlPlane(): Promise<void>
@@ -874,10 +874,10 @@ function FigmaSetupDialog({
   }
   const runtimeReady = status?.runtime === 'ready'
   const activeSession = status?.sessions.find((session) => session.sessionId === status.activeSession) ?? status?.sessions[0]
+  const freeTarget = status?.target?.creativeMode === 'free'
   const integrationReady = Boolean(
     status?.target
-    && status.designSystem?.mode === 'live'
-    && status.designSystem.componentCount > 0,
+    && (freeTarget || (status.designSystem?.mode === 'live' && status.designSystem.componentCount > 0)),
   )
 
   return (
@@ -910,15 +910,20 @@ function FigmaSetupDialog({
           <div className={status?.target ? 'setup-step complete' : status?.pluginConnected ? 'setup-step current' : 'setup-step'}>
             <span className="step-index">4</span>
             <div>
-              <strong>{status?.target ? 'Nguồn ZDS đã allowlist' : 'Xác nhận nguồn ZDS'}</strong>
+              <strong>{status?.target ? freeTarget ? 'Page vẽ live đã chọn' : 'Nguồn ZDS đã allowlist' : 'Xác nhận cách dùng Page'}</strong>
               <small>{status?.target
                 ? `${status.target.fileName} · ${status.target.pageName}`
-                : 'Mở Page chứa component ZDS trước khi xác nhận.'}</small>
+                : 'Mở Page component ZDS để guard, hoặc mở Page trống để agent vẽ free-creative.'}</small>
             </div>
             {status?.pluginConnected && activeSession && (
-              <button className="allow-target-button" disabled={busy} onClick={() => void run(() => onAllowTarget(activeSession.sessionId))}>
-                <ShieldCheck size={14} /> {status?.target ? 'Đổi sang Page đang mở' : 'Dùng Page đang mở'}
-              </button>
+              <div className="figma-target-actions">
+                <button className="allow-target-button" disabled={busy} onClick={() => void run(() => onAllowTarget(activeSession.sessionId, true))}>
+                  <ShieldCheck size={14} /> {status?.target && !freeTarget ? 'Đổi ZDS sang Page đang mở' : 'Dùng ZDS'}
+                </button>
+                <button className="secondary-button no-zds-button" disabled={busy} onClick={() => void run(() => onAllowTarget(activeSession.sessionId, false))}>
+                  Không dùng ZDS
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -927,13 +932,15 @@ function FigmaSetupDialog({
           <div className={status.designSystem.mode === 'live' ? 'ds-context-status live' : 'ds-context-status fallback'}>
             <ShieldCheck size={18} />
             <div>
-              <strong>{status.designSystem.mode === 'live' ? 'Live Design System context' : 'Synthetic fixture guard'}</strong>
+              <strong>{freeTarget ? 'Figma live · free creative' : status.designSystem.mode === 'live' ? 'Live Design System context' : 'Synthetic fixture guard'}</strong>
               <span>{status.designSystem.componentCount} components · {status.designSystem.iconCount} icons · {status.designSystem.tokenCount} tokens · {status.designSystem.fingerprint.slice(0, 12)}</span>
               {status.designSystem.fallbackReason && <small>{status.designSystem.fallbackReason}</small>}
             </div>
-            <button className="icon-button" disabled={busy} title="Đọc lại Design System" onClick={() => void run(onRefreshDesignSystem)}>
-              <RefreshCw className={busy ? 'spin' : ''} size={16} />
-            </button>
+            {!freeTarget && (
+              <button className="icon-button" disabled={busy} title="Đọc lại Design System" onClick={() => void run(onRefreshDesignSystem)}>
+                <RefreshCw className={busy ? 'spin' : ''} size={16} />
+              </button>
+            )}
           </div>
         )}
         {status?.warnings?.map((warning) => (
@@ -943,7 +950,7 @@ function FigmaSetupDialog({
         <footer>
           <span className={integrationReady ? 'figma-ready-label ready' : 'figma-ready-label'}>
             {integrationReady ? <CheckCircle2 size={15} /> : <LoaderCircle size={15} />}
-            {integrationReady ? 'Sẵn sàng cho preflight' : status?.pluginConnected ? 'Chờ allowlist' : 'Đang chờ plugin'}
+            {integrationReady ? freeTarget ? 'Sẵn sàng vẽ live không ZDS' : 'Sẵn sàng cho preflight' : status?.pluginConnected ? 'Chờ allowlist' : 'Đang chờ plugin'}
           </span>
           <button className="secondary-button" disabled={!runtimeReady || busy} onClick={() => void run(onOpenControlPlane)}>
             <ExternalLink size={14} /> Runtime console

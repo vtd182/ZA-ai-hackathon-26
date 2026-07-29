@@ -998,6 +998,7 @@ const applyArtifact = async (params: JsonRecord, requestId: string): Promise<Jso
   const sourcePage = await requireSourcePage(params.targetPageId);
   const idempotencyKey = String(metadata.idempotencyKey ?? "");
   if (!idempotencyKey) throw new Error("lifecycle idempotencyKey is required");
+  const useTargetPage = metadata.pageStrategy === "use_target_page";
 
   postProgress(requestId, 3, "Checking existing lifecycle artifact");
   const existing = await findArtifactRoot(idempotencyKey);
@@ -1019,13 +1020,13 @@ const applyArtifact = async (params: JsonRecord, requestId: string): Promise<Jso
       };
     }
     postProgress(requestId, 5, "Interrupted lifecycle artifact found; rebuilding it");
-    if (existing.page.id !== sourcePage.id) staleExistingPage = existing.page;
+    if (!useTargetPage && existing.page.id !== sourcePage.id) staleExistingPage = existing.page;
     existing.root.remove();
   }
 
-  postProgress(requestId, 8, "Preparing a dedicated Figma page");
-  const recoverable = staleExistingPage ? null : await recoverableArtifactPage(metadata);
-  let outputPage = staleExistingPage ?? recoverable?.page ?? null;
+  postProgress(requestId, 8, useTargetPage ? "Preparing the selected Figma page" : "Preparing a dedicated Figma page");
+  const recoverable = useTargetPage || staleExistingPage ? null : await recoverableArtifactPage(metadata);
+  let outputPage = useTargetPage ? sourcePage : staleExistingPage ?? recoverable?.page ?? null;
   let reusedAtPageCapacity = false;
   if (!outputPage) {
     try {
@@ -1043,13 +1044,13 @@ const applyArtifact = async (params: JsonRecord, requestId: string): Promise<Jso
       postProgress(requestId, 9, `Figma Page limit reached; preserving prior versions on ${outputPage.name}`);
     }
   }
-  const reusedOutputPage = Boolean(staleExistingPage || recoverable || reusedAtPageCapacity);
+  const reusedOutputPage = Boolean(useTargetPage || staleExistingPage || recoverable || reusedAtPageCapacity);
   if (recoverable) recoverable.root.remove();
   const previousOutputPageName = outputPage.name;
-  const expectedOutputPageName = artifactPageName(metadata);
+  const expectedOutputPageName = useTargetPage ? outputPage.name : artifactPageName(metadata);
   const root = figma.createSection();
   root.name = `DualMind · ${String(metadata.specId ?? "Artifact")} · v${String(metadata.specVersion ?? "")}`;
-  root.x = reusedAtPageCapacity ? nextArtifactRootX(outputPage) : 0;
+  root.x = useTargetPage || reusedAtPageCapacity ? nextArtifactRootX(outputPage) : 0;
   root.y = 0;
   outputPage.appendChild(root);
   writeMetadata(root, {
@@ -1094,7 +1095,7 @@ const applyArtifact = async (params: JsonRecord, requestId: string): Promise<Jso
         applyStatus: "complete",
         renderedScreenCount: renderedLifecycleScreenIds(root).length,
       });
-      outputPage.name = expectedOutputPageName;
+      if (!useTargetPage) outputPage.name = expectedOutputPageName;
       figma.commitUndo();
       postProgress(requestId, 100, "Creative Figma artifact created");
       return {
@@ -1240,7 +1241,7 @@ const applyArtifact = async (params: JsonRecord, requestId: string): Promise<Jso
       applyStatus: "complete",
       renderedScreenCount: renderedLifecycleScreenIds(root).length,
     });
-    outputPage.name = expectedOutputPageName;
+    if (!useTargetPage) outputPage.name = expectedOutputPageName;
     figma.commitUndo();
     postProgress(requestId, 100, "Lifecycle artifact created");
     return {

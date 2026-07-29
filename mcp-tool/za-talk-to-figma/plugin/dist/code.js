@@ -1353,7 +1353,7 @@ var __async = (__this, __arguments, generator) => {
         return null;
     }
   });
-  const metadataKey = "za-pm-lifecycle";
+  const metadataKey$1 = "za-pm-lifecycle";
   const postProgress = (requestId, progress, message) => {
     var _a;
     (_a = figma.ui) == null ? void 0 : _a.postMessage({
@@ -1364,8 +1364,8 @@ var __async = (__this, __arguments, generator) => {
     });
   };
   const yieldToFigma = () => new Promise((resolve) => setTimeout(resolve, 0));
-  const readMetadata = (node) => {
-    const raw = node.getPluginData(metadataKey);
+  const readMetadata$1 = (node) => {
+    const raw = node.getPluginData(metadataKey$1);
     if (!raw) return null;
     try {
       const parsed = JSON.parse(raw);
@@ -1375,7 +1375,7 @@ var __async = (__this, __arguments, generator) => {
     }
   };
   const writeMetadata = (node, metadata) => {
-    node.setPluginData(metadataKey, JSON.stringify(metadata));
+    node.setPluginData(metadataKey$1, JSON.stringify(metadata));
   };
   const findArtifactRoot = (idempotencyKey) => __async(null, null, function* () {
     const pages = [
@@ -1391,7 +1391,7 @@ var __async = (__this, __arguments, generator) => {
         }
       }
       const root = page.children.find((node) => {
-        const metadata = readMetadata(node);
+        const metadata = readMetadata$1(node);
         return (metadata == null ? void 0 : metadata.kind) === "artifact_root" && metadata.idempotencyKey === idempotencyKey;
       });
       if (root) return { page, root };
@@ -1804,7 +1804,7 @@ var __async = (__this, __arguments, generator) => {
     } else {
       throw new Error(`PROTOTYPE_UNAVAILABLE: ${node.id} does not support reactions`);
     }
-    writeMetadata(node, __spreadProps(__spreadValues({}, readMetadata(node)), {
+    writeMetadata(node, __spreadProps(__spreadValues({}, readMetadata$1(node)), {
       prototypeEdges: destinations.map(({ edge }) => edge)
     }));
   });
@@ -1986,7 +1986,7 @@ var __async = (__this, __arguments, generator) => {
       if (rootAlias) {
         applyCreativeFrameStyle(frame, rootAlias);
         frame.name = `${screenId} · ${String(creativeScreen.name)}`;
-        writeMetadata(frame, __spreadProps(__spreadValues({}, readMetadata(frame)), {
+        writeMetadata(frame, __spreadProps(__spreadValues({}, readMetadata$1(frame)), {
           creativeElementId: rootAlias.id,
           creativeElementKind: rootAlias.kind
         }));
@@ -2037,7 +2037,7 @@ var __async = (__this, __arguments, generator) => {
         }
         if ("opacity" in node) node.opacity = Number((_h = element.opacity) != null ? _h : 1);
         placeCreativeNode(node, element, parent);
-        writeMetadata(node, __spreadProps(__spreadValues({}, readMetadata(node)), {
+        writeMetadata(node, __spreadProps(__spreadValues({}, readMetadata$1(node)), {
           creativeElementId: element.id,
           creativeElementKind: element.kind
         }));
@@ -2099,7 +2099,7 @@ var __async = (__this, __arguments, generator) => {
         }
       }
       const managedRoots = page.children.filter((node) => {
-        const stored = readMetadata(node);
+        const stored = readMetadata$1(node);
         return (stored == null ? void 0 : stored.namespace) === "za.pm-lifecycle/v1" && stored.kind === "artifact_root";
       });
       if (managedRoots.length === 0 || managedRoots.length !== page.children.length) continue;
@@ -2113,14 +2113,14 @@ var __async = (__this, __arguments, generator) => {
   }, 0);
   const containsLifecycleScreen = (node) => {
     var _a;
-    if (((_a = readMetadata(node)) == null ? void 0 : _a.kind) === "screen") return true;
+    if (((_a = readMetadata$1(node)) == null ? void 0 : _a.kind) === "screen") return true;
     if (!("children" in node)) return false;
     return node.children.some((child) => containsLifecycleScreen(child));
   };
   const renderedLifecycleScreenIds = (root) => {
     if (!("children" in root)) return [];
     return root.children.flatMap((node) => {
-      const metadata = readMetadata(node);
+      const metadata = readMetadata$1(node);
       return (metadata == null ? void 0 : metadata.kind) === "screen" && typeof metadata.screenId === "string" ? [metadata.screenId] : [];
     });
   };
@@ -2142,11 +2142,11 @@ var __async = (__this, __arguments, generator) => {
         }
       }
       const roots = page.children.filter((node) => {
-        const stored = readMetadata(node);
+        const stored = readMetadata$1(node);
         return (stored == null ? void 0 : stored.namespace) === "za.pm-lifecycle/v1" && stored.kind === "artifact_root" && stored.specId === metadata.specId && stored.specVersion === metadata.specVersion;
       });
       if (roots.length !== 1) continue;
-      const rootMetadata = readMetadata(roots[0]);
+      const rootMetadata = readMetadata$1(roots[0]);
       const isInterrupted = (rootMetadata == null ? void 0 : rootMetadata.applyStatus) === "in_progress";
       if (isInterrupted || !containsLifecycleScreen(roots[0])) return { page, root: roots[0] };
     }
@@ -2166,11 +2166,12 @@ var __async = (__this, __arguments, generator) => {
     const sourcePage = yield requireSourcePage(params.targetPageId);
     const idempotencyKey = String((_a = metadata.idempotencyKey) != null ? _a : "");
     if (!idempotencyKey) throw new Error("lifecycle idempotencyKey is required");
+    const useTargetPage = metadata.pageStrategy === "use_target_page";
     postProgress(requestId, 3, "Checking existing lifecycle artifact");
     const existing = yield findArtifactRoot(idempotencyKey);
     let staleExistingPage = null;
     if (existing) {
-      const existingMetadata = readMetadata(existing.root);
+      const existingMetadata = readMetadata$1(existing.root);
       if (hasExpectedLifecycleScreens(existing.root, screens)) {
         if (existingMetadata.planHash !== planHash) {
           throw new Error(`IDEMPOTENCY_CONFLICT: ${idempotencyKey} already exists with another plan hash`);
@@ -2186,12 +2187,12 @@ var __async = (__this, __arguments, generator) => {
         };
       }
       postProgress(requestId, 5, "Interrupted lifecycle artifact found; rebuilding it");
-      if (existing.page.id !== sourcePage.id) staleExistingPage = existing.page;
+      if (!useTargetPage && existing.page.id !== sourcePage.id) staleExistingPage = existing.page;
       existing.root.remove();
     }
-    postProgress(requestId, 8, "Preparing a dedicated Figma page");
-    const recoverable = staleExistingPage ? null : yield recoverableArtifactPage(metadata);
-    let outputPage = (_b = staleExistingPage != null ? staleExistingPage : recoverable == null ? void 0 : recoverable.page) != null ? _b : null;
+    postProgress(requestId, 8, useTargetPage ? "Preparing the selected Figma page" : "Preparing a dedicated Figma page");
+    const recoverable = useTargetPage || staleExistingPage ? null : yield recoverableArtifactPage(metadata);
+    let outputPage = useTargetPage ? sourcePage : (_b = staleExistingPage != null ? staleExistingPage : recoverable == null ? void 0 : recoverable.page) != null ? _b : null;
     let reusedAtPageCapacity = false;
     if (!outputPage) {
       try {
@@ -2208,13 +2209,13 @@ var __async = (__this, __arguments, generator) => {
         postProgress(requestId, 9, `Figma Page limit reached; preserving prior versions on ${outputPage.name}`);
       }
     }
-    const reusedOutputPage = Boolean(staleExistingPage || recoverable || reusedAtPageCapacity);
+    const reusedOutputPage = Boolean(useTargetPage || staleExistingPage || recoverable || reusedAtPageCapacity);
     if (recoverable) recoverable.root.remove();
     const previousOutputPageName = outputPage.name;
-    const expectedOutputPageName = artifactPageName(metadata);
+    const expectedOutputPageName = useTargetPage ? outputPage.name : artifactPageName(metadata);
     const root = figma.createSection();
     root.name = `DualMind · ${String((_c = metadata.specId) != null ? _c : "Artifact")} · v${String((_d = metadata.specVersion) != null ? _d : "")}`;
-    root.x = reusedAtPageCapacity ? nextArtifactRootX(outputPage) : 0;
+    root.x = useTargetPage || reusedAtPageCapacity ? nextArtifactRootX(outputPage) : 0;
     root.y = 0;
     outputPage.appendChild(root);
     writeMetadata(root, __spreadProps(__spreadValues({}, metadata), {
@@ -2250,13 +2251,13 @@ var __async = (__this, __arguments, generator) => {
         if (!hasExpectedLifecycleScreens(root, screens)) {
           throw new Error("ARTIFACT_INCOMPLETE: creative renderer did not produce every expected screen");
         }
-        writeMetadata(root, __spreadProps(__spreadValues({}, readMetadata(root)), {
+        writeMetadata(root, __spreadProps(__spreadValues({}, readMetadata$1(root)), {
           prototypeEdges: rendered.edges,
           creative: true,
           applyStatus: "complete",
           renderedScreenCount: renderedLifecycleScreenIds(root).length
         }));
-        outputPage.name = expectedOutputPageName;
+        if (!useTargetPage) outputPage.name = expectedOutputPageName;
         figma.commitUndo();
         postProgress(requestId, 100, "Creative Figma artifact created");
         return {
@@ -2392,12 +2393,12 @@ var __async = (__this, __arguments, generator) => {
       if (!hasExpectedLifecycleScreens(root, screens)) {
         throw new Error("ARTIFACT_INCOMPLETE: renderer did not produce every expected screen");
       }
-      writeMetadata(root, __spreadProps(__spreadValues({}, readMetadata(root)), {
+      writeMetadata(root, __spreadProps(__spreadValues({}, readMetadata$1(root)), {
         prototypeEdges: flattenEdges(screens),
         applyStatus: "complete",
         renderedScreenCount: renderedLifecycleScreenIds(root).length
       }));
-      outputPage.name = expectedOutputPageName;
+      if (!useTargetPage) outputPage.name = expectedOutputPageName;
       figma.commitUndo();
       postProgress(requestId, 100, "Lifecycle artifact created");
       return {
@@ -2421,7 +2422,7 @@ var __async = (__this, __arguments, generator) => {
       const root2 = yield getNodeByIdLocalFirst(rootNodeId);
       const pageId = root2 ? containingPageId(root2) : null;
       const page2 = pageId ? yield getNodeByIdLocalFirst(pageId) : null;
-      const metadata = root2 ? readMetadata(root2) : null;
+      const metadata = root2 ? readMetadata$1(root2) : null;
       if (root2 && (page2 == null ? void 0 : page2.type) === "PAGE" && (metadata == null ? void 0 : metadata.kind) === "artifact_root" && metadata.idempotencyKey === idempotencyKey) {
         location = { page: page2, root: root2 };
       }
@@ -2429,17 +2430,17 @@ var __async = (__this, __arguments, generator) => {
     if (!location) location = yield findArtifactRoot(idempotencyKey);
     if (!location) throw new Error(`ARTIFACT_NOT_FOUND: ${idempotencyKey}`);
     const { page, root } = location;
-    const rootMetadata = readMetadata(root);
+    const rootMetadata = readMetadata$1(root);
     const descendants = (node) => {
       if (!("children" in node)) return [];
       return node.children.flatMap((child) => [child, ...descendants(child)]);
     };
     const screens = "children" in root ? root.children.flatMap((node) => {
       var _a2;
-      const metadata = readMetadata(node);
+      const metadata = readMetadata$1(node);
       if ((metadata == null ? void 0 : metadata.kind) !== "screen") return [];
       const childSlots = descendants(node).flatMap((child) => {
-        const slot = readMetadata(child);
+        const slot = readMetadata$1(child);
         return (slot == null ? void 0 : slot.kind) === "slot" ? [{
           slotKey: String(slot.slotKey),
           componentKey: typeof slot.componentKey === "string" ? slot.componentKey : null,
@@ -2450,11 +2451,11 @@ var __async = (__this, __arguments, generator) => {
         }] : [];
       });
       const sectionKeys = descendants(node).flatMap((child) => {
-        const section = readMetadata(child);
+        const section = readMetadata$1(child);
         return (section == null ? void 0 : section.kind) === "presentation_section" && typeof section.sectionKey === "string" ? [section.sectionKey] : [];
       });
       const creativeNodes = [node, ...descendants(node)].filter((child) => {
-        const childMetadata = readMetadata(child);
+        const childMetadata = readMetadata$1(child);
         return typeof (childMetadata == null ? void 0 : childMetadata.creativeElementId) === "string";
       });
       return [{
@@ -2496,7 +2497,7 @@ var __async = (__this, __arguments, generator) => {
     }
     const screenIdByNodeId = new Map(screens.map((screen) => [screen.nodeId, screen.screenId]));
     const prototypeEdges = "children" in root ? root.children.flatMap((screenNode) => [screenNode, ...descendants(screenNode)].flatMap((node) => {
-      const metadata = readMetadata(node);
+      const metadata = readMetadata$1(node);
       const edges = Array.isArray(metadata == null ? void 0 : metadata.prototypeEdges) ? metadata.prototypeEdges : [];
       const reactions = "reactions" in node && Array.isArray(node.reactions) ? node.reactions : [];
       return edges.filter((edge) => reactions.some(
@@ -2507,9 +2508,9 @@ var __async = (__this, __arguments, generator) => {
     })) : [];
     const renderedDesignBrief = "children" in root ? root.children.find((node) => {
       var _a2;
-      return ((_a2 = readMetadata(node)) == null ? void 0 : _a2.kind) === "design_brief";
+      return ((_a2 = readMetadata$1(node)) == null ? void 0 : _a2.kind) === "design_brief";
     }) : void 0;
-    const renderedDesignBriefMetadata = renderedDesignBrief ? readMetadata(renderedDesignBrief) : null;
+    const renderedDesignBriefMetadata = renderedDesignBrief ? readMetadata$1(renderedDesignBrief) : null;
     return {
       schemaVersion: 1,
       targetHash: String((_a = rootMetadata.targetHash) != null ? _a : ""),
@@ -2542,6 +2543,7 @@ var __async = (__this, __arguments, generator) => {
         return null;
     }
   });
+  const metadataKey = "za-pm-lifecycle";
   const DEFAULT_PLACEHOLDERS = [
     "button",
     "long text button",
@@ -2557,6 +2559,15 @@ var __async = (__this, __arguments, generator) => {
     "có 3 level button cơ bản"
   ];
   const normalize = (value) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+  const readMetadata = (node) => {
+    if (!node || typeof node.getPluginData !== "function") return null;
+    try {
+      const raw = node.getPluginData(metadataKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  };
   const isVisible = (node, root) => {
     let current = node;
     while (current) {
@@ -2684,8 +2695,17 @@ var __async = (__this, __arguments, generator) => {
     }
     return false;
   };
-  const directMobileScreens = (root) => {
+  const directProductScreens = (root, surfaceMode) => {
     const children = "children" in root ? root.children : [];
+    const metadataScreens = children.filter((node) => {
+      var _a;
+      return node.type === "FRAME" && ((_a = readMetadata(node)) == null ? void 0 : _a.kind) === "screen";
+    });
+    if (metadataScreens.length > 0) return metadataScreens;
+    if (surfaceMode === "adaptive") {
+      const adaptiveDirect = children.filter((node) => node.type === "FRAME" && node.width >= 320 && node.width <= 1600 && node.height >= 480 && node.height <= 1600 && !hasInstanceAncestor(node, root));
+      if (adaptiveDirect.length > 0) return adaptiveDirect;
+    }
     const direct = children.filter((node) => node.type === "FRAME" && node.width >= 320 && node.width <= 480 && node.height >= 600 && node.height <= 1e3);
     if (direct.length > 0) return direct;
     if (!("findAll" in root)) return [];
@@ -2700,12 +2720,14 @@ var __async = (__this, __arguments, generator) => {
     if (!root || root.type === "DOCUMENT") throw new Error(`Node not found: ${rootNodeId}`);
     const expectedScreenCount = Number(params.expectedScreenCount || 0);
     const expectedPrototypeLinks = Number(params.expectedPrototypeLinks || 0);
+    const surfaceMode = params.surfaceMode === "adaptive" ? "adaptive" : "mobile";
+    const requireZdsInstances = params.requireZdsInstances !== false;
     const forbiddenTerms = (Array.isArray(params.forbiddenTerms) ? params.forbiddenTerms : []).filter((item) => typeof item === "string" && item.trim().length > 0).map(normalize);
     const placeholderTerms = [
       ...DEFAULT_PLACEHOLDERS,
       ...Array.isArray(params.placeholderTerms) ? params.placeholderTerms : []
     ].filter((item) => typeof item === "string" && item.trim().length > 0).map(normalize);
-    const screens = directMobileScreens(root);
+    const screens = directProductScreens(root, surfaceMode);
     const issues = [];
     let visitedNodes = 0;
     let textCount = 0;
@@ -2737,7 +2759,7 @@ var __async = (__this, __arguments, generator) => {
               code: "ZDS_INSTANCE_WITHOUT_SCREEN",
               severity: "error",
               nodeId: node.id,
-              message: `ZDS instance ${node.name} is not contained in a mobile screen frame.`
+              message: `ZDS instance ${node.name} is not contained in a product screen frame.`
             });
           } else {
             visibleTopLevelInstances.push({ node, screen, bounds: nodeBounds });
@@ -2887,7 +2909,7 @@ var __async = (__this, __arguments, generator) => {
         code: "SCREEN_COUNT_MISMATCH",
         severity: "error",
         nodeId: root.id,
-        message: `Found ${screens.length}/${expectedScreenCount} mobile screens.`
+        message: `Found ${screens.length}/${expectedScreenCount} product screens.`
       });
     }
     if (prototypeLinkCount < expectedPrototypeLinks) {
@@ -2898,7 +2920,7 @@ var __async = (__this, __arguments, generator) => {
         message: `Found ${prototypeLinkCount}/${expectedPrototypeLinks} prototype links.`
       });
     }
-    if (zdsInstanceCount === 0) {
+    if (requireZdsInstances && zdsInstanceCount === 0) {
       issues.push({
         code: "NO_ZDS_INSTANCES",
         severity: "error",

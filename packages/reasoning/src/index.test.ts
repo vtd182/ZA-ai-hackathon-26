@@ -291,6 +291,44 @@ describe('mock provider command inference', () => {
     expect(blueprint.visualNarrative).toContain('Scaffold tối thiểu')
   })
 
+  it('uses primitive actions when a free creative Figma target has no ZDS roles', () => {
+    const blueprint = createScaffoldFigmaBlueprint(creativeTestSpec, [], { sparse: true })
+    const elements = blueprint.screens[0]!.elements
+    const action = elements.find((element) => element.id === `action-${creativeTestSpec.screens[0]!.id}`)
+
+    expect(elements.some((element) => element.kind === 'component')).toBe(false)
+    expect(action).toMatchObject({
+      kind: 'rectangle',
+      componentRole: null,
+    })
+    expect(action?.text).toMatch(/Tiếp tục|Hoàn tất/)
+    if (blueprint.prototypeEdges[0]) expect(blueprint.prototypeEdges[0].fromElementId).toBe(action?.id)
+  })
+
+  it('uses a desktop-sized scaffold for adaptive no-ZDS web briefs', () => {
+    const webSpec = parseProductSpec({
+      ...creativeTestSpec,
+      title: 'Admin web dashboard quản lý booking',
+      idea: {
+        ...creativeTestSpec.idea,
+        title: 'Web dashboard quản lý booking',
+        summary: 'Một admin web dashboard cho đội vận hành theo dõi booking, lọc trạng thái và xử lý exception.',
+      },
+      screens: creativeTestSpec.screens.map((screen) => ({
+        ...screen,
+        title: `Dashboard ${screen.title}`,
+        purpose: `Quản trị và theo dõi ${screen.purpose}`,
+        designSystemRoles: ['primary-button'],
+      })),
+    })
+    const blueprint = createScaffoldFigmaBlueprint(webSpec, [], { sparse: false, surface: 'adaptive' })
+
+    expect(blueprint.screens[0]?.width).toBeGreaterThanOrEqual(1_280)
+    expect(blueprint.screens[0]?.height).toBeGreaterThanOrEqual(900)
+    expect(blueprint.visualNarrative).toContain('desktop')
+    expect(blueprint.screens[0]?.elements.some((element) => element.kind === 'component')).toBe(false)
+  })
+
   it('keeps deterministic fallback copy inside compact ZDS control limits', async () => {
     const longTitleSpec = parseProductSpec({
       ...creativeTestSpec,

@@ -156,7 +156,7 @@ export function approveFigmaWorkerElicitation(
 
 export function parseFigmaDesignWorkerReport(
   value: unknown,
-  task: Pick<FigmaDesignWorkerTask, 'artifactPageName' | 'rootNodeId'>,
+  task: Pick<FigmaDesignWorkerTask, 'artifactPageName' | 'rootNodeId'> & { allowZeroZdsInstances?: boolean },
   observed?: ObservedCraftEvidence,
 ): FigmaDesignWorkerReport {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Design worker returned no report object')
@@ -203,7 +203,7 @@ export function parseFigmaDesignWorkerReport(
     artifactPageName: task.artifactPageName,
     rootNodeId: task.rootNodeId,
     screenCount: number('screenCount', 1),
-    zdsInstanceCount: number('zdsInstanceCount', 1),
+    zdsInstanceCount: number('zdsInstanceCount', task.allowZeroZdsInstances ? 0 : 1),
     prototypeLinkCount: number('prototypeLinkCount', 0),
     screenshotsReviewed,
     refinementPasses,
@@ -258,13 +258,31 @@ export function buildFigmaDesignWorkerPrompt(task: FigmaDesignWorkerTask): strin
   const repairContext = task.qaFeedback?.length
     ? `\nIndependent Agent Core audit rejected the previous pass. Resume the existing artifact; do not rebuild it. Fix every issue below, then repeat screenshot/refine/audit:\n${task.qaFeedback.map((issue) => `- ${issue}`).join('\n')}\n`
     : ''
+  const freeMode = task.plan.source.mode === 'free'
+  const surfaceGuidance = freeMode
+    ? `This approved task is Figma free-creative / no-ZDS mode.
+- Do NOT force the artifact into mobile Mini App format.
+- Choose the surface from ProductSpec: desktop web app, admin dashboard, landing page, tablet flow or mobile app are all valid.
+- If the brief says web/admin/dashboard/landing/CRM/SaaS/portal/backoffice, use a desktop-sized composition (roughly 1280-1440px wide) with navigation, grids, tables/forms/filters/hero sections as appropriate.
+- ZDS instances are optional and normally absent. Use primitives, typography, custom components and product-specific visual systems. Report zdsInstanceCount as 0 if no real instances are used.`
+    : `This approved task is ZDS/reference Mini App mode.
+- Compose mobile screens at 390x844.
+- Use real ZDS instances for controls and keep them instance-backed through completion.`
+  const sourceBoundary = freeMode
+    ? 'This no-ZDS task has no source ZDS Page contract; the approved output Page is the creative workspace.'
+    : 'Never mutate nodes on the source ZDS Page.'
+  const sourceScope = freeMode
+    ? `All MCP calls must include sessionId ${task.sessionId}. The only writable Page is "${task.artifactPageName}". There is no required read-only ZDS source for this no-ZDS task; do not navigate away to hunt components unless explicitly needed for read-only context.`
+    : `All MCP calls must include sessionId ${task.sessionId}. The only writable Page is "${task.artifactPageName}". The read-only ZDS source is "${task.sourcePageName}" (${task.sourcePageId}).`
   return `Use the embedded global skill pack below. It is already imported by PM Lifecycle Agent; do not rely on repository-relative skill files being present in production.
 
 ${renderSkillPackForPrompt(task.skillPack)}
 
 You are the approved Figma craft worker for PM Lifecycle Agent. Use only the za-talk-to-figma MCP server.
 
-The scaffold has already been created after user approval. It is intentionally sparse and is not a layout suggestion, visual direction or wireframe to polish. Read the lifecycle artifact by idempotency key and root node, explicitly navigate to the exact output Page before any write, then author the product experience from ProductSpec. Preserve the artifact root, screen frames, existing ZDS instances and lifecycle metadata so independent read-back remains valid. You own the information architecture, composition, visual language, product copy, states and signature moments. You may freely restyle, resize, move, reorder and enrich the scaffold with custom composition and additional layers. Do not create, rename or delete Pages. Never mutate nodes on the source ZDS Page.
+The scaffold has already been created after user approval. It is intentionally sparse and is not a layout suggestion, visual direction or wireframe to polish. Read the lifecycle artifact by idempotency key and root node, explicitly navigate to the exact output Page before any write, then author the product experience from ProductSpec. Preserve the artifact root, screen frames, existing ZDS instances and lifecycle metadata so independent read-back remains valid. You own the information architecture, composition, visual language, product copy, states and signature moments. You may freely restyle, resize, move, reorder and enrich the scaffold with custom composition and additional layers. Do not create, rename or delete Pages. ${sourceBoundary}
+
+${surfaceGuidance}
 
 Product truth precedence is strict: active requirements and current screens override broad idea copy and historical decisions; removed requirements are forbidden. Before completion, scan the final output text for concepts from every removed requirement and make the count zero.
 
@@ -280,7 +298,7 @@ This must be a real craft loop, not a fast tool-success pass:
 
 This is craft pass ${task.iteration ?? 1}.${repairContext}
 
-All MCP calls must include sessionId ${task.sessionId}. The only writable Page is "${task.artifactPageName}". The read-only ZDS source is "${task.sourcePageName}" (${task.sourcePageId}).
+${sourceScope}
 ${iconLibrary ? `
 The brief's "iconLibrary" lists ${iconLibrary.count} real ZDS icon component sets (prefixes ${iconLibrary.namePrefixes.join(', ') || 'zi_zds_ic_'}) as name → componentSetId. Use them for every icon in the journey — headers, list items, tabs, empty states, statuses: instantiate_component({ componentSetId: <setId>, parentId: <a frame on the output Page> }), then position and recolor as needed. Do not draw placeholder squares or custom glyphs where a matching named icon exists, and do not navigate to the icon Page (instantiate cross-page by id).
 ` : ''}
@@ -448,7 +466,10 @@ export class CodexFigmaDesignWorker {
             return
           }
           try {
-            const report = parseFigmaDesignWorkerReport(JSON.parse(output), task, observed)
+            const report = parseFigmaDesignWorkerReport(JSON.parse(output), {
+              ...task,
+              allowZeroZdsInstances: task.plan.source.mode === 'free',
+            }, observed)
             emit('completed', report.summary)
             finish(null, report)
           } catch (error) {

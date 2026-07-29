@@ -216,6 +216,40 @@ describe("lifecycle artifact plugin handlers", () => {
     expect(tampered?.data.screens[0].sectionKeys).toEqual([]);
   });
 
+  it("can draw a free-creative artifact directly on the selected target page", async () => {
+    page.name = "Free sketch";
+    const prepared = preflight();
+    prepared.source.mode = "free";
+    prepared.source.metadata.pageStrategy = "use_target_page";
+    prepared.source.metadata.artifactPageName = "Should not rename";
+    prepared.resolvedSlots = [{
+      screenId: "SCREEN-MENU",
+      slotKey: "menu",
+      componentKey: null,
+      componentBinding: null,
+      semanticRole: null,
+      resolution: "primitive_fallback",
+    }];
+
+    const applied = await handleLifecycleArtifactRequest(request("apply_lifecycle_artifact_plan", {
+      preflightPlan: prepared,
+      planHash: "c".repeat(64),
+      targetPageId: "0:1",
+    }) as any);
+
+    expect(documentRoot.children).toHaveLength(1);
+    expect(applied?.data.artifactPageId).toBe("0:1");
+    expect(applied?.data.artifactPageName).toBe("Free sketch");
+    expect(page.name).toBe("Free sketch");
+    expect(page.children).toHaveLength(1);
+    expect(JSON.parse(page.children[0].getPluginData("za-pm-lifecycle"))).toMatchObject({
+      pageStrategy: "use_target_page",
+      artifactPageId: "0:1",
+      artifactPageName: "Free sketch",
+      applyStatus: "complete",
+    });
+  });
+
   it("recovers only an incomplete agent-owned artifact page", async () => {
     const stalePage = (globalThis as any).figma.createPage();
     stalePage.name = "PM · Remind backup · v1";

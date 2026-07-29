@@ -110,6 +110,26 @@ describe('Figma design worker', () => {
     }, taskScope)).toThrow(/approved artifact Page/)
   })
 
+  it('allows zero ZDS instances only for no-ZDS free worker reports', () => {
+    const report = {
+      schemaVersion: 1,
+      artifactPageName: taskScope.artifactPageName,
+      rootNodeId: taskScope.rootNodeId,
+      screenCount: 3,
+      zdsInstanceCount: 0,
+      prototypeLinkCount: 2,
+      screenshotsReviewed: 2,
+      refinementPasses: 1,
+      removedRequirementMentions: 0,
+      visualQaPassed: true,
+      summary: 'Adaptive web dashboard crafted with primitives.',
+    }
+
+    expect(parseFigmaDesignWorkerReport(report, { ...taskScope, allowZeroZdsInstances: true }))
+      .toMatchObject({ zdsInstanceCount: 0 })
+    expect(() => parseFigmaDesignWorkerReport(report, taskScope)).toThrow(/invalid zdsInstanceCount/)
+  })
+
   it('builds a prompt that names the exact writable and read-only Pages', () => {
     const loginTask: FigmaDesignWorkerTask = {
       modelId: 'gpt-5.5',

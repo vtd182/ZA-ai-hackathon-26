@@ -110,6 +110,7 @@ export const lifecycleArtifactMetadataSchema = z.object({
     'create_new',
     'create_or_recover_incomplete',
     'create_or_reuse_managed',
+    'use_target_page',
   ]).optional(),
 })
 export type LifecycleArtifactMetadata = z.infer<typeof lifecycleArtifactMetadataSchema>

@@ -304,4 +304,59 @@ describe("product craft audit", () => {
       "TOUCH_TARGET_TOO_SMALL",
     ]));
   });
+
+  it("allows adaptive free-mode desktop screens without ZDS instances", async () => {
+    screen.width = 1280;
+    screen.height = 900;
+    screen.absoluteBoundingBox = bounds(0, 0, 1280, 900);
+    screen.getPluginData = (key: string) => key === "za-pm-lifecycle"
+      ? JSON.stringify({ kind: "screen", screenId: "SCREEN-WEB-DASHBOARD" })
+      : "";
+    const title = {
+      id: "1:3",
+      name: "Dashboard title",
+      type: "TEXT",
+      characters: "Vận hành booking hôm nay",
+      visible: true,
+      opacity: 1,
+      fills: [{ type: "SOLID", color: { r: 0.06, g: 0.09, b: 0.16 } }],
+      fontSize: 32,
+      absoluteBoundingBox: bounds(56, 64, 420, 48),
+      parent: screen,
+    };
+    const cta = {
+      id: "1:4",
+      name: "Review exception CTA",
+      type: "RECTANGLE",
+      visible: true,
+      opacity: 1,
+      fills: [{ type: "SOLID", color: { r: 0, g: 0.42, b: 0.96 } }],
+      absoluteBoundingBox: bounds(56, 760, 220, 48),
+      parent: screen,
+      reactions: [{
+        trigger: { type: "ON_CLICK" },
+        actions: [{ type: "NODE", destinationId: "1:9" }],
+      }],
+    };
+    screen.children = [title, cta];
+
+    const result = await handleProductCraftAuditRequest(request({
+      rootNodeId: root.id,
+      expectedScreenCount: 1,
+      expectedPrototypeLinks: 1,
+      forbiddenTerms: [],
+      surfaceMode: "adaptive",
+      requireZdsInstances: false,
+    }) as any);
+
+    expect(result?.data).toMatchObject({
+      passed: true,
+      metrics: {
+        screenCount: 1,
+        zdsInstanceCount: 0,
+        prototypeLinkCount: 1,
+      },
+      issues: [],
+    });
+  });
 });

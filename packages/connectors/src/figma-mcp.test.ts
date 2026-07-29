@@ -149,6 +149,18 @@ describe('FigmaMcpAdapter', () => {
     expect(transport.calls.at(-1)?.args).toMatchObject({ sessionId, artifactPlan: plan, allowedTarget: target })
   })
 
+  it('pins the same page separately when no-ZDS free creative is selected', async () => {
+    const transport = new FakeTransport({ get_runtime_health: health, get_pages: pages })
+    const adapter = new FigmaMcpAdapter({ binaryPath: '/unused' }, transport)
+
+    const zdsTarget = await adapter.pinTarget(sessionId, '0:1', '2026-07-22T12:00:00.000Z')
+    const freeTarget = await adapter.pinTarget(sessionId, '0:1', '2026-07-22T12:00:00.000Z', 'free')
+
+    expect(zdsTarget.creativeMode).toBeUndefined()
+    expect(freeTarget.creativeMode).toBe('free')
+    expect(freeTarget.targetHash).not.toBe(zdsTarget.targetHash)
+  })
+
   it('applies, reads and audits only after revalidating the allowlisted target', async () => {
     const bootstrap = new FakeTransport({ get_runtime_health: health, get_pages: pages })
     const target = await new FigmaMcpAdapter({ binaryPath: '/unused' }, bootstrap)

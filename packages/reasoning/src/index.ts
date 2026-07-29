@@ -158,6 +158,18 @@ Tạo prototype edge từ CTA component thật đến màn hình đích. fromEle
 Ưu tiên 4-7 màn hình quan trọng thay vì nhiều màn hình hời hợt. Giữ screenId và requirementIds đúng ProductSpec.
 Chỉ trả JSON đúng schema.`
 
+const figmaFreeDesignPolicy = `Bạn đang làm việc như một senior product designer trên Figma free-creative mode, KHÔNG dùng ZDS.
+Không giới hạn thiết kế thành mobile Mini App. Hãy chọn surface theo ProductSpec và ngữ cảnh người dùng: web app, admin dashboard, landing page, desktop tool, tablet flow hoặc mobile app đều hợp lệ.
+Nếu brief nói web/dashboard/admin/landing/CRM/SaaS/portal/backoffice, dùng desktop canvas khoảng 1280-1440px wide với navigation, grid, dashboard/table/form/filter/hero sections phù hợp. Nếu brief nói Zalo Mini App/mobile/di động rõ ràng thì dùng mobile 390x844.
+Hãy tạo một Creative Figma Blueprint gần sản phẩm thật, không phải wireframe và không lặp một template cho mọi màn hình.
+Mỗi màn hình/page phải có hierarchy, content, state và interaction riêng theo đúng ProductSpec. Dùng dữ liệu mẫu cụ thể, không dùng placeholder như "Thông tin chính", "Lựa chọn của người dùng" hay "Trạng thái hiện tại".
+Dùng primitives frame/text/rectangle/ellipse/divider tự do để tạo composition, visual hierarchy, data visualization, marketing sections, dashboard modules và product-specific moments. Không tạo element kind "component" và không bịa componentRole.
+Element được khai báo theo thứ tự cha trước con. parentId null nghĩa là đặt trực tiếp trong screen/page. Với parent có auto-layout vertical/horizontal, x/y nên null. Với layout none, đặt x/y cụ thể.
+Với web/dashboard/landing, ưu tiên 3-6 page/section frame có chiều rộng lớn, layout nhiều cột, sidebar/topbar khi phù hợp, và content thật đủ để review. Với mobile, giữ touch target tối thiểu 44px. Luôn giữ text có tương phản và không để nội dung tràn frame.
+Tạo prototype edge từ CTA hoặc interaction surface thật đến màn hình đích. fromElementId phải tồn tại trong fromScreenId.
+Ưu tiên 4-7 màn hình/page quan trọng thay vì nhiều màn hình hời hợt. Giữ screenId và requirementIds đúng ProductSpec.
+Chỉ trả JSON đúng schema.`
+
 function outputSchemaFor(request: ReasoningRequest): Record<string, unknown> {
   if (request.responseMode === 'route') return conversationRouteJsonSchema
   const creative = request.responseMode === 'creative'
@@ -189,8 +201,11 @@ function buildPrompt(request: ReasoningRequest): string {
   const diff = request.canvasDiff
     ? `Thay đổi người dùng vừa Sync (${request.canvasDiff.fromRevision} -> ${request.canvasDiff.toRevision}): ${request.canvasDiff.summary}\n${request.canvasDiff.changes.slice(0, 30).map((item) => `- ${item.change}: ${item.id} ${item.label}`).join('\n')}`
     : 'Không có CanvasDiff mới trong lượt này.'
+  const figmaPolicy = (request.figmaComponentRoles?.length ?? 0) === 0
+    ? figmaFreeDesignPolicy
+    : figmaDesignPolicy
   const responseInstruction = request.responseMode === 'figma'
-    ? `${figmaDesignPolicy}
+    ? `${figmaPolicy}
 
 ProductSpec:
 ${JSON.stringify(request.productSpec)}
@@ -272,31 +287,88 @@ function compactControlCopy(value: string, limit: number): string {
   return candidate.slice(0, wordBoundary >= Math.floor(limit * 0.6) ? wordBoundary : limit).trim()
 }
 
+type ScaffoldSurface = 'mobile' | 'adaptive'
+
+function normalizeSurfaceText(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
+function inferAdaptiveFigmaFrame(spec: ProductSpec, surface: ScaffoldSurface): {
+  width: number
+  height: number
+  contentWidth: number
+  heroWidth: number
+  heroHeight: number
+  detailHeight: number
+  paddingX: number
+  paddingY: number
+  narrative: string
+} {
+  if (surface === 'mobile') {
+    return {
+      width: 390,
+      height: 844,
+      contentWidth: 350,
+      heroWidth: 350,
+      heroHeight: 220,
+      detailHeight: 230,
+      paddingX: 20,
+      paddingY: 24,
+      narrative: 'mobile Mini App journey',
+    }
+  }
+  const text = normalizeSurfaceText([
+    spec.title,
+    spec.idea.title,
+    spec.idea.summary,
+    ...spec.requirements.flatMap((item) => [item.title, item.description]),
+    ...spec.screens.flatMap((item) => [item.title, item.purpose]),
+  ].join(' '))
+  const explicitlyMobile = /\b(mini\s*app|zalo|mobile|di dong|ung dung di dong)\b/.test(text)
+  const explicitlyWeb = /\b(web|website|dashboard|admin|crm|saas|landing|portal|backoffice|console|desktop|quan tri|bang dieu khien|trang web)\b/.test(text)
+  if (explicitlyMobile && !explicitlyWeb) {
+    return inferAdaptiveFigmaFrame(spec, 'mobile')
+  }
+  const landing = /\b(landing|website|trang web|marketing|hero)\b/.test(text)
+  return {
+    width: landing ? 1440 : 1280,
+    height: landing ? 960 : 900,
+    contentWidth: landing ? 1320 : 1160,
+    heroWidth: landing ? 1320 : 1160,
+    heroHeight: landing ? 300 : 260,
+    detailHeight: landing ? 300 : 320,
+    paddingX: 48,
+    paddingY: 40,
+    narrative: landing ? 'desktop landing/product page' : 'desktop web product surface',
+  }
+}
+
 export function createScaffoldFigmaBlueprint(
   spec: ProductSpec,
   roles: string[],
-  options: { sparse?: boolean } = {},
+  options: { sparse?: boolean; surface?: ScaffoldSurface } = {},
 ): FigmaCreativeBlueprint {
   const available = new Set(roles)
   const activeRequirements = new Set(spec.requirements.filter((item) => item.status !== 'removed').map((item) => item.id))
   const screens = spec.screens
     .filter((screen) => screen.requirementIds.some((id) => activeRequirements.has(id)))
-  const primaryRole = available.has('primary-button') ? 'primary-button' : roles[0] ?? 'primary-button'
+  const frame = inferAdaptiveFigmaFrame(spec, options.surface ?? 'mobile')
+  const primaryRole = available.has('primary-button') ? 'primary-button' : roles[0] ?? null
   const headerRole = available.has('app-header') ? 'app-header' : null
   const outputScreens = screens.map((screen, index) => {
     const root = `root-${screen.id}`
     const action = `action-${screen.id}`
     const elements: FigmaCreativeBlueprint['screens'][number]['elements'] = [
       {
-        id: root, kind: 'frame', parentId: null, name: `${screen.title} content`, x: 0, y: 0, width: 390, height: 844,
-        layout: 'vertical', gap: 16, paddingTop: 24, paddingRight: 20, paddingBottom: 24, paddingLeft: 20,
+        id: root, kind: 'frame', parentId: null, name: `${screen.title} content`, x: 0, y: 0, width: frame.width, height: frame.height,
+        layout: 'vertical', gap: 16, paddingTop: frame.paddingY, paddingRight: frame.paddingX, paddingBottom: frame.paddingY, paddingLeft: frame.paddingX,
         fill: index === 0 ? '#F2F7FF' : '#FFFFFF', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
         text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: null, componentText: null, layoutGrow: 0,
       },
     ]
     if (headerRole) {
       elements.push({
-        id: `header-${screen.id}`, kind: 'component', parentId: root, name: 'ZDS app header', x: null, y: null, width: 350, height: 52,
+        id: `header-${screen.id}`, kind: 'component', parentId: root, name: 'ZDS app header', x: null, y: null, width: frame.contentWidth, height: 52,
         layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
         fill: null, stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
         text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: headerRole,
@@ -307,44 +379,44 @@ export function createScaffoldFigmaBlueprint(
       const hero = `hero-${screen.id}`
       elements.push(
         {
-          id: hero, kind: 'frame', parentId: root, name: 'Product moment', x: null, y: null, width: 350, height: 220,
-          layout: 'vertical', gap: 10, paddingTop: 24, paddingRight: 20, paddingBottom: 24, paddingLeft: 20,
+          id: hero, kind: 'frame', parentId: root, name: 'Product moment', x: null, y: null, width: frame.heroWidth, height: frame.heroHeight,
+          layout: 'vertical', gap: 10, paddingTop: 24, paddingRight: 24, paddingBottom: 24, paddingLeft: 24,
           fill: index === screens.length - 1 ? '#E8F8EF' : '#EAF3FF', stroke: null, strokeWidth: 0, radius: 20, opacity: 1,
           text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: null, componentText: null, layoutGrow: 0,
         },
         {
-          id: `eyebrow-${screen.id}`, kind: 'text', parentId: hero, name: 'Journey label', x: null, y: null, width: 310, height: 20,
+          id: `eyebrow-${screen.id}`, kind: 'text', parentId: hero, name: 'Journey label', x: null, y: null, width: frame.heroWidth - 48, height: 20,
           layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
           fill: '#0068FF', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
           text: `BƯỚC ${index + 1} · ${screen.title.toUpperCase()}`, fontSize: 12, fontWeight: 'semibold', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
         },
         {
-          id: `title-${screen.id}`, kind: 'text', parentId: hero, name: 'Screen headline', x: null, y: null, width: 310, height: 66,
+          id: `title-${screen.id}`, kind: 'text', parentId: hero, name: 'Screen headline', x: null, y: null, width: frame.heroWidth - 48, height: 66,
           layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
           fill: '#101828', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
           text: screen.title, fontSize: 30, fontWeight: 'bold', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
         },
         {
-          id: `purpose-${screen.id}`, kind: 'text', parentId: hero, name: 'Outcome copy', x: null, y: null, width: 310, height: 56,
+          id: `purpose-${screen.id}`, kind: 'text', parentId: hero, name: 'Outcome copy', x: null, y: null, width: frame.heroWidth - 48, height: 56,
           layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
           fill: '#475467', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
           text: screen.purpose, fontSize: 15, fontWeight: 'regular', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
         },
         {
-          id: `detail-${screen.id}`, kind: 'frame', parentId: root, name: 'Product detail', x: null, y: null, width: 350, height: 230,
+          id: `detail-${screen.id}`, kind: 'frame', parentId: root, name: 'Product detail', x: null, y: null, width: frame.contentWidth, height: frame.detailHeight,
           layout: 'vertical', gap: 12, paddingTop: 18, paddingRight: 18, paddingBottom: 18, paddingLeft: 18,
           fill: '#FFFFFF', stroke: '#E4E7EC', strokeWidth: 1, radius: 16, opacity: 1,
           text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: null, componentText: null, layoutGrow: 0,
         },
         {
-          id: `detail-title-${screen.id}`, kind: 'text', parentId: `detail-${screen.id}`, name: 'Detail title', x: null, y: null, width: 314, height: 28,
+          id: `detail-title-${screen.id}`, kind: 'text', parentId: `detail-${screen.id}`, name: 'Detail title', x: null, y: null, width: frame.contentWidth - 36, height: 28,
           layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
           fill: '#101828', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
           text: index === 0 ? 'Mọi thứ cần biết trong một nhịp nhìn' : `Điều người dùng cần hoàn tất tại ${screen.title}`,
           fontSize: 18, fontWeight: 'semibold', textAlign: 'left', componentRole: null, componentText: null, layoutGrow: 0,
         },
         {
-          id: `detail-body-${screen.id}`, kind: 'text', parentId: `detail-${screen.id}`, name: 'Concrete product content', x: null, y: null, width: 314, height: 96,
+          id: `detail-body-${screen.id}`, kind: 'text', parentId: `detail-${screen.id}`, name: 'Concrete product content', x: null, y: null, width: frame.contentWidth - 36, height: 96,
           layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
           fill: '#344054', stroke: null, strokeWidth: 0, radius: 0, opacity: 1,
           text: `${screen.purpose}\n\nTrạng thái được lưu ngay trên thiết bị và có thể tiếp tục ở lần mở sau.`,
@@ -391,7 +463,7 @@ export function createScaffoldFigmaBlueprint(
         layoutGrow: 0,
       })
     }
-    if (actionRoleIndex < 0) {
+    if (actionRoleIndex < 0 && primaryRole) {
       elements.push({
         id: action, kind: 'component', parentId: root, name: 'Primary journey action', x: null, y: null, width: 350, height: 52,
         layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
@@ -399,14 +471,22 @@ export function createScaffoldFigmaBlueprint(
         text: null, fontSize: null, fontWeight: null, textAlign: null, componentRole: primaryRole,
         componentText: index === screens.length - 1 ? 'Hoàn tất' : 'Tiếp tục', layoutGrow: 0,
       })
+    } else if (actionRoleIndex < 0) {
+      elements.push({
+        id: action, kind: 'rectangle', parentId: root, name: 'Primary journey action', x: null, y: null, width: Math.min(360, frame.contentWidth), height: 52,
+        layout: 'none', gap: 0, paddingTop: 0, paddingRight: 0, paddingBottom: 0, paddingLeft: 0,
+        fill: '#0068FF', stroke: null, strokeWidth: 0, radius: 16, opacity: 1,
+        text: index === screens.length - 1 ? 'Hoàn tất' : 'Tiếp tục', fontSize: 15, fontWeight: 'semibold', textAlign: 'center',
+        componentRole: null, componentText: null, layoutGrow: 0,
+      })
     }
     return {
       screenId: screen.id,
       name: screen.title,
       purpose: screen.purpose,
       requirementIds: screen.requirementIds.filter((id) => activeRequirements.has(id)),
-      width: 390,
-      height: 844,
+      width: frame.width,
+      height: frame.height,
       background: index === 0 ? '#F2F7FF' : '#FFFFFF',
       presentationNote: options.sparse
         ? `Sparse guarded scaffold only; create a product-specific composition for ${screen.purpose}`
@@ -420,7 +500,7 @@ export function createScaffoldFigmaBlueprint(
     productPromise: spec.idea.summary,
     visualNarrative: options.sparse
       ? 'Scaffold tối thiểu chỉ giữ traceability và ZDS controls; design worker sở hữu toàn bộ art direction và composition.'
-      : 'Một hành trình Mini App rõ nhịp, dùng ZDS cho interaction và composition riêng cho từng product moment.',
+      : `Một ${frame.narrative} rõ nhịp, dùng controls/primitive phù hợp và composition riêng cho từng product moment.`,
     principles: options.sparse
       ? ['Không coi scaffold là design direction', 'ProductSpec quyết định nội dung', 'ZDS giữ interaction, design worker sở hữu expression']
       : ['Một nhiệm vụ chính trên mỗi màn hình', 'Nội dung thật trước trang trí', 'ZDS cho controls, primitives cho product expression'],
@@ -694,7 +774,12 @@ class MockProvider implements ReasoningProvider {
     if (request.responseMode === 'figma') {
       if (!request.productSpec) throw new Error('Mock Figma design requires ProductSpec')
       result.intent = { kind: 'artifact', target: null, artifactAction: 'prepare' }
-      result.figmaBlueprint = createScaffoldFigmaBlueprint(request.productSpec, request.figmaComponentRoles ?? [])
+      const freeFigma = (request.figmaComponentRoles?.length ?? 0) === 0
+      result.figmaBlueprint = createScaffoldFigmaBlueprint(
+        request.productSpec,
+        request.figmaComponentRoles ?? [],
+        freeFigma ? { surface: 'adaptive' } : {},
+      )
       result.message = `Đã tạo creative blueprint cho ${result.figmaBlueprint.screens.length} màn hình.`
     }
     if (request.canvasDiff && request.responseMode !== 'route') {

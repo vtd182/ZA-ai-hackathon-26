@@ -74,6 +74,7 @@ Signature moment:
 - **Current slice (2026-07-26 demo-hardening):** (1) `skill-installer.ts` auto-installs the guarded `pm-lifecycle-canvas` skill into `~/.claude/skills` on launch (tldraw-style, idempotent hash marker, never clobbers a foreign same-named skill), making external Claude/Codex able to draw on the live canvas; SKILL.md now uses an absolute `$HOME` helper path (portable). See `docs/SKILL_PACKAGING.md`. (2) All HTTP providers (OpenAI/Gemini/Anthropic) now run under `withProviderDeadline` (race-based timeout + forwarded cancel); Gemini finally receives the abort signal — a stalled provider can no longer hold the single active-turn slot. (3) UI polish: token-based design system, non-overlapping canvas overlays (scene-bar pill top-right), gradient CTAs/chat bubbles, canvas dot-grid + card accent stripe, and an "AI Canvas" header chip showing the Dev Canvas Bridge is live (IPC `dev-bridge:status`). (4) Mock route turns clear `result.commands` (no offline canvas/phase mutation on conversation). Regression tests: `skill-installer.test.ts` (5), reasoning route-command test. Full suite 174 pass/2 skip, typecheck clean. Demo pitch/script in `docs/PITCH.md`.
 - **Current slice (2026-07-29 AgentRouter):** AgentRouter now follows the China docs endpoint family, not the `co.agentrouter.org` mirror. The app exposes the three account models (`gpt-5.6-sol`, `claude-opus-4-8`, `claude-opus-5`) in a global provider model selector. Raw SDK calls hit AgentRouter WAF (`unauthorized client detected`), so the `agentrouter` adapter uses a temporary Codex app-server/Responses bridge with `https://agentrouter.org/v1` and `AGENT_ROUTER_TOKEN`. Live contract evidence: `PM_AGENT_AGENTROUTER_LIVE=1 ... vitest ... -t 'runs AgentRouter'` passed for `gpt-5.6-sol` in 17.6s. Manual tests for both Claude models through the same bridge reconnected repeatedly and ended with upstream high-demand errors.
 - **Current slice (2026-07-29 release):** GitHub Release pipeline now prepares one canonical packaged resource tree containing skill packs plus minimal Figma MCP/plugin runtime. Electron installers embed `resources/figma-runtime`. CI builds the OS-independent Figma plugin once, reuses it in macOS/Windows jobs, and attaches `za-talk-to-figma-plugin.zip` plus OS-specific `za-talk-to-figma-runtime-<os>-<arch>.zip` bundles. Local `./run.sh dist` rebuilt Go + plugin and produced `apps/desktop/release/DualMind-0.1.2-arm64.dmg` plus `.dmg.blockmap` with no lock file.
+- **Current slice (2026-07-29 no-ZDS Figma):** Figma setup now has explicit `Dùng ZDS` and `Không dùng ZDS` paths. ZDS mode keeps the selected Page as guarded component source and writes to managed artifact Pages. No-ZDS mode marks the selected Page as a live free-creative destination, uses a live-primitives manifest with no fake component keys, plans with `pageStrategy: use_target_page`, and the plugin appends artifact roots directly on that Page without renaming it. Explicit no-ZDS never silently degrades to Mock Figma; stale target retries reprepare a Figma-only approval and preserve already verified Jira/Zdoc. No-ZDS is now adaptive-surface design: web/admin/dashboard/landing/tablet/mobile are chosen from ProductSpec, ZDS count may be 0, and desktop product frames are valid audit targets.
 - **Design note:** natural-language Figma approval (`artifact/approve`, BUG-033) is intentionally kept; `artifactPlanPending` already requires `WAITING_FOR_APPROVAL` + no `pendingIntent` + all actions `pending_approval`, so it cannot fire on a change preview and only executes a payload-hash-bound plan the user just prepared.
 - **Last known repository state:** Runnable Electron app with Studio/lifecycle display separation, one blank-first infinite canvas per thread, typed Canvas Programs, Mock/Codex provider paths, thread-specific ProductSpec synthesis, editable consent-first prototypes, exact-selection Sync/refine, deterministic impact preview, Markdown PRD export and approved strict live Figma ZDS write/read-back verification.
 - **Known blockers:** cần trial/commercial/hobby tldraw license key trước production packaging; OpenAI/Gemini/Anthropic adapters chưa thể live-test khi không có API key; GitHub Release workflow is being validated by the `v0.1.2` tag push. `v0.1.1` exposed a Windows CI plugin-build mismatch and should be ignored.
@@ -742,6 +743,50 @@ Signature moment:
 - **Fix:** Build the Figma plugin once in a dedicated Ubuntu job, upload it as an artifact, reuse it in OS matrix jobs through `PM_AGENT_FIGMA_PLUGIN_SOURCE`, build only the Go runtime per OS, and publish all assets from one final release job as `.zip` bundles.
 - **Regression test:** Workflow structure now has a single `publish-release` owner and no plugin build step inside the OS matrix. Local `./run.sh dist` remains the package smoke for current OS.
 - **Caveat:** This workflow change affects the next tag after `v0.1.2`; the existing `v0.1.2` draft can still be published manually if its visible asset list is acceptable.
+
+### BUG-056 - Explicit no-ZDS Figma pages degraded to mock instead of drawing live
+
+- **Status:** FIXED
+- **Found:** 2026-07-29, user trace with a newly created Figma Page and no ZDS components.
+- **Symptom:** The user selected/created a blank Figma Page, expected the agent to draw there without ZDS, but artifact creation did not produce a live design on that Page.
+- **Trigger:** Connect Figma plugin, switch to a new blank Page, allow the current Page, then request/create Figma design without intending to use ZDS.
+- **Root cause:** A Page without ZDS captured as `fixture_fallback`; `figmaExecutionContext()` routed all fixture fallback contexts to `connectorMode: mock`, so live Figma writes were skipped. Worse, if live-free reused the synthetic ZDS manifest, preflight could resolve fake component keys and apply would try to clone unavailable components.
+- **Fix:** Add explicit no-ZDS target mode (`creativeMode: free`) and UI button. Free targets remain `connectorMode: live`, `planMode: free`, use a live-primitives manifest with no components, and set `pageStrategy: use_target_page`. The plugin handles that strategy by appending the artifact root to the selected Page without renaming/deleting it.
+- **Regression test:** Connector tests cover distinct free target hash and primitive-only free preflight; reasoning test proves empty-role scaffold creates primitive actions; plugin lifecycle test proves `use_target_page` draws on the selected Page with no extra Page.
+- **Caveat:** Creating a brand-new named Page from app chat/slash is still a follow-up; today the user creates/opens the desired Page in Figma, then clicks `Không dùng ZDS`.
+
+### BUG-057 - No-ZDS retry reused stale Mock Figma payload
+
+- **Status:** FIXED
+- **Found:** 2026-07-29, user runtime trace after no-ZDS Page selection.
+- **Symptom:** Artifact sync showed `Partial Failure` with `Mock Figma Idempotency Conflict`; retry spammed `Chỉ có thể rebind Figma sau một artifact execution chưa hoàn tất`.
+- **Trigger:** A thread had an old/mock Figma action, then the active Figma target changed to a live free Page and the user retried or regenerated Figma.
+- **Root cause:** Explicit no-ZDS preparation could still fall back to the offline mock when live planning/preflight failed, producing a stale `ffffffff...` target payload. Mock regenerate idempotency omitted the revision/target suffix, causing conflicts with a previous mock receipt. Rebind also only accepted `DELIVERY/PARTIAL_FAILURE` and did not gracefully handle an already-created Figma approval.
+- **Fix:** `creativeMode: free` is always treated as live/free, even if its saved context is absent. Explicit no-ZDS planning fails loudly instead of degrading to mock. The Figma worker uses the selected target Page as output for `use_target_page`. Mock fallback idempotency includes revision/target suffix. Reprepare now supports Delivery and Change partial failures and repeated retry clicks return the existing pending-approval message.
+- **Regression test:** `./run.sh typecheck`; `pnpm vitest run packages/agent-core/src/impact.test.ts packages/connectors/src/figma-artifact-plan.test.ts packages/connectors/src/figma-mcp.test.ts packages/reasoning/src/index.test.ts`; full `./run.sh test`; `./run.sh build`; plugin `bun test src/lifecycle-artifact.test.ts`.
+- **Caveat:** If Figma plugin/session is genuinely disconnected, no-ZDS now blocks with an explicit live-target error instead of producing a mock preview; this is intentional for honest demo behavior.
+
+### BUG-058 - Free Figma blueprints still required ZDS component roles
+
+- **Status:** FIXED
+- **Found:** 2026-07-29, no-ZDS retry after BUG-057.
+- **Symptom:** Artifact sync failed with `Figma live free target chưa sẵn sàng (Creative screen ... is missing required ZDS roles: App-Header, Primary-Button)` even though the user explicitly selected `Không dùng ZDS`.
+- **Trigger:** Prepare or retry a live free target with a creative/scaffold blueprint whose screen elements are primitives rather than ZDS component elements.
+- **Root cause:** `createFigmaArtifactPlan` validated creative blueprint screen roles before respecting `mode: free`; preflight also warned about missing ZDS-backed controls for all modes except severity downgrade.
+- **Fix:** Free mode skips required ZDS role matching and suppresses the `CREATIVE_ZDS_CONTROL_MISSING` adoption issue. Reference/strict plans keep the ZDS role/adoption guard.
+- **Regression test:** `packages/connectors/src/figma-artifact-plan.test.ts` covers primitive-only creative blueprints on a no-ZDS live target. `pnpm vitest run packages/connectors/src/figma-artifact-plan.test.ts`, `./run.sh typecheck`, `./run.sh test`, and `./run.sh build` pass.
+- **Caveat:** Free mode still validates ProductSpec screen traceability, placeholder copy and compact component copy limits when an element is explicitly a component.
+
+### BUG-059 - No-ZDS craft was still implicitly mobile-only
+
+- **Status:** FIXED
+- **Found:** 2026-07-29, user asked whether free/no-ZDS supported web design.
+- **Symptom:** Even after removing ZDS role requirements, no-ZDS Figma still inherited mobile Mini App assumptions from provider prompt, scaffold dimensions, craft skill instructions and product-craft audit screen detection.
+- **Trigger:** Use `Không dùng ZDS` for a web/admin/dashboard/landing brief.
+- **Root cause:** Mobile/ZDS assumptions were spread across multiple layers: provider policy hard-coded `390x844`; deterministic scaffold returned `390x844`; craft worker skill and QA references required Mini App/mobile; audit counted only 320-480px-wide mobile frames and required at least one ZDS instance.
+- **Fix:** Free/no-ZDS mode now uses adaptive-surface guidance and desktop-sized fallback frames for web-like ProductSpecs. Worker prompt/skill pack distinguishes no-ZDS adaptive mode from ZDS/reference Mini App mode. Worker report and plugin audit allow zero ZDS instances for free mode. Product-craft audit detects lifecycle metadata/adaptive product frames and no longer labels every screen as mobile.
+- **Regression test:** Reasoning test covers adaptive desktop scaffold; worker test covers `zdsInstanceCount: 0` only when allowed; plugin audit test covers 1280x900 free desktop frame with no ZDS instances. Full `./run.sh test`, plugin typecheck/build, `./run.sh build` and final `./run.sh typecheck` pass.
+- **Caveat:** ProductSpec still carries `designSystemRoles` as a domain field; free mode ignores those roles for Figma composition rather than removing them from ProductSpec.
 
 Khi thêm bug, dùng mẫu này và không xóa bug cũ sau khi fix:
 

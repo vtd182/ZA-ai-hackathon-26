@@ -9,6 +9,9 @@ type AuditIssue = {
 
 type Bounds = { x: number; y: number; width: number; height: number };
 type Rgb = { r: number; g: number; b: number };
+type SurfaceMode = "mobile" | "adaptive";
+
+const metadataKey = "za-pm-lifecycle";
 
 const DEFAULT_PLACEHOLDERS = [
   "button",
@@ -26,6 +29,16 @@ const DEFAULT_PLACEHOLDERS = [
 ];
 
 const normalize = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+
+const readMetadata = (node: any): Record<string, unknown> | null => {
+  if (!node || typeof node.getPluginData !== "function") return null;
+  try {
+    const raw = node.getPluginData(metadataKey);
+    return raw ? JSON.parse(raw) as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+};
 
 const isVisible = (node: any, root: any): boolean => {
   let current: any = node;
@@ -199,8 +212,24 @@ const hasInstanceAncestor = (node: any, root: any): boolean => {
   return false;
 };
 
-const directMobileScreens = (root: any): any[] => {
+const directProductScreens = (root: any, surfaceMode: SurfaceMode): any[] => {
   const children = "children" in root ? root.children : [];
+  const metadataScreens = children.filter((node: any) => (
+    node.type === "FRAME"
+    && readMetadata(node)?.kind === "screen"
+  ));
+  if (metadataScreens.length > 0) return metadataScreens;
+  if (surfaceMode === "adaptive") {
+    const adaptiveDirect = children.filter((node: any) => (
+      node.type === "FRAME"
+      && node.width >= 320
+      && node.width <= 1_600
+      && node.height >= 480
+      && node.height <= 1_600
+      && !hasInstanceAncestor(node, root)
+    ));
+    if (adaptiveDirect.length > 0) return adaptiveDirect;
+  }
   const direct = children.filter((node: any) => (
     node.type === "FRAME"
     && node.width >= 320
@@ -232,6 +261,8 @@ export const handleProductCraftAuditRequest = async (
 
   const expectedScreenCount = Number(params.expectedScreenCount || 0);
   const expectedPrototypeLinks = Number(params.expectedPrototypeLinks || 0);
+  const surfaceMode: SurfaceMode = params.surfaceMode === "adaptive" ? "adaptive" : "mobile";
+  const requireZdsInstances = params.requireZdsInstances !== false;
   const forbiddenTerms = (Array.isArray(params.forbiddenTerms) ? params.forbiddenTerms : [])
     .filter((item: unknown): item is string => typeof item === "string" && item.trim().length > 0)
     .map(normalize);
@@ -242,7 +273,7 @@ export const handleProductCraftAuditRequest = async (
     .filter((item: unknown): item is string => typeof item === "string" && item.trim().length > 0)
     .map(normalize);
 
-  const screens = directMobileScreens(root);
+  const screens = directProductScreens(root, surfaceMode);
   const issues: AuditIssue[] = [];
   let visitedNodes = 0;
   let textCount = 0;
@@ -274,7 +305,7 @@ export const handleProductCraftAuditRequest = async (
             code: "ZDS_INSTANCE_WITHOUT_SCREEN",
             severity: "error",
             nodeId: node.id,
-            message: `ZDS instance ${node.name} is not contained in a mobile screen frame.`,
+            message: `ZDS instance ${node.name} is not contained in a product screen frame.`,
           });
         } else {
           visibleTopLevelInstances.push({ node, screen, bounds: nodeBounds });
@@ -428,7 +459,7 @@ export const handleProductCraftAuditRequest = async (
       code: "SCREEN_COUNT_MISMATCH",
       severity: "error",
       nodeId: root.id,
-      message: `Found ${screens.length}/${expectedScreenCount} mobile screens.`,
+      message: `Found ${screens.length}/${expectedScreenCount} product screens.`,
     });
   }
   if (prototypeLinkCount < expectedPrototypeLinks) {
@@ -439,7 +470,7 @@ export const handleProductCraftAuditRequest = async (
       message: `Found ${prototypeLinkCount}/${expectedPrototypeLinks} prototype links.`,
     });
   }
-  if (zdsInstanceCount === 0) {
+  if (requireZdsInstances && zdsInstanceCount === 0) {
     issues.push({
       code: "NO_ZDS_INSTANCES",
       severity: "error",

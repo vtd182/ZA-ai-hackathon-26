@@ -200,6 +200,55 @@ describe('semantic Figma artifact planner', () => {
     expect(result.plan.resolvedSlots.some((slot) => slot.resolution === 'primitive_fallback')).toBe(true)
   })
 
+  it('keeps a no-ZDS live target on its selected page with primitive controls', () => {
+    const primitiveManifest = { ...syntheticZaloDesignSystem, components: [] }
+    const plan = createFigmaArtifactPlan(
+      mealOrderingProductSpec,
+      { ...target, creativeMode: 'free' },
+      primitiveManifest,
+      { ...metadata, pageStrategy: 'use_target_page' },
+      'free',
+    )
+    const result = preflightFigmaArtifactPlan(plan, primitiveManifest, { ...target, creativeMode: 'free' })
+
+    expect(plan.metadata.pageStrategy).toBe('use_target_page')
+    expect(result.allowed).toBe(true)
+    expect(result.plan.resolvedSlots.every((slot) => slot.resolution === 'primitive_fallback')).toBe(true)
+  })
+
+  it('allows a no-ZDS creative blueprint with no component roles', () => {
+    const primitiveManifest = { ...syntheticZaloDesignSystem, components: [] }
+    const blueprint = creativeBlueprint()
+    blueprint.screens = blueprint.screens.map((screen) => ({
+      ...screen,
+      elements: screen.elements.map((element) => element.kind === 'component'
+        ? {
+            ...element,
+            kind: 'rectangle' as const,
+            name: `Primitive ${element.name}`,
+            componentRole: null,
+            componentText: null,
+            fill: '#FFFFFF',
+            stroke: '#D0D5DD',
+            strokeWidth: 1,
+            radius: 14,
+          }
+        : element),
+    }))
+    const plan = createFigmaArtifactPlan(
+      mealOrderingProductSpec,
+      { ...target, creativeMode: 'free' },
+      primitiveManifest,
+      { ...metadata, pageStrategy: 'use_target_page' },
+      'free',
+      blueprint,
+    )
+    const result = preflightFigmaArtifactPlan(plan, primitiveManifest, { ...target, creativeMode: 'free' })
+
+    expect(result.allowed).toBe(true)
+    expect(result.issues.map((issue) => issue.code)).not.toContain('CREATIVE_ZDS_CONTROL_MISSING')
+  })
+
   it('strict mode still hard-blocks when the ref lacks a required component', () => {
     const thinManifest = { ...syntheticZaloDesignSystem, components: syntheticZaloDesignSystem.components.slice(0, 1) }
     const plan = createFigmaArtifactPlan(mealOrderingProductSpec, target, thinManifest, metadata, 'strict')

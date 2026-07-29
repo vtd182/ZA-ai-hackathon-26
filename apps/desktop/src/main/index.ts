@@ -16,6 +16,8 @@ import {
   MockFigmaArtifactConnector,
   MockJiraConnector,
   MockZdocConnector,
+  createFixtureFallbackDesignSystemContext,
+  createLivePrimitiveFallbackManifest,
   normalizeFigmaDesignSystemContext,
   renderProductSpecMarkdown,
   SqliteMockArtifactStore,
@@ -340,6 +342,10 @@ interface FigmaExecutionContext {
 function figmaExecutionContext(): FigmaExecutionContext {
   const target = figmaIntegration.getActiveTarget()
   const context = target ? figmaIntegration.getContext(target.targetHash) : null
+  if (target?.creativeMode === 'free') {
+    const manifest = context?.manifest ?? createLivePrimitiveFallbackManifest(syntheticZaloDesignSystem)
+    return { target, manifest, connectorMode: 'live', planMode: 'free', iconCatalog: null }
+  }
   if (target && context) {
     // A configured ZDS ref that captured live → reference mode: prefer its components and
     // icons, creatively fill anything it lacks, and never block the flow. (ZDS rule kept.)
@@ -409,6 +415,11 @@ function figmaCraftPathLabel(action: PlannedAction | undefined): string {
     : ' · chưa có icon ZDS (allowlist Page component để nạp)'
   if (payload?.connectorMode !== 'live') {
     return '⚠️ Mock preview — CHƯA allowlist ref ZDS nên đây KHÔNG phải bản thật; hãy mở Page component ZDS rồi allowlist để vào chế độ live.'
+  }
+  if (payload?.guardMode === 'free') {
+    return worker?.mode === 'codex_mcp'
+      ? 'Agentic craft worker (Codex) — Figma live free creative, không clone ZDS.'
+      : 'Figma live free creative — không dùng ZDS, chỉ vẽ primitive lên Page đã chọn.'
   }
   if (worker?.mode === 'codex_mcp') {
     return `Agentic craft worker (Codex) — bản thiết kế đầy đủ${iconNote}.`
@@ -722,6 +733,9 @@ async function prepareExecutableActions(
     ? await figmaDesignWorker.probe()
     : { available: false, detail: 'Blueprint compositor được cấu hình' }
   let useAgenticWorker = figmaContext.connectorMode === 'live' && workerProbe.available
+  const liveFreeTarget = figmaContext.connectorMode === 'live'
+    && figmaContext.planMode === 'free'
+    && figmaContext.target.creativeMode === 'free'
   const thread = history.getThread(state.threadId)
   const threadProfile = history.getProfile(thread.providerId)
   // When the thread runs on AgentRouter, route the Figma craft worker through the same Codex→
@@ -744,7 +758,7 @@ async function prepareExecutableActions(
     runId: state.id,
     threadId: state.threadId,
     actionId: figmaAction.id,
-    pageStrategy: 'create_or_reuse_managed' as const,
+    pageStrategy: liveFreeTarget ? 'use_target_page' as const : 'create_or_reuse_managed' as const,
   }
   const uniqueRoles = (manifest: DesignSystemManifest): string[] =>
     [...new Set(manifest.components.filter((component) => !component.deprecated).map((component) => component.semanticRole))]
@@ -760,8 +774,13 @@ async function prepareExecutableActions(
     // PRIMARY Figma pipeline: blueprint → immutable plan → preflight. Any failure degrades to the
     // offline mock below so a Figma problem never aborts the Jira + Confluence + PRD package.
     creativeBlueprint = useAgenticWorker
-      ? createScaffoldFigmaBlueprint(spec, uniqueRoles(figmaContext.manifest), { sparse: true })
-      : await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest, refineNote)
+      ? createScaffoldFigmaBlueprint(spec, uniqueRoles(figmaContext.manifest), {
+          sparse: true,
+          ...(liveFreeTarget ? { surface: 'adaptive' as const } : {}),
+        })
+      : liveFreeTarget
+        ? createScaffoldFigmaBlueprint(spec, [], { sparse: false, surface: 'adaptive' })
+        : await createCreativeFigmaBlueprint(state, spec, figmaContext.manifest, refineNote)
     const metadata = {
       ...metadataBase,
       idempotencyKey: `figma:${state.id}:spec-v${spec.version}${revisionLabel && !editInPlace ? `:${revisionLabel}` : ''}:${useAgenticWorker ? 'craft' : 'creative'}-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}:${figmaContext.target.targetHash.slice(0, 12)}`,
@@ -785,14 +804,25 @@ async function prepareExecutableActions(
       throw new Error(`Figma preflight blocked: ${figmaPreflight.issues.map((issue) => `${issue.code}: ${issue.message}`).join('; ') || 'unknown'}`)
     }
   } catch (error) {
+    const reason = error instanceof Error ? error.message : 'Figma không sẵn sàng'
+    if (liveFreeTarget) {
+      emitArtifactProgress(state.threadId, {
+        target: 'figma',
+        stage: 'planning',
+        status: 'failed',
+        stageElapsedMs: Date.now() - planningStartedAt,
+        totalElapsedMs: Date.now() - planningStartedAt,
+        message: `Figma live free target chưa sẵn sàng (${reason}). Không chuyển sang Mock Figma vì bạn đã chọn Không dùng ZDS.`,
+      })
+      throw new Error(`Figma live free target chưa sẵn sàng: ${reason}. Không tự chuyển sang Mock Figma vì bạn đã chọn "Không dùng ZDS"; hãy kiểm tra Figma plugin/session và allowlist lại Page đang mở.`)
+    }
     // Figma failed (live capture, blueprint or preflight) — DEGRADE to the offline mock so the
     // kickoff still ships Jira + Confluence + PRD. The synthetic scaffold is deterministic + valid.
-    const reason = error instanceof Error ? error.message : 'Figma không sẵn sàng'
     emitArtifactProgress(state.threadId, { target: 'figma', stage: 'planning', status: 'running', stageElapsedMs: Date.now() - planningStartedAt, totalElapsedMs: Date.now() - planningStartedAt, message: `Figma chưa sẵn sàng (${reason}) — chuyển sang bản mock; gói vẫn tạo Jira + Confluence + PRD.` })
     figmaContext = mockFigmaExecutionContext()
     useAgenticWorker = false
     creativeBlueprint = createScaffoldFigmaBlueprint(spec, uniqueRoles(figmaContext.manifest), { sparse: true })
-    const mockMetadata = { ...metadataBase, idempotencyKey: `figma:${state.id}:spec-v${spec.version}:mock-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}` }
+    const mockMetadata = { ...metadataBase, idempotencyKey: `figma:${state.id}:spec-v${spec.version}${revisionLabel && !editInPlace ? `:${revisionLabel}` : ''}:mock-${hashConnectorPayload(creativeBlueprint as unknown as Record<string, unknown>).slice(0, 16)}:${figmaContext.target.targetHash.slice(0, 12)}` }
     figmaPlan = createFigmaArtifactPlan(spec, figmaContext.target, figmaContext.manifest, mockMetadata, figmaContext.planMode, creativeBlueprint)
     figmaPreflight = await new MockFigmaArtifactConnector(figmaContext.manifest, figmaContext.target, { store: mockFigmaStore }).preflight(figmaPlan)
   }
@@ -921,7 +951,8 @@ function withFigmaDesignWorker(
     execute: async (action: PlannedAction, preflight: PreflightResult<FigmaPreflightPlan>): Promise<ActionReceipt> => {
       const receipt = await base.execute(action, preflight)
       const artifactPageName = preflight.plan.source.metadata.artifactPageName
-      if (!artifactPageName) throw new Error('Approved design task has no dedicated artifact Page')
+        ?? preflight.plan.source.target.pageName
+      if (!artifactPageName) throw new Error('Approved design task has no output Figma Page')
       const modelId = typeof workerConfig.modelId === 'string' ? workerConfig.modelId : 'gpt-5.5'
       const timeoutMs = typeof workerConfig.timeoutBudgetMs === 'number'
         ? workerConfig.timeoutBudgetMs
@@ -1011,6 +1042,8 @@ function withFigmaDesignWorker(
           expectedScreenCount: preflight.plan.source.screens.length,
           expectedPrototypeLinks,
           forbiddenTerms,
+          requireZdsInstances: preflight.plan.source.mode !== 'free',
+          surfaceMode: preflight.plan.source.mode === 'free' ? 'adaptive' : 'mobile',
         })
         if (audit.passed) {
           const now = Date.now()
@@ -1222,16 +1255,28 @@ function approvedFigmaTargetHash(action: PlannedAction | undefined): string | nu
   return typeof targetHash === 'string' ? targetHash : null
 }
 
+function hasPendingFigmaApproval(state: RunState): boolean {
+  return state.status === 'WAITING_FOR_APPROVAL'
+    && !state.pendingIntent
+    && state.pendingActions.some((action) => action.target === 'figma' && action.status === 'pending_approval')
+}
+
 async function reprepareFigmaForCurrentTarget(
   threadId: string,
 ): Promise<import('@pm-agent/domain').ApproveChangeOutput> {
   const state = workspaceFor(threadId).runState
-  if (state.phase !== 'DELIVERY' || state.status !== 'PARTIAL_FAILURE') {
+  if (hasPendingFigmaApproval(state)) {
+    const message = 'Plan Figma mới đang chờ duyệt. Hãy kiểm tra target/payload rồi chọn “Duyệt & tạo”; không cần bấm retry thêm.'
+    return { ...workspaceFor(threadId), message }
+  }
+  const canReprepare = state.status === 'PARTIAL_FAILURE'
+    && (state.phase === 'DELIVERY' || state.phase === 'CHANGE_IMPACT')
+  if (!canReprepare) {
     throw new Error('Chỉ có thể rebind Figma sau một artifact execution chưa hoàn tất')
   }
   const context = figmaExecutionContext()
   if (context.connectorMode !== 'live') {
-    throw new Error('Figma live target chưa sẵn sàng. Mở Figma setup và allowlist lại Page ZDS trước khi retry.')
+    throw new Error('Figma live target chưa sẵn sàng. Mở Figma setup và allowlist lại Page đang muốn vẽ trước khi retry.')
   }
   const oldFigmaAction = state.pendingActions.find((action) => action.target === 'figma')
   const previousTargetHash = approvedFigmaTargetHash(oldFigmaAction)
@@ -1254,7 +1299,10 @@ async function reprepareFigmaForCurrentTarget(
     pendingActions: [figmaAction],
   }, 'REPREPARE_ARTIFACT', at)
   lifecycle.savePreview(staged)
-  const message = 'Figma plugin đã reconnect nên immutable target cũ hết hiệu lực. Plan Figma mới đã preflight; PRD và backlog đã verified vẫn được giữ nguyên. Hãy duyệt lại riêng payload Figma.'
+  const targetLabel = context.planMode === 'free' && context.target.creativeMode === 'free'
+    ? `Page free-creative “${context.target.pageName}”`
+    : `ZDS target “${context.target.pageName}”`
+  const message = `Figma target đã đổi sang ${targetLabel}, nên immutable payload cũ hết hiệu lực. Plan Figma mới đã preflight; PRD và backlog đã verified vẫn được giữ nguyên. Hãy duyệt lại riêng payload Figma.`
   history.addMessage(threadId, 'assistant', message)
   return { ...workspaceFor(threadId), message }
 }
@@ -1314,7 +1362,12 @@ async function figmaStatus(): Promise<FigmaSetupStatus> {
   }
   const context = target ? figmaIntegration.getContext(target.targetHash) : null
   const warnings: string[] = []
-  if (target && isManagedFigmaArtifactPage(target.pageName)) {
+  if (target?.creativeMode === 'free') {
+    warnings.push(
+      `Đang bật "Không dùng ZDS": agent sẽ vẽ trực tiếp lên Page "${target.pageName}" bằng free-creative primitives. `
+      + 'Muốn bám Zalo Design System thì mở Page component ZDS rồi chọn "Dùng ZDS".',
+    )
+  } else if (target && isManagedFigmaArtifactPage(target.pageName)) {
     warnings.push(
       `Page đang allowlist ("${target.pageName}") là output do app tạo, không có component ZDS — `
       + `đang chạy chế độ free-creative (AI tự thiết kế, không clone/ghi live vào Figma). `
@@ -1329,7 +1382,7 @@ async function figmaStatus(): Promise<FigmaSetupStatus> {
   }
 }
 
-async function allowFigmaTarget(sessionId: string, forceCapture: boolean): Promise<FigmaSetupStatus> {
+async function allowFigmaTarget(sessionId: string, forceCapture: boolean, useDesignSystem = true): Promise<FigmaSetupStatus> {
   const health = await figmaMcp.health()
   const session = health.sessions.find((item) => item.sessionId === sessionId)
   if (!session) throw new Error('Figma session không còn tồn tại. Hãy mở lại plugin.')
@@ -1342,13 +1395,28 @@ async function allowFigmaTarget(sessionId: string, forceCapture: boolean): Promi
   // switch to a real ZDS Page if they wanted reference mode. The ZDS-follows-ZDS rule is unchanged:
   // a Page WITH ZDS still captures live and drives reference mode.
   const activeTarget = figmaIntegration.getActiveTarget()
-  const allowedAt = activeTarget?.sessionId === sessionId && activeTarget.pageId === pages.currentPageId
+  const creativeMode: FigmaTargetBinding['creativeMode'] = useDesignSystem ? 'zds' : 'free'
+  const activeMode = activeTarget?.creativeMode ?? 'zds'
+  const allowedAt = activeTarget?.sessionId === sessionId
+    && activeTarget.pageId === pages.currentPageId
+    && activeMode === creativeMode
     ? activeTarget.allowedAt
     : timestamp()
-  const target = await figmaMcp.pinTarget(sessionId, pages.currentPageId, allowedAt)
+  const target = await figmaMcp.pinTarget(sessionId, pages.currentPageId, allowedAt, creativeMode)
 
   const cached = forceCapture ? null : figmaIntegration.getContext(target.targetHash)
   if (!cached) {
+    if (!useDesignSystem) {
+      const context = createFixtureFallbackDesignSystemContext(
+        target,
+        createLivePrimitiveFallbackManifest(syntheticZaloDesignSystem),
+        'Người dùng chọn Không dùng ZDS; Page này là live destination cho free-creative primitives.',
+        timestamp(),
+      )
+      figmaIntegration.saveActiveTarget(target)
+      figmaIntegration.saveContext(context)
+      return figmaStatus()
+    }
     const capture = await figmaMcp.captureDesignSystem(target)
     // Reference-only ZDS icon inventory (separate "Icon" Page). Best-effort and never blocking:
     // a null catalog simply means the craft worker falls back to composed icon primitives.
@@ -1573,11 +1641,15 @@ function registerIpc(): void {
   ipcMain.handle('lifecycle:retry-action', async (_event, threadId: string, target: PlannedAction['target']) => {
     if (target === 'figma') {
       const state = workspaceFor(threadId).runState
+      if (hasPendingFigmaApproval(state)) {
+        const message = 'Plan Figma mới đang chờ duyệt. Hãy kiểm tra target/payload rồi chọn “Duyệt & tạo”; không cần bấm retry thêm.'
+        return { ...workspaceFor(threadId), message }
+      }
       const oldFigmaAction = state.pendingActions.find((action) => action.target === 'figma')
       const oldTargetHash = approvedFigmaTargetHash(oldFigmaAction)
       const context = figmaExecutionContext()
       if (oldFigmaAction?.payload.connectorMode === 'live' && context.connectorMode !== 'live') {
-        throw new Error('Figma live target chưa sẵn sàng. Mở Figma setup và allowlist lại Page ZDS trước khi retry.')
+        throw new Error('Figma live target chưa sẵn sàng. Mở Figma setup và allowlist lại Page đang muốn vẽ trước khi retry.')
       }
       if (oldTargetHash && context.connectorMode === 'live' && oldTargetHash !== context.target.targetHash) {
         return reprepareFigmaForCurrentTarget(threadId)
@@ -1673,11 +1745,11 @@ function registerIpc(): void {
     await figmaRuntime.start()
     return figmaStatus()
   })
-  ipcMain.handle('figma:allow-target', (_event, sessionId: string) => allowFigmaTarget(sessionId, true))
+  ipcMain.handle('figma:allow-target', (_event, sessionId: string, useDesignSystem = true) => allowFigmaTarget(sessionId, true, useDesignSystem))
   ipcMain.handle('figma:refresh-design-system', () => {
     const target = figmaIntegration.getActiveTarget()
     if (!target) throw new Error('Chưa có Figma target trong allowlist.')
-    return allowFigmaTarget(target.sessionId, true)
+    return allowFigmaTarget(target.sessionId, true, true)
   })
   ipcMain.handle('figma:show-manifest', () => {
     if (!existsSync(figmaRuntime.manifestPath)) throw new Error('Figma plugin chưa được build. Chạy ./run.sh setup trước.')

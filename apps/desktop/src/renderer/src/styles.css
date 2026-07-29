@@ -2387,6 +2387,21 @@ a:focus-visible,
   cursor: pointer;
 }
 
+.figma-target-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+  max-width: 290px;
+}
+
+.figma-target-actions .no-zds-button {
+  border-color: #d4dbe0;
+  color: #475467;
+  background: #f8fafc;
+}
+
 .manifest-path {
   margin-top: 14px;
   padding: 9px 10px;

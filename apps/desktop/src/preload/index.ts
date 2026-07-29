@@ -54,7 +54,7 @@ const api: DesktopApi = {
   figma: {
     status: () => ipcRenderer.invoke('figma:status'),
     start: () => ipcRenderer.invoke('figma:start'),
-    allowTarget: (sessionId) => ipcRenderer.invoke('figma:allow-target', sessionId),
+    allowTarget: (sessionId, useDesignSystem) => ipcRenderer.invoke('figma:allow-target', sessionId, useDesignSystem),
     refreshDesignSystem: () => ipcRenderer.invoke('figma:refresh-design-system'),
     showManifest: () => ipcRenderer.invoke('figma:show-manifest'),
     openControlPlane: () => ipcRenderer.invoke('figma:open-control-plane'),
