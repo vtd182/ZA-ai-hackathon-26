@@ -4,7 +4,7 @@
 
 - macOS with Figma Desktop;
 - Node.js 22+ with Corepack/pnpm;
-- Go 1.24+ and Bun 1.3+ for the local Figma bridge build;
+- Go 1.26+ and Bun 1.3+ for the local Figma bridge build;
 - Codex CLI only when using the Codex provider. Mock Offline works without login or API keys.
 
 No Figma REST token is required. Jira and Zdoc remain labeled local mocks.
@@ -22,15 +22,19 @@ From the repository root:
 
 ## Import the Figma plugin
 
-1. In PM Lifecycle Agent, click **Figma** in the top toolbar.
+> Installed DualMind from a release (`.dmg` / `.exe`)? The Go runtime and plugin ship bundled and auto-start — you do **not** need `./run.sh setup`. Follow the same steps below; see README → **Kết nối Figma → A** for the packaged `manifest.json` location.
+
+1. In DualMind, click **Figma** in the top toolbar.
 2. Confirm **Runtime local** and **Plugin build** are ready.
 3. Click **Open manifest**.
 4. In Figma Desktop, choose **Plugins → Development → Import plugin from manifest…**.
 5. Select the revealed `manifest.json`.
 6. Run **ZA Talk To Figma** from Figma's Development plugins.
-7. Return to PM Lifecycle Agent and click **Use this page** to explicitly allowlist the open sandbox file/page.
+7. Return to DualMind and pick a source at step 4:
+   - **Use this page** to allowlist the open ZDS page — craft follows the Zalo Design System; or
+   - **Không dùng ZDS** for free-creative mode — the agent designs from scratch and draws straight onto the target/new page (no ZDS reference needed).
 
-The setup dialog changes to **Ready for preflight** only after the plugin is connected, the exact session/page is allowlisted and a bounded Design System context has been cached. Keep the plugin open while using the integration.
+The setup dialog changes to **Ready for preflight** only after the plugin is connected, the exact session/page is allowlisted and a bounded Design System context has been cached (ZDS mode) or free-creative mode is selected. Keep the plugin open while using the integration.
 
 The app never treats plugin connectivity as write permission. Switching to another Figma session or page invalidates readiness until that target is explicitly allowlisted.
 

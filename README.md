@@ -157,11 +157,31 @@ Mở **Settings** trong app → chọn provider → nhập API key (mã hóa b�
 
 ## Kết nối Figma (tùy chọn)
 
-1. Mở **Figma desktop** → import plugin: `Plugins → Development → Import plugin from manifest` → chọn `mcp-tool/za-talk-to-figma/plugin/manifest.json`.
-2. Chạy plugin **ZA Talk To Figma** (kết nối runtime local `127.0.0.1:1802`).
-3. Trong app → mở **Page chứa component ZDS** (không phải Page output `DualMind · …`) → bấm **“Dùng Page đang mở”** để allowlist nguồn.
-4. Panel hiện **“Live Design System · N components · M icons”** → sẵn sàng generate.
+Runtime Go (Figma MCP) + plugin đã **đóng gói sẵn trong app** và **tự khởi động** ở `127.0.0.1:1802`. Bạn chỉ cần import plugin vào **Figma Desktop** một lần. Yêu cầu: **Figma Desktop** (import plugin dev không chạy trên trình duyệt).
 
+### A. Nếu bạn cài từ bản release (.dmg / .exe)
+
+1. Mở app → panel **Figma**. Bước 1 “Runtime local” tự chạy (nếu chưa, bấm **Khởi động**).
+2. Bước 2 “Plugin build” → bấm **“Mở manifest”**. App mở Finder/Explorer ngay tại `manifest.json` đóng gói:
+   - macOS: `DualMind.app/Contents/Resources/figma-runtime/plugin/manifest.json`
+   - Windows: `resources/figma-runtime/plugin/manifest.json` (trong thư mục cài đặt)
+3. Trong **Figma Desktop**: `Plugins → Development → Import plugin from manifest…` → chọn đúng `manifest.json` ở bước 2.
+4. Chạy plugin **ZA Talk To Figma** → panel app chuyển **“Figma đã kết nối”**.
+
+> macOS chưa ký: nếu runtime không chạy, gỡ quarantine `xattr -dr com.apple.quarantine /Applications/DualMind.app` rồi mở lại.
+
+### B. Nếu bạn chạy từ source (dev)
+
+1. Mở **Figma Desktop** → `Plugins → Development → Import plugin from manifest…` → chọn `mcp-tool/za-talk-to-figma/plugin/manifest.json`.
+2. Chạy plugin **ZA Talk To Figma** (kết nối runtime local `127.0.0.1:1802`).
+
+### Xác nhận nguồn (cả A và B)
+
+- **Có ZDS**: mở **Page chứa component ZDS** (không phải Page output `DualMind · …`) → **“Dùng Page đang mở”** → panel hiện **“Live Design System · N components · M icons”**, craft **bám ZDS**.
+- **Không có ZDS**: bấm **“Không dùng ZDS”** → chế độ **free-creative**, agent tự thiết kế và vẽ thẳng lên page target/page mới.
+
+> Đổi file/page trong Figma thì phải **allowlist lại** (guardrail chống ghi nhầm).
+>
 > Không kết nối Figma **vẫn dùng được**: gói kickoff tự hạ Figma xuống mock, vẫn ra Jira + Confluence + PRD.
 
 ---
