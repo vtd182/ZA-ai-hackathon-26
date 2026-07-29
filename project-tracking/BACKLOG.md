@@ -558,9 +558,16 @@
 - **Evidence update:** Canvas collaboration is now a visible two-way loop. The chat panel shows
   canvas/selection state, lets the user draft a focused question or refine prompt, and can trigger
   CanvasWorkspace sync so diff + selection context are read into chat through the existing guarded
-  path. Stale canvas saves after demo reset are ignored to avoid FK errors from unmounted canvases.
-  Verification: `pnpm exec vitest run apps/desktop/src/renderer/src/canvas-collaboration-copy.test.ts packages/persistence/src/history-store.test.ts`,
+  path. Verification: `pnpm exec vitest run apps/desktop/src/renderer/src/canvas-collaboration-copy.test.ts packages/persistence/src/history-store.test.ts`,
   `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
+- **Evidence update:** The seeded signature path is sharp again for AgentRouter-style route output:
+  change handling stages previews from structured `intent.kind === 'change'` even when route-mode
+  providers clear mutation commands. The demo meal-ordering thread is seeded as an approved
+  Delivery baseline, and approved change impact produces ProductSpec v2 as confirmed truth before
+  executing verified Figma/Backlog/PRD artifacts. Verification:
+  `pnpm exec vitest run fixtures/meal-ordering/src/index.test.ts packages/agent-core/src/impact.test.ts packages/persistence/src/history-store.test.ts packages/reasoning/src/index.test.ts`,
+  `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, `PM_AGENT_SMOKE_RESET_COUNT=1 ./run.sh smoke`,
+  and `git diff --check` pass.
 
 ## Epic E7 - Change synchronization
 

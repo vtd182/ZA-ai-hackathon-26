@@ -2351,8 +2351,14 @@ function registerIpc(): void {
       }
 
       const canvasSyncIntent = Boolean(input.canvasDiff)
-      const removalCommand = routedIntent.kind === 'change' && !canvasSyncIntent
+      const legacyRemovalCommand = routedIntent.kind === 'change' && !canvasSyncIntent
         ? proposal.result.commands.find((command) => command.type === 'remove_card')
+        : undefined
+      const changeRequest = routedIntent.kind === 'change' && !canvasSyncIntent
+        ? {
+            query: routedIntent.target?.trim() || legacyRemovalCommand?.query || routedContent.trim(),
+            reason: routedContent.trim(),
+          }
         : undefined
       let changePreview
       let responseMessage = proposal.result.message
@@ -2382,7 +2388,7 @@ function registerIpc(): void {
         const selected = effectiveSelection?.selectedShapeCount ?? 0
         responseMessage = `${proposal.result.message}\n\nCanvas context đã verified: ${semanticNodes.length} semantic node, ${input.canvas.bindings?.length ?? 0} kết nối${selected > 0 ? ` và ${selected} phần tử đang chọn` : ''}. ProductSpec chưa thay đổi.`
         commands = []
-      } else if (removalCommand) {
+      } else if (changeRequest) {
         const workspace = workspaceFor(input.threadId)
         if (workspace.preview) {
           changePreview = workspace.preview
@@ -2390,8 +2396,8 @@ function registerIpc(): void {
           commands = [{ type: 'focus_card', query: workspace.preview.intent.targetEntityId }, { type: 'switch_view', view: 'change' }]
         } else {
           const resolution = resolveRemovalChangeIntent(workspace.runState.productSpec, {
-            query: removalCommand.query,
-            reason: routedContent.trim(),
+            query: changeRequest.query,
+            reason: changeRequest.reason,
             ...(input.selection ? { selectedEntityId: input.selection.entityId } : {}),
           })
           if (resolution.status === 'needs_user_input') {
@@ -3359,7 +3365,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
       }
     }
 
-    await window.webContents.executeJavaScript(`document.querySelector('.integration-button')?.click()`)
+    await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Figma integration"]')?.click()`)
     await wait(500)
     const figmaSetup = await window.webContents.executeJavaScript(`(async () => {
       const status = await window.pmAgent.figma.status();

@@ -92,6 +92,7 @@ describe('deterministic change impact', () => {
       'STORY-PAY-WALLET',
     ])
     expect(preview.after.version).toBe(2)
+    expect(preview.after.status).toBe('approved')
     expect(preview.after.requirements.find((item) => item.id === 'REQ-PAYMENT')).toMatchObject({ status: 'removed', priority: 'wont' })
     expect(preview.after.idea.summary).not.toMatch(/thanh toán|ví nội bộ/i)
     expect(preview.after.decisions.find((item) => item.id === 'DECISION-MVP-SCOPE')).toMatchObject({
@@ -107,6 +108,16 @@ describe('deterministic change impact', () => {
     expect(preview.after.dependencies.some((item) => item.id === 'DEP-WALLET-SDK')).toBe(false)
     expect(preview.actions.map((action) => action.target)).toEqual(['figma', 'jira', 'zdoc'])
     expect(preview.actions.every((action) => action.payloadHash.length === 64)).toBe(true)
+  })
+
+  it('keeps impact output as draft when the source ProductSpec is not confirmed', () => {
+    const draft = parseProductSpec({
+      ...structuredClone(mealOrderingProductSpec),
+      status: 'draft',
+    })
+    const preview = createImpactPreview(draft, intent, 'RUN-TEST', timestamp)
+
+    expect(preview.after.status).toBe('draft')
   })
 
   it('invalidates approval when any payload changes', () => {

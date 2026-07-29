@@ -131,7 +131,7 @@ function paymentRemoval(spec: ProductSpec, targetId: string, updatedAt: string):
   const after = parseProductSpec({
     ...structuredClone(spec),
     version: spec.version + 1,
-    status: 'draft',
+    status: spec.status === 'approved' ? 'approved' : 'draft',
     idea: removesPayment
       ? {
           ...spec.idea,

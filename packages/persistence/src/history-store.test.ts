@@ -65,7 +65,10 @@ describe('deterministic demo reset', () => {
     }
 
     expect(DEMO_FIXTURE_VERSION).toBe(1)
-    expect(JSON.parse(snapshots[0]!).id).toBe(DEMO_THREAD_ID)
+    expect(JSON.parse(snapshots[0]!)).toMatchObject({
+      id: DEMO_THREAD_ID,
+      phase: 'deliver',
+    })
     expect(new Set(snapshots).size).toBe(1)
     lifecycle.close()
     history.close()

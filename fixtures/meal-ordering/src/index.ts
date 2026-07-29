@@ -5,7 +5,7 @@ export const mealOrderingProductSpec = parseProductSpec({
   id: 'SPEC-MEAL-ORDERING',
   version: 1,
   title: 'Mini App đặt suất ăn trước',
-  status: 'draft',
+  status: 'approved',
   idea: {
     id: 'IDEA-MEAL-ORDERING',
     kind: 'idea',
@@ -69,4 +69,3 @@ export const mealOrderingProductSpec = parseProductSpec({
 })
 
 export const removePaymentPrompt = 'Bỏ payment khỏi MVP'
-

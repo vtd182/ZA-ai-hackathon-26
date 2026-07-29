@@ -587,7 +587,7 @@ export class HistoryStore {
     this.db.prepare(`
       INSERT INTO conversation_threads (
         id, title, phase, status, provider_id, model_id, canvas_snapshot, created_at, updated_at
-      ) VALUES (?, ?, 'discover', 'active', ?, ?, NULL, ?, ?)
+      ) VALUES (?, ?, 'deliver', 'active', ?, ?, NULL, ?, ?)
     `).run(
       DEMO_THREAD_ID,
       'Mini App đặt suất ăn trước cho nhân viên',

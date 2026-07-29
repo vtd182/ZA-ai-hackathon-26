@@ -441,6 +441,11 @@ Intent:
 - **Status note 2026-07-30 update:** renderer copy now makes that boundary visible: AgentRouter can
   craft Figma, but cannot directly execute connector writes. This keeps the demo honest about why
   the product is more governed than a normal provider chat.
+- **Status note 2026-07-30 seeded change update:** route-mode providers may clear mutation
+  commands, so app-owned change handling now trusts the structured `change` intent and resolves the
+  target inside Agent Core. The meal-ordering demo starts from an approved Delivery baseline, making
+  `Bỏ payment khỏi MVP` demonstrate impact preview -> approved ProductSpec v2 -> verified Figma,
+  backlog and PRD sync.
 
 ## 9. Prompt Audit Checklist
 

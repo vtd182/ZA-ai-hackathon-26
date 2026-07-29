@@ -694,6 +694,7 @@ export function App(): React.JSX.Element {
             )}
             <button
               className={figmaStatus?.target && figmaStatus.designSystem?.mode === 'live' ? 'integration-button connected' : 'integration-button'}
+              aria-label="Figma integration"
               title="Figma integration"
               onClick={() => setFigmaSetupOpen(true)}
             >

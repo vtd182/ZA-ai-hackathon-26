@@ -317,6 +317,7 @@ describe('mock provider command inference', () => {
 
     // Direct slash/creative turns own mutation; a lightweight route turn must not
     // carry remove_card/switch_view even though the wording would infer one.
+    expect(response.result.intent.kind).toBe('change')
     expect(response.result.commands).toEqual([])
   })
 
