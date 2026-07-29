@@ -855,7 +855,7 @@ a:focus-visible,
   color: var(--ok);
 }
 
-.chat-history-button {
+.chat-new-button {
   margin-left: auto;
   -webkit-app-region: no-drag;
 }
@@ -865,21 +865,34 @@ a:focus-visible,
 }
 
 .selection-slot {
-  height: 58px;
-  flex: 0 0 58px;
+  /* Collapses to nothing when there is no selection so it never steals chat height. */
+  flex: 0 0 auto;
 }
 
 .selection-chip {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 38px;
-  margin: 10px 14px 0;
-  padding: 7px 9px;
+  min-height: 30px;
+  margin: 8px 14px 0;
+  padding: 5px 8px;
   border-left: 3px solid #d39b20;
   border-radius: 4px;
   background: #fff8e7;
-  font-size: 11px;
+  font-size: 10.5px;
+}
+
+.selection-chip > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.selection-chip strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .selection-chip > div {
@@ -2133,22 +2146,32 @@ a:focus-visible,
 }
 
 .error-banner {
-  z-index: 5;
-  position: absolute;
-  top: 78px;
-  left: 12px;
-  right: 12px;
+  /* Bottom-right toast so canvas errors never cover the top toolbar. */
+  z-index: 10001;
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  left: auto;
+  top: auto;
   display: flex;
   align-items: center;
   gap: 8px;
   min-height: 38px;
-  padding: 4px 6px 4px 10px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 6px 6px 6px 12px;
   border: 1px solid #f1b5b9;
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--danger);
   background: #fff3f3;
-  box-shadow: 0 5px 18px rgba(54, 68, 74, 0.12);
+  box-shadow: 0 10px 30px rgba(54, 68, 74, 0.22);
   font-size: 12px;
+}
+
+.error-banner span {
+  flex: 1;
+  overflow-wrap: anywhere;
+  max-height: 160px;
+  overflow-y: auto;
 }
 
 .error-banner span {

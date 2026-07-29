@@ -611,9 +611,6 @@ export function App(): React.JSX.Element {
       <section className="center-panel">
         <header className="topbar">
           <div className="brand-mark topbar-brand" title="DualMind">DM</div>
-          <button className="icon-button" title="Cuộc hội thoại mới" onClick={() => void createThread()}>
-            <Plus size={18} />
-          </button>
           <div className="thread-heading">
             {renamingId === activeThread?.id && activeThread ? (
               <input
@@ -788,6 +785,7 @@ export function App(): React.JSX.Element {
         onShowBacklog={() => openKickoffViewer('backlog')}
         onShowZdoc={() => openKickoffViewer('zdoc')}
         onOpenHistory={() => setHistoryOpen(true)}
+        onNewChat={() => void createThread()}
         onExport={async () => {
           if (!activeThread) return
           try {
@@ -905,7 +903,7 @@ export function App(): React.JSX.Element {
           activeProfile={activeProfile}
           figmaConnected={Boolean(figmaStatus?.target && figmaStatus.designSystem?.mode === 'live')}
           onClose={() => setSettingsOpen(false)}
-          onConfigureProfile={(profile) => setSettingsProfile(profile)}
+          onConfigureProfile={(profile) => { setSettingsOpen(false); setSettingsProfile(profile) }}
           onOpenFigma={() => { setSettingsOpen(false); setFigmaSetupOpen(true) }}
           onResetDemo={() => { setSettingsOpen(false); setResetOpen(true) }}
         />
@@ -1149,6 +1147,7 @@ function ChatPanel({
   onShowZdoc,
   onExport,
   onOpenHistory,
+  onNewChat,
 }: {
   messages: ChatMessage[]
   suggestions: ConversationSuggestion[]
@@ -1191,6 +1190,7 @@ function ChatPanel({
   onShowZdoc(): Promise<void>
   onExport(): Promise<void>
   onOpenHistory(): void
+  onNewChat(): void
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const [slashIndex, setSlashIndex] = useState(0)
@@ -1231,7 +1231,10 @@ function ChatPanel({
     <aside className="chat-panel">
       <div className="chat-header">
         <div><strong>Chat</strong><span>Product co-creation</span></div>
-        <button className="icon-button chat-history-button" title="Lịch sử hội thoại" onClick={onOpenHistory}>
+        <button className="icon-button chat-new-button" title="Cuộc hội thoại mới" onClick={onNewChat}>
+          <Plus size={16} />
+        </button>
+        <button className="icon-button" title="Lịch sử hội thoại" onClick={onOpenHistory}>
           <History size={16} />
         </button>
         <button className="icon-button chat-export-button" title="Xuất log và tài liệu" disabled={disabled} onClick={() => void onExport()}>
