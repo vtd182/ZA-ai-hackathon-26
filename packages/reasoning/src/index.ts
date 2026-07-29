@@ -763,23 +763,49 @@ class AgentRouterProvider implements ReasoningProvider {
   async reason(request: ReasoningRequest, config: ProviderRuntimeConfig, signal: AbortSignal): Promise<ProviderResponse> {
     const apiKey = requiredCredential(config.apiKey, 'AGENTROUTER_API_KEY')
     const client = new OpenAI({ apiKey, baseURL: AgentRouterProvider.baseURL })
-    const completion = await withProviderDeadline(signal, providerTimeoutMs(request), (deadlineSignal) => client.chat.completions.create({
-      model: config.modelId,
-      messages: [{ role: 'user', content: buildPrompt(request) }],
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'pm_lifecycle_reasoning',
-          strict: true,
-          schema: outputSchemaFor(request),
+    let completion
+    try {
+      completion = await withProviderDeadline(signal, providerTimeoutMs(request), (deadlineSignal) => client.chat.completions.create({
+        model: config.modelId,
+        messages: [{ role: 'user', content: buildPrompt(request) }],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'pm_lifecycle_reasoning',
+            strict: true,
+            schema: outputSchemaFor(request),
+          },
         },
-      },
-    }, { signal: deadlineSignal }))
+      }, { signal: deadlineSignal }))
+    } catch (error) {
+      throw agentRouterError(error, config.modelId)
+    }
     const text = completion.choices[0]?.message?.content ?? ''
     return normalizedParsedResponse(parseProviderOutput(text, request), completion.id, this.capabilities, completion.usage
       ? { inputTokens: completion.usage.prompt_tokens, outputTokens: completion.usage.completion_tokens }
       : undefined)
   }
+}
+
+// AgentRouter (one-api gateway) returns provider-specific 4xx errors. Translate the common ones
+// into actionable messages instead of a raw OpenAI stack trace.
+function agentRouterError(error: unknown, modelId: string): Error {
+  const e = error as { status?: number; code?: string; error?: { message?: string; code?: string }; message?: string }
+  const code = e?.code ?? e?.error?.code ?? ''
+  const detail = e?.error?.message ?? e?.message ?? 'unknown error'
+  if (/content[-_]blocked/i.test(code) || /content[-_]blocked/i.test(detail)) {
+    return new Error(
+      `AgentRouter chặn request (content-blocked). Thường do model "${modelId}" KHÔNG nằm trong gói của API key hiện tại, `
+      + 'hoặc nội dung bị moderation. Hãy đổi model sang một model được phép trong console AgentRouter (agentrouter.org/console).',
+    )
+  }
+  if (e?.status === 401 || e?.status === 403 || /unauthor|invalid.*key|permission/i.test(detail)) {
+    return new Error('AgentRouter từ chối xác thực/quyền — kiểm tra AGENTROUTER_API_KEY và quyền truy cập model.')
+  }
+  if (e?.status === 404 || /model.*not.*found|no.*such.*model/i.test(detail)) {
+    return new Error(`AgentRouter không tìm thấy model "${modelId}" — đặt lại model theo catalog AgentRouter.`)
+  }
+  return new Error(`AgentRouter lỗi ${e?.status ?? ''}: ${detail}`)
 }
 
 class GeminiProvider implements ReasoningProvider {
