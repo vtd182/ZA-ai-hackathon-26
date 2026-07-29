@@ -122,6 +122,11 @@ export function App(): React.JSX.Element {
   const [viewer, setViewer] = useState<{ kind: 'backlog'; data: MockJiraPlan } | { kind: 'zdoc'; data: MockZdocPlan } | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
+  const [chatWidth, setChatWidth] = useState(() => {
+    const saved = Number(window.localStorage.getItem('dm.chatWidth'))
+    return saved >= 340 && saved <= 820 ? saved : 412
+  })
+  const chatWidthRef = useRef(chatWidth)
   const [loading, setLoading] = useState(true)
   const [runningThreadId, setRunningThreadId] = useState<string | null>(null)
   const [approving, setApproving] = useState(false)
@@ -195,6 +200,31 @@ export function App(): React.JSX.Element {
   }, [openThread])
 
   useEffect(() => { void window.pmAgent.devBridge.status().then(setDevBridge).catch(() => setDevBridge(null)) }, [])
+
+  useEffect(() => {
+    chatWidthRef.current = chatWidth
+    window.localStorage.setItem('dm.chatWidth', String(chatWidth))
+  }, [chatWidth])
+
+  const startChatResize = useCallback((event: React.MouseEvent) => {
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = chatWidthRef.current
+    const onMove = (moveEvent: MouseEvent): void => {
+      // Dragging left widens the chat rail; clamp so neither canvas nor chat collapses.
+      setChatWidth(Math.min(820, Math.max(340, startWidth + (startX - moveEvent.clientX))))
+    }
+    const onUp = (): void => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [])
 
   useEffect(() => window.pmAgent.menu.onOpenSettings(() => setSettingsOpen(true)), [])
 
@@ -661,7 +691,7 @@ export function App(): React.JSX.Element {
   }
 
   return (
-    <div className="app-frame">
+    <div className="app-frame" style={{ '--chat-width': `${chatWidth}px` } as React.CSSProperties}>
       <div className="app-titlebar"><span>ZA-ai-hackathon-26 — DualMind</span></div>
       <main className="app-shell">
       <section className="center-panel">
@@ -850,6 +880,7 @@ export function App(): React.JSX.Element {
         onShowZdoc={() => openKickoffViewer('zdoc')}
         onOpenHistory={() => setHistoryOpen(true)}
         onNewChat={() => void createThread()}
+        onResizeStart={startChatResize}
         onExport={async () => {
           if (!activeThread) return
           try {
@@ -1251,6 +1282,7 @@ function ChatPanel({
   onExport,
   onOpenHistory,
   onNewChat,
+  onResizeStart,
 }: {
   messages: ChatMessage[]
   suggestions: ConversationSuggestion[]
@@ -1297,6 +1329,7 @@ function ChatPanel({
   onExport(): Promise<void>
   onOpenHistory(): void
   onNewChat(): void
+  onResizeStart(event: React.MouseEvent): void
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const [slashIndex, setSlashIndex] = useState(0)
@@ -1353,6 +1386,7 @@ function ChatPanel({
 
   return (
     <aside className="chat-panel">
+      <div className="chat-resizer" onMouseDown={onResizeStart} title="Kéo để co dãn khung chat" role="separator" aria-orientation="vertical" />
       <div className="chat-header">
         <div><strong>Chat</strong><span>Product co-creation</span></div>
         <button className="icon-button chat-new-button" title="Cuộc hội thoại mới" onClick={onNewChat}>
@@ -1602,21 +1636,29 @@ function ChatPanel({
 }
 
 function WorkflowStateReceiptPanel({ receipt }: { receipt: WorkflowStateReceipt }): React.JSX.Element {
+  const [collapsed, setCollapsed] = useState(false)
   return (
-    <section className={`workflow-state-receipt ${receipt.tone}`} aria-label="Workflow state receipt">
+    <section className={`workflow-state-receipt ${receipt.tone}${collapsed ? ' collapsed' : ''}`} aria-label="Workflow state receipt">
       <header>
         <ListChecks size={15} />
         <div>
           <strong>{receipt.title}</strong>
           <span>{receipt.status}</span>
         </div>
+        <button className="panel-collapse" aria-expanded={!collapsed} title={collapsed ? 'Mở' : 'Thu gọn'} onClick={() => setCollapsed((value) => !value)}>
+          {collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+        </button>
       </header>
-      <div className="workflow-state-facts">
-        {receipt.facts.slice(0, 2).map((fact) => <span key={fact}>{fact}</span>)}
-      </div>
-      <div className="workflow-state-next">
-        {receipt.nextActions.slice(0, 2).map((action) => <small key={action}>{action}</small>)}
-      </div>
+      {!collapsed && (
+        <>
+          <div className="workflow-state-facts">
+            {receipt.facts.slice(0, 2).map((fact) => <span key={fact}>{fact}</span>)}
+          </div>
+          <div className="workflow-state-next">
+            {receipt.nextActions.slice(0, 2).map((action) => <small key={action}>{action}</small>)}
+          </div>
+        </>
+      )}
     </section>
   )
 }
@@ -1639,15 +1681,19 @@ function DeliveryGuide({
   const readiness = productSpecReadiness(productSpec)
   const requirements = readiness.metrics.find((item) => item.label === 'Req')?.value ?? 0
   const confirmed = productSpec.status === 'approved'
+  const [collapsed, setCollapsed] = useState(false)
   return (
-    <section className="delivery-guide" aria-label="Delivery next steps">
+    <section className={collapsed ? 'delivery-guide collapsed' : 'delivery-guide'} aria-label="Delivery next steps">
       <header>
         <div>
           <strong>{productSpec.status === 'draft' ? 'Draft ProductSpec workspace' : 'Delivery workspace'}</strong>
           <span>ProductSpec v{productSpec.version} · {readiness.truthLabel} · {readiness.surfaceLabel} · {readiness.artifactLabel}</span>
         </div>
-        <CheckCircle2 size={17} />
+        <button className="panel-collapse" aria-expanded={!collapsed} title={collapsed ? 'Mở' : 'Thu gọn'} onClick={() => setCollapsed((value) => !value)}>
+          {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+        </button>
       </header>
+      {collapsed ? null : <>
       <div className="delivery-status">
         {readiness.metrics.filter((item) => item.label !== 'Must').map((metric) => <span key={metric.label}><b>{metric.value}</b> {metric.label}</span>)}
         <span><b>{canvasItemCount}</b> Canvas</span>
@@ -1684,6 +1730,7 @@ function DeliveryGuide({
           <FolderOpen size={16} /><span><strong>Tạo kickoff package</strong><small>Figma · PRD.md · backlog mock</small></span>
         </button>
       </div>
+      </>}
     </section>
   )
 }

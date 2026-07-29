@@ -179,8 +179,8 @@ a:focus-visible,
   flex: 1;
   min-height: 0;
   display: grid;
-  /* History moved to a dialog — two columns now: canvas + a roomier chat rail. */
-  grid-template-columns: minmax(480px, 1fr) 412px;
+  /* Canvas + a user-resizable chat rail (--chat-width set on .app-frame, persisted). */
+  grid-template-columns: minmax(360px, 1fr) var(--chat-width, 412px);
   width: 100%;
   background: #f3f6f6;
 }
@@ -878,11 +878,59 @@ a:focus-visible,
 }
 
 .chat-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border-left: 1px solid var(--line);
   background: #ffffff;
+}
+
+/* Drag handle to resize the chat rail (co dãn khung chat). */
+.chat-resizer {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 7px;
+  height: 100%;
+  z-index: 12;
+  cursor: col-resize;
+  -webkit-app-region: no-drag;
+}
+
+.chat-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 3px;
+  width: 1px;
+  height: 100%;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.chat-resizer:hover::after,
+.chat-resizer:active::after {
+  background: var(--brand, #0868df);
+}
+
+.panel-collapse {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.panel-collapse:hover {
+  background: rgb(8 104 223 / 10%);
 }
 
 .chat-header {
@@ -1196,7 +1244,7 @@ a:focus-visible,
 
 .workflow-state-receipt header {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: start;
   gap: 7px;
 }
@@ -3027,7 +3075,7 @@ a:focus-visible,
 
 @media (max-width: 1240px) {
   .app-shell {
-    grid-template-columns: minmax(430px, 1fr) 360px;
+    grid-template-columns: minmax(320px, 1fr) var(--chat-width, 360px);
   }
 
   .model-label {
