@@ -1313,10 +1313,19 @@ async function figmaStatus(): Promise<FigmaSetupStatus> {
     }
   }
   const context = target ? figmaIntegration.getContext(target.targetHash) : null
+  const warnings: string[] = []
+  if (target && isManagedFigmaArtifactPage(target.pageName)) {
+    warnings.push(
+      `Page đang allowlist ("${target.pageName}") là output do app tạo, không có component ZDS — `
+      + `đang chạy chế độ free-creative (AI tự thiết kế, không clone/ghi live vào Figma). `
+      + `Nếu muốn bám Zalo Design System, mở Page chứa component ZDS rồi bấm "Đổi sang Page đang mở".`,
+    )
+  }
   return {
     ...runtime,
     target,
     designSystem: context ? summarizeFigmaDesignSystemContext(context) : null,
+    warnings,
   }
 }
 
@@ -1327,20 +1336,11 @@ async function allowFigmaTarget(sessionId: string, forceCapture: boolean): Promi
   const pages = await figmaMcp.pages(sessionId)
   const currentPage = pages.pages.find((page) => page.id === pages.currentPageId)
   if (!currentPage) throw new Error('Không đọc được Page hiện tại từ Figma session.')
-  if (isManagedFigmaArtifactPage(currentPage.name)) {
-    // Name the actual file and list the real ZDS-source candidates in it (any non-output Page),
-    // instead of hardcoding a file name — the ref file may be "(Copy)", "- dup" or anything else.
-    const sourceCandidates = pages.pages
-      .filter((page) => !isManagedFigmaArtifactPage(page.name))
-      .map((page) => page.name)
-    const hint = sourceCandidates.length > 0
-      ? ` Ví dụ Page nguồn trong file này: ${sourceCandidates.slice(0, 6).map((name) => `"${name.trim()}"`).join(', ')}.`
-      : ' File này chưa có Page component ZDS nào — hãy mở đúng file thư viện ZDS.'
-    throw new Error(
-      `"${currentPage.name}" là Page output do PM Lifecycle tạo trong file "${session.fileName}", không phải nguồn ZDS. `
-      + `Hãy mở Page chứa component ZDS (đang xem Page đó trong Figma) rồi thử lại.${hint}`,
-    )
-  }
+  // A managed-output Page (our own artifact) is no longer a hard error: it simply has no ZDS
+  // components, so capture below yields fixture_fallback → the safe free-creative mock path (no
+  // live clone / no overwrite). figmaStatus() surfaces a non-blocking warning so the PM knows to
+  // switch to a real ZDS Page if they wanted reference mode. The ZDS-follows-ZDS rule is unchanged:
+  // a Page WITH ZDS still captures live and drives reference mode.
   const activeTarget = figmaIntegration.getActiveTarget()
   const allowedAt = activeTarget?.sessionId === sessionId && activeTarget.pageId === pages.currentPageId
     ? activeTarget.allowedAt

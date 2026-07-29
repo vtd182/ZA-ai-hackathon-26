@@ -2271,6 +2271,24 @@ a:focus-visible,
   font-size: 10.5px;
 }
 
+.figma-operation-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--warn);
+  background: var(--warn-soft);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.figma-operation-warning > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 .figma-setup-dialog > header {
   margin-bottom: 16px;
 }

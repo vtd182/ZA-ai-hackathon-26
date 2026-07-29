@@ -14,4 +14,6 @@ export interface FigmaSetupStatus {
   manifestPath: string
   controlPlaneUrl: string
   detail: string
+  /** Non-blocking advisories about the current target (e.g. an output Page pinned as source). */
+  warnings: string[]
 }

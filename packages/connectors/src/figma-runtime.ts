@@ -61,6 +61,7 @@ export class FigmaRuntimeManager {
         manifestPath: this.options.manifestPath,
         controlPlaneUrl: this.controlPlaneUrl,
         detail: overview.connected ? 'Figma plugin đã kết nối runtime local.' : 'Runtime sẵn sàng; đang chờ Figma plugin.',
+        warnings: [],
       }
     }
 
@@ -79,6 +80,7 @@ export class FigmaRuntimeManager {
       manifestPath: this.options.manifestPath,
       controlPlaneUrl: this.controlPlaneUrl,
       detail: this.lastError ?? (binaryReady ? 'Runtime chưa chạy.' : 'Chưa build Figma runtime cho máy này.'),
+      warnings: [],
     }
   }
 

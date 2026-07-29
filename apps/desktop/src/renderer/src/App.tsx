@@ -936,6 +936,9 @@ function FigmaSetupDialog({
             </button>
           </div>
         )}
+        {status?.warnings?.map((warning) => (
+          <div key={warning} className="figma-operation-warning"><CircleAlert size={15} /> {warning}</div>
+        ))}
         {operationError && <div className="figma-operation-error"><CircleAlert size={15} /> {operationError}</div>}
         <footer>
           <span className={integrationReady ? 'figma-ready-label ready' : 'figma-ready-label'}>
