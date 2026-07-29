@@ -553,7 +553,13 @@
 - **Evidence update:** ProductSpec readiness is now a shared renderer contract. Delivery,
   ProductSpec overview and compact inspector show Draft/Confirmed truth, surface, artifact readiness,
   traceability blockers and next actions; the kickoff package button is gated by this readiness.
-  Verification: `pnpm exec vitest run apps/desktop/src/renderer/src/productspec-readiness.test.ts`
+  Verification: `pnpm exec vitest run apps/desktop/src/renderer/src/productspec-readiness.test.ts`,
+  `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
+- **Evidence update:** Canvas collaboration is now a visible two-way loop. The chat panel shows
+  canvas/selection state, lets the user draft a focused question or refine prompt, and can trigger
+  CanvasWorkspace sync so diff + selection context are read into chat through the existing guarded
+  path. Stale canvas saves after demo reset are ignored to avoid FK errors from unmounted canvases.
+  Verification: `pnpm exec vitest run apps/desktop/src/renderer/src/canvas-collaboration-copy.test.ts packages/persistence/src/history-store.test.ts`,
   `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
 
 ## Epic E7 - Change synchronization

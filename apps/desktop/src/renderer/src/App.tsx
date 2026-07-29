@@ -59,6 +59,7 @@ import type {
   PhaseReasoningResult,
 } from '@pm-agent/domain'
 import { artifactBriefFacts, artifactBriefForAction, artifactTargetLabel } from './artifact-brief-copy'
+import { canvasCollaborationCopy, type CanvasCollaborationAction } from './canvas-collaboration-copy'
 import { classifyErrorText } from './error-classifier'
 import { productSpecReadiness, productSurfaceLabel } from './productspec-readiness'
 import { providerRuntimeCopy } from './provider-runtime-copy'
@@ -134,6 +135,7 @@ export function App(): React.JSX.Element {
   const [lifecycleWorkspace, setLifecycleWorkspace] = useState<LifecycleWorkspaceState | null>(null)
   const [promotionPreview, setPromotionPreview] = useState<CanvasPromotionPreview | null>(null)
   const [programBatch, setProgramBatch] = useState<{ id: number; requestId?: string; program: CanvasProgram; source: CanvasExecutionReceipt['source'] }>({ id: 0, program: noCanvasProgram, source: 'provider' })
+  const [canvasSyncRequestId, setCanvasSyncRequestId] = useState(0)
   const [artifactProgress, setArtifactProgress] = useState<Partial<Record<PlannedAction['target'], ArtifactProgressEvent>>>({})
   const [artifactClock, setArtifactClock] = useState(Date.now())
   const [suggestions, setSuggestions] = useState<ConversationSuggestion[]>([])
@@ -727,6 +729,7 @@ export function App(): React.JSX.Element {
                 threadId={activeThread.id}
                 snapshot={activeThread.canvasSnapshot}
                 programBatch={programBatch}
+                syncRequestId={canvasSyncRequestId}
                 agentBusy={runningThreadId === activeThread.id}
                 onContextChange={(context, nextSelection) => {
                   setCanvasContext(context)
@@ -798,6 +801,7 @@ export function App(): React.JSX.Element {
         deliveryActive={lifecycleWorkspace?.runState.phase === 'DELIVERY' && lifecycleWorkspace.runState.status === 'ACTIVE'}
         canvasItemCount={canvasContext?.shapes.filter((shape) => shape.semanticId && shape.nodeKind).length ?? 0}
         onStartPromotion={startPromotion}
+        onSyncCanvas={() => setCanvasSyncRequestId((value) => value + 1)}
         promotionPreview={promotionPreview ?? undefined}
         artifactActions={lifecycleWorkspace?.runState.pendingIntent ? [] : lifecycleWorkspace?.runState.pendingActions ?? []}
         disabled={!activeThread}
@@ -1180,6 +1184,7 @@ function ChatPanel({
   disabled,
   onSend,
   onStartPromotion,
+  onSyncCanvas,
   onStop,
   onLoadEarlier,
   onApprove,
@@ -1224,6 +1229,7 @@ function ChatPanel({
   disabled: boolean
   onSend(content: string): Promise<void>
   onStartPromotion(): Promise<void>
+  onSyncCanvas(): void
   onStop(): Promise<void>
   onLoadEarlier(): Promise<void>
   onApprove(): Promise<void>
@@ -1269,6 +1275,12 @@ function ChatPanel({
     ? slashCommands.filter((item) => item.command.startsWith(slashQuery) || item.label.toLowerCase().includes(slashQuery.slice(1)))
     : []
   const selectedSlashCommand = matchingSlashCommands[Math.min(slashIndex, Math.max(0, matchingSlashCommands.length - 1))]
+  const canvasCollaboration = canvasCollaborationCopy({
+    canvasItemCount,
+    selectionLabel: selection?.label,
+    productSpecStatus: productSpec?.status,
+    canPromote: canvasItemCount > 0 && (!productSpec || productSpec.requirements.filter((item) => item.status !== 'removed').length === 0),
+  })
 
   const chooseSlashCommand = (item: typeof slashCommands[number]): void => {
     setDraft(`${item.command}${item.acceptsPrompt ? ' ' : ''}`)
@@ -1450,20 +1462,17 @@ function ChatPanel({
           onPrepareArtifacts={onPrepareArtifacts}
         />
       )}
-      {selection && (
-        <div className="selection-slot">
-          <div className="selection-chip">
-            <div><span>Context canvas</span><strong>{selection.label.replace('\n', ' · ')}</strong></div>
-            <button
-              type="button"
-              title="Chat về vùng đang chọn"
-              onClick={() => {
-                setDraft(`Về ${selection.label.replace('\n', ' · ')}: `)
-                requestAnimationFrame(() => composerRef.current?.focus())
-              }}
-            ><MessageSquareText size={15} /></button>
-          </div>
-        </div>
+      {canvasCollaboration && (
+        <CanvasCollaborationPanel
+          copy={canvasCollaboration}
+          busy={sending || approving || artifactBusy || blockedByOtherThread}
+          onDraft={(prompt) => {
+            setDraft(prompt)
+            requestAnimationFrame(() => composerRef.current?.focus())
+          }}
+          onSync={onSyncCanvas}
+          onPromote={onStartPromotion}
+        />
       )}
       <div className="composer">
         {matchingSlashCommands.length > 0 && (
@@ -1601,6 +1610,58 @@ function DeliveryGuide({
 }
 
 const PRIORITY_LABEL: Record<string, string> = { must: 'Must', should: 'Should', could: 'Could', wont: "Won't" }
+
+function CanvasCollaborationPanel({
+  copy,
+  busy,
+  onDraft,
+  onSync,
+  onPromote,
+}: {
+  copy: NonNullable<ReturnType<typeof canvasCollaborationCopy>>
+  busy: boolean
+  onDraft(prompt: string): void
+  onSync(): void
+  onPromote(): Promise<void>
+}): React.JSX.Element {
+  const run = (action: CanvasCollaborationAction): void => {
+    if (action.id === 'sync-canvas') {
+      onSync()
+      return
+    }
+    if (action.id === 'promote-canvas') {
+      void onPromote()
+      return
+    }
+    if (action.draft) onDraft(action.draft)
+  }
+  const icon = (action: CanvasCollaborationAction): React.JSX.Element => {
+    if (action.id === 'sync-canvas') return <RefreshCw size={14} />
+    if (action.id === 'promote-canvas') return <ShieldCheck size={14} />
+    if (action.id === 'refine-selection') return <Pencil size={14} />
+    return <MessageSquareText size={14} />
+  }
+
+  return (
+    <section className="canvas-collaboration-panel" aria-label="Canvas collaboration loop">
+      <header>
+        <div>
+          <strong>{copy.title}</strong>
+          <span>{copy.status}</span>
+        </div>
+      </header>
+      <p>{copy.detail}</p>
+      <div className="canvas-collaboration-actions">
+        {copy.actions.map((action) => (
+          <button type="button" key={action.id} disabled={busy} title={action.detail} onClick={() => run(action)}>
+            {icon(action)}
+            <span><strong>{action.label}</strong><small>{action.detail}</small></span>
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
 
 function ProductSpecOverview({
   productSpec,

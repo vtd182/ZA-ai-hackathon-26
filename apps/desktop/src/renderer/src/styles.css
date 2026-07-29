@@ -913,6 +913,88 @@ a:focus-visible,
   flex: 0 0 auto;
 }
 
+.canvas-collaboration-panel {
+  flex: 0 0 auto;
+  margin: 8px 14px 0;
+  padding: 10px;
+  border: 1px solid #c9dce8;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #f7fbff 0%, #ffffff 100%);
+  box-shadow: var(--shadow-1);
+}
+
+.canvas-collaboration-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.canvas-collaboration-panel header div {
+  min-width: 0;
+}
+
+.canvas-collaboration-panel strong {
+  display: block;
+  color: #27353b;
+  font-size: 10.5px;
+}
+
+.canvas-collaboration-panel header span,
+.canvas-collaboration-panel p,
+.canvas-collaboration-actions small {
+  color: #64747b;
+  font-size: 9.5px;
+}
+
+.canvas-collaboration-panel p {
+  margin: 5px 0 8px;
+  line-height: 14px;
+}
+
+.canvas-collaboration-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 5px;
+}
+
+.canvas-collaboration-actions button {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 6px 7px;
+  border: 1px solid #d5e1e7;
+  border-radius: 6px;
+  color: #23629e;
+  text-align: left;
+  background: #ffffff;
+}
+
+.canvas-collaboration-actions button:hover:not(:disabled) {
+  border-color: #6ca7e9;
+  background: #f4f9ff;
+  box-shadow: 0 0 0 3px var(--brand-ring);
+}
+
+.canvas-collaboration-actions button:disabled {
+  opacity: 0.5;
+}
+
+.canvas-collaboration-actions button span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.canvas-collaboration-actions button strong,
+.canvas-collaboration-actions button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .selection-chip {
   display: flex;
   align-items: center;

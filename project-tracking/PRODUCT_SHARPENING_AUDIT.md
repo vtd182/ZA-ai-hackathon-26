@@ -378,6 +378,11 @@ Intent:
 - **Status note 2026-07-30 update:** artifact approval no longer hides the non-Figma contracts.
   The panel names all kickoff briefs before write approval, helping the user see PRD/backlog are
   governed outputs too, not unchecked side effects.
+- **Status note 2026-07-30 canvas update:** chat now surfaces a `Canvas collaboration loop` panel
+  whenever the thread has canvas content. With a selection, the panel offers `Hỏi vùng này`,
+  `Sửa vùng này` and `Sync vùng chọn`; without a selection it explains canvas as exploration/review
+  and exposes `Sync canvas` plus guarded promotion when applicable. The chat-side sync button calls
+  the same CanvasWorkspace diff/read-back path as the canvas toolbar.
 
 ### `P0-SHARP-007` Demo script and rehearsal matrix
 

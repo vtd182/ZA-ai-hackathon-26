@@ -110,6 +110,21 @@ describe('deterministic demo reset', () => {
     lifecycle.close()
     history.close()
   })
+
+  it('ignores a stale canvas save after demo reset deletes the old thread', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pm-agent-stale-canvas-'))
+    cleanup.push(directory)
+    const history = new HistoryStore(join(directory, 'app.db'))
+    const stale = history.createThread()
+
+    history.resetDemoWorkspace()
+
+    expect(() => history.saveCanvas(stale.id, { store: { stale: true } })).not.toThrow()
+    expect(history.listThreads()).toHaveLength(1)
+    expect(history.listThreads()[0]?.id).toBe(DEMO_THREAD_ID)
+
+    history.close()
+  })
 })
 
 describe('createThread reuses empty threads', () => {

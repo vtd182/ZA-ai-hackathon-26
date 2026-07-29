@@ -35,6 +35,7 @@ interface CanvasWorkspaceProps {
   threadId: string
   snapshot: unknown | null
   programBatch: { id: number; requestId?: string; program: CanvasProgram; source: CanvasExecutionReceipt['source'] }
+  syncRequestId: number
   agentBusy: boolean
   onContextChange(context: CanvasDocumentContext, selection?: CanvasSelectionContext): void
   onExecution(receipt: CanvasExecutionReceipt): Promise<void>
@@ -132,6 +133,7 @@ export function CanvasWorkspace({
   threadId,
   snapshot,
   programBatch,
+  syncRequestId,
   agentBusy,
   onContextChange,
   onExecution,
@@ -252,7 +254,7 @@ export function CanvasWorkspace({
     editorRef.current?.zoomToSelection({ animation: { duration: 220 } })
   }
 
-  const syncCanvas = async (): Promise<void> => {
+  const syncCanvas = useCallback(async (): Promise<void> => {
     const editor = editorRef.current
     if (!editor || syncing) return
     const context = inspectCanvas(editor, revision.current + 1)
@@ -274,7 +276,12 @@ export function CanvasWorkspace({
     } finally {
       setSyncing(false)
     }
-  }
+  }, [emitContext, onSync, showActivity, syncing, threadId])
+
+  useEffect(() => {
+    if (syncRequestId <= 0) return
+    void syncCanvas()
+  }, [syncCanvas, syncRequestId])
 
   const arrangeScene = async (): Promise<void> => {
     const editor = editorRef.current

@@ -301,7 +301,8 @@ export class HistoryStore {
     const timestamp = now()
     const documentId = `canvas:${threadId}`
     this.db.transaction(() => {
-      this.db.prepare('UPDATE conversation_threads SET canvas_snapshot = ?, updated_at = ? WHERE id = ?').run(payload, timestamp, threadId)
+      const updated = this.db.prepare('UPDATE conversation_threads SET canvas_snapshot = ?, updated_at = ? WHERE id = ?').run(payload, timestamp, threadId)
+      if (updated.changes === 0) return
       this.db.prepare(`
         INSERT INTO canvas_documents (id, thread_id, schema_version, created_at, updated_at)
         VALUES (?, ?, 1, ?, ?)

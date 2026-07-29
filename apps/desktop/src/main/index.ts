@@ -2790,7 +2790,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
         await wait(350)
         const manualState = await window.webContents.executeJavaScript(`({
           dirty: Boolean(document.querySelector('.scene-dirty')),
-          feedback: Boolean(document.querySelector('.selection-chip button'))
+          feedback: Boolean(document.querySelector('[aria-label="Canvas collaboration loop"] button'))
         })`) as { dirty: boolean; feedback: boolean }
         lifecycleFlow.manualDirty = manualState.dirty
         lifecycleFlow.selectionFeedbackReady = manualState.feedback
