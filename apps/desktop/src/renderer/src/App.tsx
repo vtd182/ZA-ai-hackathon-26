@@ -6,7 +6,9 @@ import {
   Cable,
   CheckCircle2,
   Maximize2,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   CircleAlert,
   Download,
   ExternalLink,
@@ -610,7 +612,6 @@ export function App(): React.JSX.Element {
     <main className="app-shell">
       <section className="center-panel">
         <header className="topbar">
-          <div className="brand-mark topbar-brand" title="DualMind">DM</div>
           <div className="thread-heading">
             {renamingId === activeThread?.id && activeThread ? (
               <input
@@ -1056,6 +1057,7 @@ function LifecycleStepper({ phase, requirements, canvasItemCount, onStartPromoti
   onStartPromotion(): Promise<void>
   busy: boolean
 }): React.JSX.Element {
+  const [collapsed, setCollapsed] = useState(false)
   const phaseIndex: Record<string, number> = { IDEA_INTAKE: 0, DISCOVERY: 1, DECISION: 2, DELIVERY: 3, CHANGE_IMPACT: 3 }
   const base = phase ? phaseIndex[phase] ?? 0 : 0
   const readyForFigma = phase === 'DELIVERY' && requirements > 0
@@ -1084,22 +1086,30 @@ function LifecycleStepper({ phase, requirements, canvasItemCount, onStartPromoti
   }
 
   return (
-    <section className="lifecycle-stepper" aria-label="Tiến trình lifecycle">
-      <ol className="stepper-track">
-        {LIFECYCLE_STEPS.map((label, index) => (
-          <li key={label} className={index === activeIndex ? 'current' : index < activeIndex ? 'done' : 'todo'}>
-            <span className="stepper-dot">{index < activeIndex ? '✓' : index + 1}</span>
-            <span className="stepper-label">{label}</span>
-          </li>
-        ))}
-      </ol>
-      {hint && (
-        <div className="stepper-hint">
-          <span>{hint}</span>
-          {action && (
-            <button className="stepper-action" disabled={busy} onClick={() => void action!.run()}>{action.label}</button>
+    <section className={collapsed ? 'lifecycle-stepper collapsed' : 'lifecycle-stepper'} aria-label="Tiến trình lifecycle">
+      <button className="stepper-toggle" aria-expanded={!collapsed} onClick={() => setCollapsed((value) => !value)}>
+        <span className="stepper-toggle-label">Bước {activeIndex + 1}/{LIFECYCLE_STEPS.length} · {LIFECYCLE_STEPS[activeIndex]}</span>
+        {collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+      </button>
+      {!collapsed && (
+        <>
+          <ol className="stepper-track">
+            {LIFECYCLE_STEPS.map((label, index) => (
+              <li key={label} className={index === activeIndex ? 'current' : index < activeIndex ? 'done' : 'todo'}>
+                <span className="stepper-dot">{index < activeIndex ? '✓' : index + 1}</span>
+                <span className="stepper-label">{label}</span>
+              </li>
+            ))}
+          </ol>
+          {hint && (
+            <div className="stepper-hint">
+              <span>{hint}</span>
+              {action && (
+                <button className="stepper-action" disabled={busy} onClick={() => void action!.run()}>{action.label}</button>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
     </section>
   )
@@ -1242,21 +1252,6 @@ function ChatPanel({
         </button>
         <CheckCircle2 size={18} className="verified-icon" />
       </div>
-      <div className="selection-slot">
-        {selection && (
-          <div className="selection-chip">
-            <div><span>Context canvas</span><strong>{selection.label.replace('\n', ' · ')}</strong></div>
-            <button
-              type="button"
-              title="Chat về vùng đang chọn"
-              onClick={() => {
-                setDraft(`Về ${selection.label.replace('\n', ' · ')}: `)
-                requestAnimationFrame(() => composerRef.current?.focus())
-              }}
-            ><MessageSquareText size={15} /></button>
-          </div>
-        )}
-      </div>
       <LifecycleStepper
         phase={phase}
         requirements={productSpec?.requirements.filter((item) => item.status !== 'removed').length ?? 0}
@@ -1388,6 +1383,21 @@ function ChatPanel({
           onSend={onSend}
           onPrepareArtifacts={onPrepareArtifacts}
         />
+      )}
+      {selection && (
+        <div className="selection-slot">
+          <div className="selection-chip">
+            <div><span>Context canvas</span><strong>{selection.label.replace('\n', ' · ')}</strong></div>
+            <button
+              type="button"
+              title="Chat về vùng đang chọn"
+              onClick={() => {
+                setDraft(`Về ${selection.label.replace('\n', ' · ')}: `)
+                requestAnimationFrame(() => composerRef.current?.focus())
+              }}
+            ><MessageSquareText size={15} /></button>
+          </div>
+        </div>
       )}
       <div className="composer">
         {matchingSlashCommands.length > 0 && (

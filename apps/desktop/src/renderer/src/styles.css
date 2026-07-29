@@ -2638,7 +2638,7 @@ a:focus-visible,
 .thread-title-button .rename-hint {
   flex: 0 0 auto;
   color: var(--muted, #8a969b);
-  opacity: 0;
+  opacity: 0.55;
   transition: opacity 120ms ease;
 }
 
@@ -2894,4 +2894,38 @@ a:focus-visible,
   color: #45535a;
   font-size: 12px;
   line-height: 1.5;
+}
+
+/* ===== Collapsible lifecycle stepper ===== */
+.stepper-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+  padding: 2px 2px 6px;
+  border: 0;
+  background: transparent;
+  color: #45535a;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.stepper-toggle-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.lifecycle-stepper.collapsed {
+  padding-bottom: 6px;
+}
+
+.lifecycle-stepper.collapsed .stepper-toggle {
+  padding-bottom: 2px;
+}
+
+/* Selection chip now sits directly above the composer — small gap so it reads as attached. */
+.selection-slot {
+  margin-bottom: 2px;
 }

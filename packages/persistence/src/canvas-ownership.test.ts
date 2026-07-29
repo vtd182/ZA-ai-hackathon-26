@@ -15,8 +15,10 @@ describe('CanvasDocument ownership', () => {
     const filename = join(directory, 'app.db')
     let history = new HistoryStore(filename)
     const a = history.createThread()
-    // Give thread A content before opening B: createThread reuses an untouched empty
-    // thread, so B is only a distinct thread once A is no longer blank.
+    // Give thread A a real message before opening B: createThread reuses any thread with no
+    // messages (a blank canvas alone is not a conversation), so B is a distinct thread only
+    // once A actually holds a conversation.
+    history.addMessage(a.id, 'user', 'seed A')
     history.saveCanvas(a.id, { entity: 'A-v1' })
     const b = history.createThread()
     history.saveCanvas(a.id, { entity: 'A-v2' })
