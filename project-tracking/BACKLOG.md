@@ -162,6 +162,8 @@
 - **Deliver:** implement một trong OpenAI Responses, Gemini Interactions hoặc Anthropic Messages theo native API, được chọn dựa trên credential sẵn có.
 - **Acceptance:** pass provider conformance kit; có structured output, streaming/cancel, usage và handoff sang/từ Mock.
 - **Progress:** native OpenAI Responses, Gemini và Anthropic adapters đã implement structured output/cancel cơ bản; chưa chọn/live-test release slot, chưa normalize usage/stream và chưa pass conformance/handoff.
+- **Progress:** 2026-07-29 AgentRouter integration hardened against the China docs at `docs.agentrouter.org`: UI exposes the three account models (`gpt-5.6-sol`, `claude-opus-4-8`, `claude-opus-5`), the adapter uses a Codex Responses bridge to `https://agentrouter.org/v1` instead of raw SDK calls, and `AGENT_ROUTER_TOKEN` is the primary env var. Live `gpt-5.6-sol` provider contract test passed.
+- **Remaining:** `claude-opus-4-8` and `claude-opus-5` selected through the Codex Responses bridge returned repeated reconnect/high-demand errors in manual tests; a Claude-Code-compatible wire adapter remains a follow-up if those models must be reliable in-app.
 
 ### `P0-HIS-001` Thread, turn and message repositories
 
@@ -519,6 +521,8 @@
 - **Depends on:** P0-DEM-001, P0-QA-003
 - **Deliver:** macOS package, demo script, backup screenshots/video, timing notes.
 - **Acceptance:** clean-profile smoke test pass; full demo nằm trong timebox đã chọn.
+- **Progress:** GitHub Release outputs now include installer-embedded minimal packaged skill packs + Figma MCP/plugin runtime, plus standalone `za-talk-to-figma-<os>-<arch>.tar.gz` bundles per OS. Local `./run.sh dist` rebuilt Go/plugin and produced `apps/desktop/release/ZSpector-0.1.1-arm64.dmg` and `.dmg.blockmap` with no `.lock`; packaged app resources contain only minimal plugin manifest/dist plus runtime binary.
+- **Remaining:** clean-profile installed-app smoke and final timed demo rehearsal after the `v0.1.1` GitHub release run completes.
 
 ## P1 sau khi P0 ổn định
 

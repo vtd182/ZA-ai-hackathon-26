@@ -54,15 +54,21 @@ no-source, plus a no-host-path-leak assertion).
 
 ## Packaging checklist
 
-1. `pnpm build && pnpm package:assets` → produces `apps/desktop/out/package-resources/`
-   containing `skill-packs/` (Figma craft + canvas skill + helper) and `README.md`.
-2. The packager (electron-builder, still TODO — `P0-DEM-002`) must copy
-   `out/package-resources/*` into Electron `process.resourcesPath` so that, on the target:
+1. `./run.sh dist` or CI release builds the Figma MCP binary/plugin first, then runs
+   `node scripts/prepare-package-assets.mjs --strict-figma`.
+2. `apps/desktop/out/package-resources/` contains `skill-packs/`, `figma-runtime/`
+   and `README.md`. The Figma runtime folder is intentionally minimal: binary,
+   `plugin/manifest.json`, `plugin/dist/code.js` and `plugin/dist/index.html`.
+3. electron-builder copies `out/package-resources/*` into Electron `process.resourcesPath`
+   so that, on the target:
    - `resources/skill-packs/pm-lifecycle-figma-design/SKILL.md` exists (Figma worker), and
-   - `resources/skill-packs/pm-lifecycle-canvas/SKILL.md` exists (canvas installer source).
-3. First launch on the new machine auto-installs `~/.claude/skills/pm-lifecycle-canvas`.
+   - `resources/skill-packs/pm-lifecycle-canvas/SKILL.md` exists (canvas installer source), and
+   - `resources/figma-runtime/plugin/manifest.json` plus the OS binary exist.
+4. GitHub Release also attaches `za-talk-to-figma-<os>-<arch>.tar.gz` as a standalone
+   MCP/plugin bundle for users who want to import/run the bridge outside the app.
+5. First launch on the new machine auto-installs `~/.claude/skills/pm-lifecycle-canvas`.
    Nothing else is required for the AI-on-canvas surface.
-4. Target machine needs `node` and `curl` on PATH for the helper (both are already
+6. Target machine needs `node` and `curl` on PATH for the helper (both are already
    assumed by the project toolchain).
 
 ## AI-on-canvas for developers

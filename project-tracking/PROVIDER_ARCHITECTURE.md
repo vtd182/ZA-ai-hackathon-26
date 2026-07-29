@@ -216,6 +216,15 @@ For local-first/privacy-sensitive mode, prefer stateless requests or disable pro
 - Use strict tool/structured output where available, then run domain validation.
 - Use prompt cache breakpoints for stable tool/system prefixes, without making cache state a correctness dependency.
 
+### AgentRouter gateway profile
+
+- The shipped `agentrouter` profile uses the China AgentRouter docs endpoint `https://agentrouter.org/v1`.
+- UI exposes the account's three allowed models: `gpt-5.6-sol`, `claude-opus-4-8` and `claude-opus-5`.
+- Direct generic OpenAI/Anthropic SDK calls are not a working integration path in live tests; AgentRouter returned `unauthorized client detected`.
+- The working path verified on 2026-07-29 is Codex CLI/Responses bridge with `wire_api = "responses"` and `AGENT_ROUTER_TOKEN`, which returned `OK` for `gpt-5.6-sol`.
+- `claude-opus-4-8` and `claude-opus-5` are selectable but returned repeated reconnect/high-demand errors through the Codex/Responses bridge in the same test session. Keep the UX honest and surface provider errors instead of silently falling back to another model.
+- `AGENTROUTER_BASE_URL` may override the endpoint only when it still resolves to an AgentRouter `/v1` base URL.
+
 ## 10. Configuration and credentials
 
 ```ts
@@ -262,3 +271,6 @@ Every adapter must pass:
 - [Anthropic Messages API](https://platform.claude.com/docs/en/api/messages/create)
 - [Anthropic streaming](https://platform.claude.com/docs/en/build-with-claude/streaming)
 - [Anthropic structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
+- [AgentRouter Pi integration guide](https://docs.agentrouter.org/pi.html)
+- [AgentRouter Codex integration guide](https://docs.agentrouter.org/codex.html)
+- [AgentRouter Claude Code integration guide](https://docs.agentrouter.org/claude-code.html)

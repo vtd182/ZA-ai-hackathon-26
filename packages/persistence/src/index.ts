@@ -66,8 +66,16 @@ const defaultProfiles: Omit<ProviderProfile, 'hasCredential'>[] = [
   { id: 'openai-api', providerId: 'openai', displayName: 'OpenAI API', modelId: 'gpt-5.6-sol', costMode: 'api_paid', enabled: true },
   { id: 'gemini-api', providerId: 'gemini', displayName: 'Gemini API', modelId: 'gemini-3-flash-preview', costMode: 'api_paid', enabled: true },
   { id: 'anthropic-api', providerId: 'anthropic', displayName: 'Claude API', modelId: 'claude-sonnet-4-6', costMode: 'api_paid', enabled: true },
-  { id: 'agentrouter-api', providerId: 'agentrouter', displayName: 'AgentRouter', modelId: 'claude-opus-4-8', costMode: 'api_paid', enabled: true },
+  { id: 'agentrouter-api', providerId: 'agentrouter', displayName: 'AgentRouter', modelId: 'gpt-5.6-sol', costMode: 'api_paid', enabled: true },
 ]
+
+const modelOptionsByProfile: Record<string, ProviderProfile['modelOptions']> = {
+  'agentrouter-api': [
+    { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol', detail: 'AgentRouter / Codex Responses bridge' },
+    { id: 'claude-opus-4-8', label: 'claude-opus-4-8', detail: 'AgentRouter account model; availability depends on upstream load' },
+    { id: 'claude-opus-5', label: 'claude-opus-5', detail: 'AgentRouter account model; availability depends on upstream load' },
+  ],
+}
 
 export const DEMO_FIXTURE_VERSION = 1 as const
 export const DEMO_THREAD_ID = 'demo:meal-ordering:v1'
@@ -390,14 +398,19 @@ export class HistoryStore {
 
   listProfiles(): Omit<ProviderProfile, 'hasCredential'>[] {
     const rows = this.db.prepare('SELECT * FROM provider_profiles WHERE enabled = 1 ORDER BY sort_order ASC').all() as ProfileRow[]
-    return rows.map((row) => ({
-      id: row.id,
-      providerId: row.provider_id,
-      displayName: row.display_name,
-      modelId: row.model_id,
-      costMode: row.cost_mode,
-      enabled: Boolean(row.enabled),
-    }))
+    return rows.map((row) => {
+      const profile: Omit<ProviderProfile, 'hasCredential'> = {
+        id: row.id,
+        providerId: row.provider_id,
+        displayName: row.display_name,
+        modelId: row.model_id,
+        costMode: row.cost_mode,
+        enabled: Boolean(row.enabled),
+      }
+      const modelOptions = modelOptionsByProfile[row.id]
+      if (modelOptions) profile.modelOptions = modelOptions
+      return profile
+    })
   }
 
   getProfile(profileId: string): Omit<ProviderProfile, 'hasCredential'> {
@@ -540,10 +553,17 @@ export class HistoryStore {
       UPDATE conversation_threads SET model_id = 'gpt-5.5'
       WHERE provider_id = 'codex-local' AND model_id = 'gpt-5.6-sol'
     `).run()
-    // Migrate the AgentRouter default model to claude-opus-4-8 for DBs seeded with the old gpt-5.
     this.db.prepare(`
-      UPDATE provider_profiles SET model_id = 'claude-opus-4-8'
-      WHERE id = 'agentrouter-api' AND model_id = 'gpt-5'
+      UPDATE provider_profiles SET display_name = 'AgentRouter'
+      WHERE id = 'agentrouter-api'
+    `).run()
+    this.db.prepare(`
+      UPDATE provider_profiles SET model_id = 'gpt-5.6-sol'
+      WHERE id = 'agentrouter-api' AND model_id IN ('gpt-5', 'gpt-5.5')
+    `).run()
+    this.db.prepare(`
+      UPDATE conversation_threads SET model_id = 'gpt-5.6-sol'
+      WHERE provider_id = 'agentrouter-api' AND model_id IN ('gpt-5', 'gpt-5.5')
     `).run()
   }
 

@@ -189,15 +189,16 @@ Quy tắc vẽ flow (đầy đủ + dễ nhìn) ở [`skills/pm-lifecycle-canvas
 Build cho **hệ điều hành hiện tại** (electron‑builder tự nhận OS):
 
 ```bash
-pnpm --filter @pm-agent/desktop run dist
+./run.sh dist
 ```
 
 - macOS → `apps/desktop/release/ZSpector-<version>-arm64.dmg`
 - Windows → `apps/desktop/release/ZSpector Setup <version>.exe`
+- Standalone Figma runtime/plugin bundle → `apps/desktop/release/za-talk-to-figma-<os>-<arch>.tar.gz` in CI
 
 **Cài trên macOS:** mở `.dmg` → kéo **ZSpector** vào Applications. App **chưa ký** → lần đầu **chuột phải → Open** (Gatekeeper).
 
-Đóng gói gồm: app bundle + native `better-sqlite3` (asar‑unpack) + `resources/skill-packs` + `resources/figma-runtime` (binary Go + plugin, đúng theo OS). Icon lấy từ `build/icon.icns` (mac) / `build/icon.png` → `.ico` (win).
+Đóng gói gồm: app bundle + native `better-sqlite3` (asar‑unpack) + `resources/skill-packs` + `resources/figma-runtime` (binary Go + plugin minimal: `manifest.json`, `dist/code.js`, `dist/index.html`, đúng theo OS). Icon lấy từ `build/icon.icns` (mac) / `build/icon.png` → `.ico` (win).
 
 > Ký/notarize để phân phối rộng cần **Apple Developer ID** — bổ sung `mac.identity` + notarize khi có cert.
 
@@ -221,8 +222,9 @@ git push origin v0.1.1
 Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) sẽ:
 1. Build runtime **Go** cho từng OS (`za-talk-to-figma` / `.exe`).
 2. Build **plugin Figma** bundle.
-3. Chạy `electron-vite build` + `electron-builder --publish always` trên **macos-latest** và **windows-latest**.
-4. Tạo/ cập nhật **GitHub Release** của tag, đính kèm `.dmg` (macOS) + `Setup .exe` (Windows) + `blockmap`/`latest.yml`.
+3. Chuẩn bị packaged resources gồm skill packs + Figma runtime/plugin minimal.
+4. Chạy `electron-vite build` + `electron-builder --publish always` trên **macos-latest** và **windows-latest**.
+5. Tạo/ cập nhật **GitHub Release** của tag, đính kèm `.dmg` (macOS) + `Setup .exe` (Windows) + `blockmap`/`latest.yml` + `za-talk-to-figma-<os>-<arch>.tar.gz`.
 
 > Bản `release/` là build artifact (đã gitignore) — không commit; luôn build lại qua tag hoặc `run dist`.
 

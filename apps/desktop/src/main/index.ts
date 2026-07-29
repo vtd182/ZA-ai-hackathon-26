@@ -118,7 +118,7 @@ const providerEnv: Record<string, string> = {
   openai: 'OPENAI_API_KEY',
   gemini: 'GEMINI_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
-  agentrouter: 'AGENTROUTER_API_KEY',
+  agentrouter: 'AGENT_ROUTER_TOKEN',
 }
 const moduleDirectory = dirname(fileURLToPath(import.meta.url))
 

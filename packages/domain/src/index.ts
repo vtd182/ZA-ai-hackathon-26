@@ -211,6 +211,7 @@ export interface ProviderProfile {
   providerId: string
   displayName: string
   modelId: string
+  modelOptions?: Array<{ id: string; label: string; detail?: string }>
   costMode: 'mock' | 'subscription' | 'api_paid'
   hasCredential: boolean
   enabled: boolean

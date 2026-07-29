@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { createScaffoldFigmaBlueprint, ProviderRegistry, inferLocalCommands } from './index'
+import {
+  createScaffoldFigmaBlueprint,
+  DEFAULT_AGENTROUTER_OPENAI_BASE_URL,
+  ProviderRegistry,
+  inferLocalCommands,
+  resolveAgentRouterOpenAIBaseURL,
+} from './index'
 import { parseProductSpec } from '@pm-agent/domain'
 
 const creativeTestSpec = parseProductSpec({
@@ -38,6 +44,16 @@ const creativeTestSpec = parseProductSpec({
 })
 
 describe('mock provider command inference', () => {
+  it('uses the official AgentRouter OpenAI-compatible endpoint', () => {
+    expect(resolveAgentRouterOpenAIBaseURL('')).toBe(DEFAULT_AGENTROUTER_OPENAI_BASE_URL)
+    expect(resolveAgentRouterOpenAIBaseURL('https://agentrouter.org/v1/')).toBe(DEFAULT_AGENTROUTER_OPENAI_BASE_URL)
+  })
+
+  it('rejects the Anthropic-compatible AgentRouter endpoint for the OpenAI-compatible profile', () => {
+    expect(() => resolveAgentRouterOpenAIBaseURL('https://agentrouter.org'))
+      .toThrow(/OpenAI-compatible.*\/v1/)
+  })
+
   it('maps Vietnamese remove-payment intent', () => {
     const result = inferLocalCommands('Bỏ payment khỏi MVP')
     expect(result.commands).toEqual([{ type: 'remove_card', query: 'payment' }])
@@ -102,6 +118,21 @@ describe('mock provider command inference', () => {
     expect(response.events.map((event) => event.sequence)).toEqual([0, 1, 2, 3])
     expect(response.capabilities).toEqual(provider.capabilities)
   })
+
+  it.skipIf(process.env.PM_AGENT_AGENTROUTER_LIVE !== '1')('runs AgentRouter through the Codex Responses bridge', async () => {
+    const provider = new ProviderRegistry().get('agentrouter')
+    const response = await provider.reason({
+      threadId: 'THREAD',
+      phase: 'discover',
+      message: 'Tôi đang nghĩ về một mini app đặt xe sân bay.',
+      recentMessages: [],
+      responseMode: 'route',
+      remoteRef: null,
+    }, { modelId: 'gpt-5.6-sol' }, AbortSignal.timeout(150_000))
+
+    expect(response.result.intent.kind).toBeTruthy()
+    expect(response.result.message.length).toBeGreaterThan(0)
+  }, 180_000)
 
   it('treats a canvas selection as conversation context instead of implicit edit permission', async () => {
     const provider = new ProviderRegistry().get('mock')

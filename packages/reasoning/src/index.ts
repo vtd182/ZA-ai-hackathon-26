@@ -1,4 +1,7 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { promisify } from 'node:util'
 import Anthropic from '@anthropic-ai/sdk'
 import { GoogleGenAI } from '@google/genai'
@@ -95,6 +98,24 @@ const openAiCapabilities: ProviderCapabilities = { structuredOutput: true, strea
 const geminiCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: false, remoteResume: false, usage: true }
 const anthropicCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: true, remoteResume: false, usage: true }
 const agentRouterCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: true, remoteResume: false, usage: true }
+
+export const DEFAULT_AGENTROUTER_OPENAI_BASE_URL = 'https://agentrouter.org/v1'
+
+export function resolveAgentRouterOpenAIBaseURL(value = process.env.AGENTROUTER_BASE_URL): string {
+  const baseURL = (value?.trim() || DEFAULT_AGENTROUTER_OPENAI_BASE_URL).replace(/\/+$/, '')
+  if (!/\/v1$/i.test(baseURL)) {
+    throw new Error(
+      'AgentRouter OpenAI-compatible profile cần base URL kết thúc bằng /v1. '
+      + 'Dùng https://agentrouter.org/v1 cho Codex/Responses bridge; Claude/Anthropic-compatible '
+      + 'raw requests đang bị AgentRouter WAF giới hạn theo client.',
+    )
+  }
+  return baseURL
+}
+
+function agentRouterCredential(apiKey: string | undefined): string | undefined {
+  return apiKey || process.env.AGENT_ROUTER_TOKEN || process.env.AGENTROUTER_API_KEY
+}
 
 const systemPolicy = `Bạn là reasoning provider cho PM Lifecycle Agent.
 Mục tiêu: giúp PM biến ý tưởng thành ProductSpec có traceability và thay đổi scope có kiểm soát.
@@ -748,42 +769,87 @@ class OpenAIProvider implements ReasoningProvider {
   }
 }
 
-// AgentRouter (https://agentrouter.org) is an OpenAI-compatible gateway to 30+ models. We reuse
-// the OpenAI SDK pointed at its /v1 base URL and use chat.completions + json_schema, which is the
-// broadly-supported structured-output path across the aggregated models.
+function tomlString(value: string): string {
+  return JSON.stringify(value)
+}
+
+function createAgentRouterCodexHome(modelId: string): string {
+  const codexHome = mkdtempSync(join(tmpdir(), 'pm-agent-agentrouter-codex-'))
+  writeFileSync(join(codexHome, 'config.toml'), [
+    `model = ${tomlString(modelId)}`,
+    'model_provider = "agentrouter-responses"',
+    'preferred_auth_method = "apikey"',
+    'approval_policy = "never"',
+    'sandbox_mode = "read-only"',
+    '',
+    '[model_providers.agentrouter-responses]',
+    'name = "AgentRouter Responses"',
+    `base_url = ${tomlString(resolveAgentRouterOpenAIBaseURL())}`,
+    'env_key = "AGENT_ROUTER_TOKEN"',
+    'wire_api = "responses"',
+    'query_params = {}',
+    'stream_idle_timeout_ms = 300000',
+    '',
+  ].join('\n'))
+  return codexHome
+}
+
+// AgentRouter blocks generic SDK-style clients with "unauthorized client detected" in live tests.
+// The integration path that currently works is Codex CLI/app-server with an AgentRouter Responses
+// provider config, so this adapter keeps the UI as AgentRouter while using Codex only as transport.
 class AgentRouterProvider implements ReasoningProvider {
   readonly id = 'agentrouter'
   readonly capabilities = agentRouterCapabilities
-  private static readonly baseURL = 'https://agentrouter.org/v1'
 
   async probe(config: ProviderRuntimeConfig): Promise<ProviderProbe> {
-    return credentialProbe(config.apiKey, 'AGENTROUTER_API_KEY', 'AgentRouter API key', this.capabilities)
+    const hasKey = Boolean(agentRouterCredential(config.apiKey))
+    if (!hasKey) {
+      return {
+        available: false,
+        label: 'Thiếu API key',
+        detail: 'Nhập AgentRouter API key trong Settings hoặc đặt AGENT_ROUTER_TOKEN.',
+        capabilities: this.capabilities,
+      }
+    }
+    try {
+      const { stdout } = await execFileAsync('codex', ['--version'], { timeout: 5_000 })
+      return {
+        available: true,
+        label: 'Sẵn sàng',
+        detail: `AgentRouter qua Codex Responses bridge · ${stdout.trim()}`,
+        capabilities: this.capabilities,
+      }
+    } catch {
+      return {
+        available: false,
+        label: 'Thiếu Codex CLI',
+        detail: 'AgentRouter cần Codex CLI local để đi đúng wire Responses mà AgentRouter chấp nhận.',
+        capabilities: this.capabilities,
+      }
+    }
   }
 
   async reason(request: ReasoningRequest, config: ProviderRuntimeConfig, signal: AbortSignal): Promise<ProviderResponse> {
-    const apiKey = requiredCredential(config.apiKey, 'AGENTROUTER_API_KEY')
-    const client = new OpenAI({ apiKey, baseURL: AgentRouterProvider.baseURL })
-    let completion
+    const apiKey = agentRouterCredential(config.apiKey)
+    if (!apiKey) throw new Error('Thiếu credential: AGENT_ROUTER_TOKEN')
+    const codexHome = createAgentRouterCodexHome(config.modelId)
     try {
-      completion = await withProviderDeadline(signal, providerTimeoutMs(request), (deadlineSignal) => client.chat.completions.create({
-        model: config.modelId,
-        messages: [{ role: 'user', content: buildPrompt(request) }],
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'pm_lifecycle_reasoning',
-            strict: true,
-            schema: outputSchemaFor(request),
-          },
+      return await reasonWithCodexAppServer({
+        request,
+        config,
+        signal,
+        capabilities: this.capabilities,
+        env: {
+          CODEX_HOME: codexHome,
+          AGENT_ROUTER_TOKEN: apiKey,
         },
-      }, { signal: deadlineSignal }))
+        persistRemoteRef: false,
+      })
     } catch (error) {
       throw agentRouterError(error, config.modelId)
+    } finally {
+      rmSync(codexHome, { recursive: true, force: true })
     }
-    const text = completion.choices[0]?.message?.content ?? ''
-    return normalizedParsedResponse(parseProviderOutput(text, request), completion.id, this.capabilities, completion.usage
-      ? { inputTokens: completion.usage.prompt_tokens, outputTokens: completion.usage.completion_tokens }
-      : undefined)
   }
 }
 
@@ -796,14 +862,17 @@ function agentRouterError(error: unknown, modelId: string): Error {
   if (/content[-_]blocked/i.test(code) || /content[-_]blocked/i.test(detail)) {
     return new Error(
       `AgentRouter chặn request (content-blocked). Thường do model "${modelId}" KHÔNG nằm trong gói của API key hiện tại, `
-      + 'hoặc nội dung bị moderation. Hãy đổi model sang một model được phép trong console AgentRouter (agentrouter.org/console).',
+      + 'hoặc nội dung bị moderation. Hãy đổi model sang một model được phép trong catalog AgentRouter.',
     )
   }
   if (e?.status === 401 || e?.status === 403 || /unauthor|invalid.*key|permission/i.test(detail)) {
-    return new Error('AgentRouter từ chối xác thực/quyền — kiểm tra AGENTROUTER_API_KEY và quyền truy cập model.')
+    return new Error('AgentRouter từ chối xác thực/quyền — kiểm tra AGENT_ROUTER_TOKEN/API key và quyền truy cập model.')
   }
   if (e?.status === 404 || /model.*not.*found|no.*such.*model/i.test(detail)) {
-    return new Error(`AgentRouter không tìm thấy model "${modelId}" — đặt lại model theo catalog AgentRouter.`)
+    return new Error(
+      `AgentRouter không tìm thấy model "${modelId}" — đặt lại model theo catalog AgentRouter. `
+      + 'Profile này dùng Codex Responses bridge tới https://agentrouter.org/v1.',
+    )
   }
   return new Error(`AgentRouter lỗi ${e?.status ?? ''}: ${detail}`)
 }
@@ -880,8 +949,8 @@ class CodexRpcClient {
   private buffer = ''
   private nextId = 1
 
-  constructor() {
-    this.child = spawn('codex', ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'] })
+  constructor(env?: NodeJS.ProcessEnv) {
+    this.child = spawn('codex', ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...env } })
     this.child.stdout.setEncoding('utf8')
     this.child.stdout.on('data', (chunk: string) => this.consume(chunk))
     this.child.on('error', (error) => this.rejectAll(error))
@@ -949,6 +1018,78 @@ class CodexRpcClient {
   }
 }
 
+async function reasonWithCodexAppServer(input: {
+  request: ReasoningRequest
+  config: ProviderRuntimeConfig
+  signal: AbortSignal
+  capabilities: ProviderCapabilities
+  env?: NodeJS.ProcessEnv
+  persistRemoteRef: boolean
+}): Promise<ProviderResponse> {
+  const { request, config, signal, capabilities, env, persistRemoteRef } = input
+  const client = new CodexRpcClient(env)
+  const abort = (): void => client.stop()
+  signal.addEventListener('abort', abort, { once: true })
+  try {
+    await client.initialize()
+    let threadId = persistRemoteRef ? request.remoteRef : null
+    if (threadId) {
+      try {
+        await client.request('thread/resume', {
+          threadId,
+          model: config.modelId,
+          cwd: process.cwd(),
+          approvalPolicy: 'never',
+          sandbox: 'read-only',
+          baseInstructions: systemPolicy,
+        })
+      } catch {
+        threadId = null
+      }
+    }
+    if (!threadId) {
+      const started = await client.request('thread/start', {
+        model: config.modelId,
+        cwd: process.cwd(),
+        approvalPolicy: 'never',
+        sandbox: 'read-only',
+        ephemeral: !persistRemoteRef,
+        baseInstructions: `${systemPolicy}\nKhông đọc file, không chạy command và không gọi tool.`,
+      }) as { thread: { id: string } }
+      threadId = started.thread.id
+    }
+
+    let output = ''
+    const completed = new Promise<void>((resolve, reject) => {
+      const timeoutMs = request.responseMode === 'figma' ? 10 * 60_000 : 120_000
+      const timeout = setTimeout(() => reject(new Error(`Codex timeout sau ${Math.round(timeoutMs / 60_000)} phút`)), timeoutMs)
+      const unsubscribe = client.onNotification((notification) => {
+        const method = notification.method
+        const params = notification.params as JsonObject | undefined
+        if (params?.threadId !== threadId) return
+        if (method === 'item/agentMessage/delta' && typeof params.delta === 'string') output += params.delta
+        if (method === 'turn/completed') {
+          clearTimeout(timeout)
+          unsubscribe()
+          const turn = params.turn as JsonObject | undefined
+          if (turn?.status === 'failed') reject(new Error(`Codex turn failed: ${JSON.stringify(turn.error)}`))
+          else resolve()
+        }
+      })
+    })
+    await client.request('turn/start', {
+      threadId,
+      input: [{ type: 'text', text: buildPrompt(request), text_elements: [] }],
+      outputSchema: outputSchemaFor(request),
+    })
+    await completed
+    return normalizedParsedResponse(parseProviderOutput(output, request), persistRemoteRef ? threadId : null, capabilities)
+  } finally {
+    signal.removeEventListener('abort', abort)
+    client.stop()
+  }
+}
+
 class CodexProvider implements ReasoningProvider {
   readonly id = 'codex'
   readonly capabilities = codexCapabilities
@@ -963,67 +1104,7 @@ class CodexProvider implements ReasoningProvider {
   }
 
   async reason(request: ReasoningRequest, config: ProviderRuntimeConfig, signal: AbortSignal): Promise<ProviderResponse> {
-    const client = new CodexRpcClient()
-    const abort = (): void => client.stop()
-    signal.addEventListener('abort', abort, { once: true })
-    try {
-      await client.initialize()
-      let threadId = request.remoteRef
-      if (threadId) {
-        try {
-          await client.request('thread/resume', {
-            threadId,
-            model: config.modelId,
-            cwd: process.cwd(),
-            approvalPolicy: 'never',
-            sandbox: 'read-only',
-            baseInstructions: systemPolicy,
-          })
-        } catch {
-          threadId = null
-        }
-      }
-      if (!threadId) {
-        const started = await client.request('thread/start', {
-          model: config.modelId,
-          cwd: process.cwd(),
-          approvalPolicy: 'never',
-          sandbox: 'read-only',
-          ephemeral: false,
-          baseInstructions: `${systemPolicy}\nKhông đọc file, không chạy command và không gọi tool.`,
-        }) as { thread: { id: string } }
-        threadId = started.thread.id
-      }
-
-      let output = ''
-      const completed = new Promise<void>((resolve, reject) => {
-        const timeoutMs = request.responseMode === 'figma' ? 10 * 60_000 : 120_000
-        const timeout = setTimeout(() => reject(new Error(`Codex timeout sau ${Math.round(timeoutMs / 60_000)} phút`)), timeoutMs)
-        const unsubscribe = client.onNotification((notification) => {
-          const method = notification.method
-          const params = notification.params as JsonObject | undefined
-          if (params?.threadId !== threadId) return
-          if (method === 'item/agentMessage/delta' && typeof params.delta === 'string') output += params.delta
-          if (method === 'turn/completed') {
-            clearTimeout(timeout)
-            unsubscribe()
-            const turn = params.turn as JsonObject | undefined
-            if (turn?.status === 'failed') reject(new Error(`Codex turn failed: ${JSON.stringify(turn.error)}`))
-            else resolve()
-          }
-        })
-      })
-      await client.request('turn/start', {
-        threadId,
-        input: [{ type: 'text', text: buildPrompt(request), text_elements: [] }],
-        outputSchema: outputSchemaFor(request),
-      })
-      await completed
-      return normalizedParsedResponse(parseProviderOutput(output, request), threadId, this.capabilities)
-    } finally {
-      signal.removeEventListener('abort', abort)
-      client.stop()
-    }
+    return reasonWithCodexAppServer({ request, config, signal, capabilities: this.capabilities, persistRemoteRef: true })
   }
 }
 

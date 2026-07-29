@@ -1824,8 +1824,19 @@ function ProviderSettings({
         </header>
         <label>
           <span>Model ID</span>
-          <input value={modelId} onChange={(event) => setModelId(event.target.value)} />
+          {profile.modelOptions?.length
+            ? (
+              <select value={modelId} onChange={(event) => setModelId(event.target.value)} aria-label="Provider model">
+                {profile.modelOptions.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            )
+            : <input value={modelId} onChange={(event) => setModelId(event.target.value)} />}
         </label>
+        {profile.modelOptions?.find((option) => option.id === modelId)?.detail && (
+          <div className="privacy-note">{profile.modelOptions.find((option) => option.id === modelId)?.detail}</div>
+        )}
         {needsKey && (
           <label>
             <span>API key</span>

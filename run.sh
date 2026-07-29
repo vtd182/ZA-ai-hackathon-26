@@ -79,6 +79,10 @@ case "$MODE" in
     "${PNPM[@]}" build
     "${PNPM[@]}" package:assets
     ;;
+  dist)
+    prepare_figma
+    "${PNPM[@]}" --filter @pm-agent/desktop run dist
+    ;;
   smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas|smoke-ambiguity|smoke-flow|smoke-canvas-agent|smoke-codex-canvas)
     unset ELECTRON_RUN_AS_NODE
     "${PNPM[@]}" build
@@ -134,7 +138,7 @@ case "$MODE" in
     exec "${PNPM[@]}" typecheck
     ;;
   *)
-    echo "Usage: ./run.sh [setup|dev|reset|build|test|typecheck|smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas|smoke-ambiguity|smoke-flow|smoke-canvas-agent|smoke-codex-canvas]" >&2
+    echo "Usage: ./run.sh [setup|dev|reset|build|dist|test|typecheck|smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas|smoke-ambiguity|smoke-flow|smoke-canvas-agent|smoke-codex-canvas]" >&2
     exit 2
     ;;
 esac

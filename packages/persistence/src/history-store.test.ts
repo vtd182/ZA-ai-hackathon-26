@@ -10,6 +10,43 @@ const cleanup: string[] = []
 afterEach(() => cleanup.splice(0).forEach((directory) => rmSync(directory, { recursive: true, force: true })))
 
 describe('deterministic demo reset', () => {
+  it('seeds AgentRouter with the allowed model choices', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pm-agent-agentrouter-'))
+    cleanup.push(directory)
+    const history = new HistoryStore(join(directory, 'app.db'))
+
+    expect(history.getProfile('agentrouter-api')).toMatchObject({
+      displayName: 'AgentRouter',
+      modelId: 'gpt-5.6-sol',
+      modelOptions: [
+        { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol', detail: expect.any(String) },
+        { id: 'claude-opus-4-8', label: 'claude-opus-4-8', detail: expect.any(String) },
+        { id: 'claude-opus-5', label: 'claude-opus-5', detail: expect.any(String) },
+      ],
+    })
+
+    history.close()
+  })
+
+  it('migrates old generic AgentRouter defaults to the account model while preserving Claude choices', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pm-agent-agentrouter-legacy-'))
+    cleanup.push(directory)
+    const filename = join(directory, 'app.db')
+    const first = new HistoryStore(filename)
+    first.configureProfile('agentrouter-api', 'gpt-5.5')
+    const thread = first.createThread()
+    first.setThreadProvider(thread.id, 'agentrouter-api')
+    first.close()
+
+    const reopened = new HistoryStore(filename)
+    expect(reopened.getProfile('agentrouter-api')).toMatchObject({
+      displayName: 'AgentRouter',
+      modelId: 'gpt-5.6-sol',
+    })
+    expect(reopened.getThread(thread.id).modelId).toBe('gpt-5.6-sol')
+    reopened.close()
+  })
+
   it('replaces history and cascading lifecycle state with the same versioned fixture', () => {
     const directory = mkdtempSync(join(tmpdir(), 'pm-agent-reset-'))
     cleanup.push(directory)

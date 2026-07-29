@@ -56,12 +56,26 @@ jobs:
           pnpm install --no-frozen-lockfile
           pnpm build
 
+      - name: Prepare packaged resources
+        run: node scripts/prepare-package-assets.mjs --strict-figma
+
+      - name: Package standalone Figma runtime
+        shell: bash
+        run: |
+          mkdir -p apps/desktop/release
+          tar -czf "apps/desktop/release/za-talk-to-figma-${RUNNER_OS}-${RUNNER_ARCH}.tar.gz" \
+            -C apps/desktop/out/package-resources figma-runtime
+
       - name: Build + publish ZSpector
         working-directory: apps/desktop
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node ../../scripts/prepare-package-assets.mjs
           pnpm exec electron-vite build
           pnpm exec electron-builder --publish always
+
+      - name: Attach standalone Figma runtime to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/desktop/release/za-talk-to-figma-${{ runner.os }}-${{ runner.arch }}.tar.gz
