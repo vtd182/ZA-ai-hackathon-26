@@ -60,6 +60,7 @@ import type {
 } from '@pm-agent/domain'
 import { artifactBriefFacts, artifactBriefForAction, artifactTargetLabel } from './artifact-brief-copy'
 import { classifyErrorText } from './error-classifier'
+import { productSpecReadiness, productSurfaceLabel } from './productspec-readiness'
 import { providerRuntimeCopy } from './provider-runtime-copy'
 
 const noCanvasProgram: CanvasProgram = { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null }
@@ -1547,25 +1548,35 @@ function DeliveryGuide({
   onConfirmProductSpec(): Promise<void>
   onPrepareArtifacts(): Promise<void>
 }): React.JSX.Element {
-  const requirements = productSpec.requirements.filter((item) => item.status !== 'removed').length
+  const readiness = productSpecReadiness(productSpec)
+  const requirements = readiness.metrics.find((item) => item.label === 'Req')?.value ?? 0
   const confirmed = productSpec.status === 'approved'
   return (
     <section className="delivery-guide" aria-label="Delivery next steps">
       <header>
         <div>
           <strong>{productSpec.status === 'draft' ? 'Draft ProductSpec workspace' : 'Delivery workspace'}</strong>
-          <span>ProductSpec v{productSpec.version} · {productSpec.status} · {productSurfaceLabel(productSpec)} · artifact chỉ write sau approval</span>
+          <span>ProductSpec v{productSpec.version} · {readiness.truthLabel} · {readiness.surfaceLabel} · {readiness.artifactLabel}</span>
         </div>
         <CheckCircle2 size={17} />
       </header>
       <div className="delivery-status">
-        <span><b>{requirements}</b> Req</span>
-        <span><b>{productSpec.screens.length}</b> Screen</span>
+        {readiness.metrics.filter((item) => item.label !== 'Must').map((metric) => <span key={metric.label}><b>{metric.value}</b> {metric.label}</span>)}
         <span><b>{canvasItemCount}</b> Canvas</span>
       </div>
       <p>{confirmed
-        ? 'ProductSpec này đã được chốt làm source of truth. Artifact sẽ vẫn cần approval riêng trước khi write.'
-        : 'Đây là draft truth để review. Hãy chốt ProductSpec trước khi tạo Figma/PRD/backlog.'}</p>
+        ? 'AgentRouter/Codex có thể tạo Figma craft blueprint; Agent Core vẫn giữ approval, MCP write và read-back.'
+        : 'Draft này cần được review/chốt trước khi tạo Figma, PRD.md và backlog mock từ cùng một source.'}</p>
+      {readiness.blockers.length > 0 && (
+        <div className="delivery-readiness blockers">
+          <strong>Cần xử lý</strong>
+          {readiness.blockers.slice(0, 2).map((item) => <span key={item}>{item}</span>)}
+        </div>
+      )}
+      <div className="delivery-readiness actions">
+        <strong>Tiếp theo</strong>
+        {readiness.nextActions.slice(0, 3).map((item) => <span key={item}>{item}</span>)}
+      </div>
       <div className="delivery-actions">
         {!confirmed && (
           <button className="delivery-confirm-action" disabled={busy || requirements === 0} onClick={() => void onConfirmProductSpec()}>
@@ -1581,7 +1592,7 @@ function DeliveryGuide({
         <button disabled={busy} onClick={() => void onSend('Tiếp tục hoàn thiện ProductSpec: chỉ ra scope, giả định và điểm còn thiếu')}>
           <FileText size={16} /><span><strong>ProductSpec</strong><small>Bổ sung scope còn thiếu</small></span>
         </button>
-        <button className="delivery-package-action" disabled={busy || requirements === 0 || !confirmed} onClick={() => void onPrepareArtifacts()}>
+        <button className="delivery-package-action" disabled={busy || !readiness.artifactReady} onClick={() => void onPrepareArtifacts()}>
           <FolderOpen size={16} /><span><strong>Tạo kickoff package</strong><small>Figma · PRD.md · backlog mock</small></span>
         </button>
       </div>
@@ -1591,11 +1602,6 @@ function DeliveryGuide({
 
 const PRIORITY_LABEL: Record<string, string> = { must: 'Must', should: 'Should', could: 'Could', wont: "Won't" }
 
-function productSurfaceLabel(productSpec: import('@pm-agent/domain').ProductSpec): string {
-  return productSpec.findings.find((finding) => finding.id === 'FINDING-PRODUCT-SURFACE')?.evidence
-    ?? productSpec.idea.productType
-}
-
 function ProductSpecOverview({
   productSpec,
   onClose,
@@ -1603,6 +1609,7 @@ function ProductSpecOverview({
   productSpec: import('@pm-agent/domain').ProductSpec
   onClose(): void
 }): React.JSX.Element {
+  const readiness = productSpecReadiness(productSpec)
   const activeRequirements = productSpec.requirements.filter((item) => item.status !== 'removed')
   const removedRequirements = productSpec.requirements.filter((item) => item.status === 'removed')
   const reqTitle = (id: string): string => productSpec.requirements.find((item) => item.id === id)?.title ?? id
@@ -1612,11 +1619,23 @@ function ProductSpecOverview({
         <header className="spec-overview-head">
           <div>
             <strong>{productSpec.title}</strong>
-            <span>ProductSpec v{productSpec.version} · {productSpec.status} · {productSurfaceLabel(productSpec).toUpperCase()}</span>
+            <span>ProductSpec v{productSpec.version} · {readiness.truthLabel} · {readiness.surfaceLabel.toUpperCase()}</span>
           </div>
           <button className="icon-button" title="Đóng" onClick={onClose}><X size={18} /></button>
         </header>
         <div className="spec-overview-body">
+          <section className={`spec-readiness ${readiness.artifactReady ? 'ready' : 'review'}`}>
+            <div>
+              <strong>{readiness.artifactLabel}</strong>
+              <span>{readiness.artifactReady ? 'Có thể chuẩn bị Figma/PRD/backlog cùng ArtifactBrief.' : 'Chưa nên write artifact bên ngoài.'}</span>
+            </div>
+            <div className="spec-readiness-metrics">
+              {readiness.metrics.map((metric) => <span key={metric.label}><b>{metric.value}</b>{metric.label}</span>)}
+            </div>
+            {readiness.blockers.length > 0 && (
+              <ul>{readiness.blockers.map((item) => <li key={item}>{item}</li>)}</ul>
+            )}
+          </section>
           <section className="spec-block">
             <h4>Ý tưởng</h4>
             <p>{productSpec.idea.summary}</p>
@@ -1695,6 +1714,7 @@ function ProductSpecInspector({
   selection?: CanvasSelectionContext
   onOpen(): void
 }): React.JSX.Element {
+  const readiness = productSpecReadiness(productSpec)
   const selected = selection?.entityId
     ? [productSpec.idea, ...productSpec.goals, ...productSpec.findings, ...productSpec.requirements, ...productSpec.screens, ...productSpec.stories, ...productSpec.dependencies, ...productSpec.decisions]
       .find((entity) => entity.id === selection.entityId)
@@ -1703,12 +1723,13 @@ function ProductSpecInspector({
     <button className="spec-inspector" aria-label="Mở tổng quan ProductSpec" onClick={onOpen} title="Xem toàn bộ ProductSpec">
       <header>
         <strong>{productSpec.status === 'draft' ? 'Draft ProductSpec' : 'ProductSpec'} v{productSpec.version}</strong>
-        <span className="spec-open-hint">{productSurfaceLabel(productSpec)} · source of truth <Maximize2 size={11} /></span>
+        <span className="spec-open-hint">{readiness.surfaceLabel} · {readiness.artifactLabel} <Maximize2 size={11} /></span>
       </header>
       <div className="spec-metrics">
-        <span><b>{productSpec.requirements.filter((item) => item.status !== 'removed').length}</b> Req</span>
-        <span><b>{productSpec.screens.length}</b> Screen</span>
-        <span><b>{productSpec.stories.length}</b> Story</span>
+        {readiness.metrics.filter((item) => item.label !== 'Must').map((metric) => <span key={metric.label}><b>{metric.value}</b> {metric.label}</span>)}
+      </div>
+      <div className={`spec-readiness-pill ${readiness.artifactReady ? 'ready' : 'review'}`}>
+        {readiness.truthLabel} · {readiness.blockers[0] ?? 'Ready for artifact approval'}
       </div>
       {selected && <p><strong>{selected.id}</strong><span>{selected.title}</span></p>}
     </button>

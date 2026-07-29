@@ -550,6 +550,11 @@
   bridge, while Figma/Jira/Zdoc writes remain Agent Core approval/MCP/read-back responsibilities.
   Verification: `pnpm exec vitest run apps/desktop/src/renderer/src/provider-runtime-copy.test.ts`,
   `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
+- **Evidence update:** ProductSpec readiness is now a shared renderer contract. Delivery,
+  ProductSpec overview and compact inspector show Draft/Confirmed truth, surface, artifact readiness,
+  traceability blockers and next actions; the kickoff package button is gated by this readiness.
+  Verification: `pnpm exec vitest run apps/desktop/src/renderer/src/productspec-readiness.test.ts`
+  `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
 
 ## Epic E7 - Change synchronization
 

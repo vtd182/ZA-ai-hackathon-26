@@ -1150,6 +1150,74 @@ a:focus-visible,
 
 .spec-block { padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
 .spec-block:last-child { border-bottom: 0; }
+.spec-readiness {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  margin: 10px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.spec-readiness.ready {
+  border-color: #92d2bb;
+  background: #f3fbf7;
+}
+
+.spec-readiness.review {
+  border-color: #f0d196;
+  background: #fffaf0;
+}
+
+.spec-readiness > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spec-readiness > div:first-child strong {
+  color: #26383f;
+  font-size: 12.5px;
+}
+
+.spec-readiness > div:first-child span {
+  color: #64747b;
+  font-size: 11px;
+}
+
+.spec-readiness-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.spec-readiness-metrics span {
+  padding: 6px;
+  border: 1px solid #e4eaed;
+  border-radius: 6px;
+  color: #64747b;
+  background: #ffffff;
+  font-size: 9.5px;
+  text-align: center;
+}
+
+.spec-readiness-metrics b {
+  display: block;
+  color: #26383f;
+  font-size: 13px;
+}
+
+.spec-readiness ul {
+  margin: 0;
+  padding-left: 17px;
+}
+
+.spec-readiness li {
+  color: #7c6328;
+  font-size: 11px;
+  line-height: 16px;
+}
 .spec-block h4 {
   margin: 0 0 8px;
   font-size: 11px;
@@ -1251,6 +1319,27 @@ a:focus-visible,
 .spec-metrics b {
   color: #27353b;
   font-size: 11px;
+}
+
+.spec-readiness-pill {
+  margin-top: 7px;
+  overflow: hidden;
+  padding: 5px 7px;
+  border-radius: 6px;
+  font-size: 9.5px;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spec-readiness-pill.ready {
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+
+.spec-readiness-pill.review {
+  color: #856719;
+  background: var(--warn-soft);
 }
 
 .spec-inspector p {
@@ -2058,9 +2147,42 @@ a:focus-visible,
   line-height: 14px;
 }
 
+.delivery-readiness {
+  display: grid;
+  gap: 4px;
+  margin: 7px 10px 0;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 9.5px;
+  line-height: 13px;
+}
+
+.delivery-readiness strong {
+  color: #26383f;
+  font-size: 10px;
+}
+
+.delivery-readiness span {
+  color: #64747b;
+}
+
+.delivery-readiness.blockers {
+  border: 1px solid #f0d196;
+  background: #fffaf0;
+}
+
+.delivery-readiness.blockers span {
+  color: #856719;
+}
+
+.delivery-readiness.actions {
+  border: 1px solid #dce6ea;
+  background: #f8fbfc;
+}
+
 .delivery-status {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 1px;
   background: #e5eaec;
 }

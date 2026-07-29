@@ -301,6 +301,11 @@ Intent:
   `/spec confirm` and the Delivery UI button mark a Draft ProductSpec as `approved`, persist the
   same ProductSpec version, and block Figma/PRD/backlog artifact planning until this confirmation
   happens.
+- **Status note 2026-07-30 readiness update:** renderer now uses a shared ProductSpec readiness
+  contract in `apps/desktop/src/renderer/src/productspec-readiness.ts`. The Delivery panel,
+  ProductSpec modal and compact inspector show Draft/Confirmed truth, product surface, artifact
+  readiness, traceability blockers and next actions. This clarifies that AgentRouter/Codex may
+  craft Figma blueprints, while Agent Core still owns approval, MCP write and read-back.
 
 ### `P0-SHARP-003` Introduce ArtifactBrief canonical contract
 
