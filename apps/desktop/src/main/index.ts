@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import electron, { type BrowserWindow as BrowserWindowType } from 'electron'
 import { acceptCompletedProviderEvents, advanceReasoningPhase, approveActions, assertProviderSwitchAllowed, changeIntentFromCanvasCommand, createHandoffPackage, createImpactPreview, customDecisionOptionId, executeConnectorAction, normalizeClarificationAnswers, rejectActions, resolveRemovalChangeIntent, selectDecisionOption, synthesizeProductSpecFromDecision, type ConnectorExecutionResult } from '@pm-agent/agent-core'
 import { legacyCommandsToCanvasProgram, planDiagramScene, planExplicitCanvasRequest, resolveCanvasSelection, synthesizeProductSpecFromCanvas } from '@pm-agent/canvas'
@@ -68,7 +68,7 @@ import {
 import { mealOrderingProductSpec } from '@pm-agent/fixture-meal-ordering'
 import { syntheticZaloDesignSystem } from '@pm-agent/fixture-zalo-design-system'
 import { DEMO_FIXTURE_VERSION, DEMO_THREAD_ID, FigmaIntegrationStore, HistoryStore, LifecycleStore, OutboxStore } from '@pm-agent/persistence'
-import { createScaffoldFigmaBlueprint, ProviderRegistry } from '@pm-agent/reasoning'
+import { createAgentRouterCodexHome, createScaffoldFigmaBlueprint, ProviderRegistry } from '@pm-agent/reasoning'
 import { SecretStore } from './secret-store'
 import { CanvasBridge } from './canvas-bridge'
 import { runCanvasScriptVm } from './canvas-script-vm'
@@ -723,8 +723,11 @@ async function prepareExecutableActions(
   let useAgenticWorker = figmaContext.connectorMode === 'live' && workerProbe.available
   const thread = history.getThread(state.threadId)
   const threadProfile = history.getProfile(thread.providerId)
+  // When the thread runs on AgentRouter, route the Figma craft worker through the same Codex→
+  // AgentRouter Responses bridge (Opus 4.8 etc.) instead of a plain Codex login.
+  const routeCraftViaAgentRouter = threadProfile.providerId === 'agentrouter'
   const designWorkerModelId = process.env.PM_AGENT_FIGMA_DESIGN_MODEL
-    ?? (threadProfile.providerId === 'codex' ? threadProfile.modelId : 'gpt-5.5')
+    ?? (threadProfile.providerId === 'codex' || routeCraftViaAgentRouter ? threadProfile.modelId : 'gpt-5.5')
   emitArtifactProgress(state.threadId, {
     target: 'figma',
     stage: 'planning',
@@ -850,6 +853,7 @@ async function prepareExecutableActions(
         skill: 'pm-lifecycle-figma-design',
         maxReviewPasses: 3,
         timeoutBudgetMs: craftTimeoutBudgetMs,
+        ...(routeCraftViaAgentRouter ? { craftProvider: 'agentrouter', providerProfileId: threadProfile.id } : {}),
         ...(refineNote ? { refinementNote: refineNote } : {}),
         ...(figmaContext.iconCatalog ? { iconCatalog: figmaContext.iconCatalog } : {}),
         productTruth: {
@@ -946,6 +950,19 @@ function withFigmaDesignWorker(
         requirement.description,
       ]).filter((term) => term.trim().length >= 3)
 
+      // Route the craft worker's Codex transport through AgentRouter when the thread runs on it,
+      // so the design is crafted by the AgentRouter model instead of a plain Codex login.
+      let craftCodexHome: string | null = null
+      const craftExtraEnv: Record<string, string> = {}
+      if (workerConfig.craftProvider === 'agentrouter') {
+        const profileId = typeof workerConfig.providerProfileId === 'string' ? workerConfig.providerProfileId : ''
+        const token = (profileId ? secrets.get(profileId) : undefined) || process.env.AGENT_ROUTER_TOKEN || process.env.AGENTROUTER_API_KEY
+        if (!token) throw new Error('Figma craft qua AgentRouter cần API key (AGENT_ROUTER_TOKEN) trong Settings.')
+        craftCodexHome = createAgentRouterCodexHome(modelId)
+        craftExtraEnv.AGENT_ROUTER_TOKEN = token
+      }
+
+      try {
       for (let iteration = 1; iteration <= maxReviewPasses; iteration += 1) {
         const remainingMs = workerDeadline - Date.now()
         if (remainingMs < 60_000) throw new Error('Figma craft budget đã hết trước independent QA repair pass')
@@ -964,6 +981,7 @@ function withFigmaDesignWorker(
           manifest,
           productTruth: typedProductTruth,
           ...(workerIconCatalog ? { iconCatalog: workerIconCatalog } : {}),
+          ...(craftCodexHome ? { codexHome: craftCodexHome, extraEnv: craftExtraEnv } : {}),
           iteration,
           ...(qaFeedback ? { qaFeedback } : {}),
           timeoutMs: remainingMs,
@@ -1019,6 +1037,9 @@ function withFigmaDesignWorker(
         })
       }
       throw new Error(`Independent Figma craft QA vẫn còn lỗi sau ${maxReviewPasses} pass: ${(qaFeedback ?? []).join('; ')}`)
+      } finally {
+        if (craftCodexHome) rmSync(craftCodexHome, { recursive: true, force: true })
+      }
     },
     readBack: (receipt) => base.readBack(receipt),
     verify: (plan: FigmaPreflightPlan, snapshot: FigmaArtifactSnapshot): Promise<VerificationResult> => base.verify(plan, snapshot),

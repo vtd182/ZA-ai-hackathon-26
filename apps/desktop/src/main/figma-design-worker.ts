@@ -73,6 +73,10 @@ export interface FigmaDesignWorkerTask {
   iteration?: number
   qaFeedback?: string[]
   timeoutMs: number
+  // Optional Codex transport overrides — used to route the craft worker through AgentRouter
+  // (a temp CODEX_HOME whose config.toml points Codex at the AgentRouter Responses provider).
+  codexHome?: string
+  extraEnv?: Record<string, string>
 }
 
 export interface FigmaDesignWorkerOptions {
@@ -315,10 +319,15 @@ export class CodexFigmaDesignWorker {
     ]
     options.onProgress?.('starting', 'Khởi tạo design worker và khóa Figma scope đã duyệt')
 
+    const env = {
+      ...process.env,
+      ...(task.codexHome ? { CODEX_HOME: task.codexHome } : {}),
+      ...(task.extraEnv ?? {}),
+    }
     return new Promise((resolve, reject) => {
       let child: ChildProcessWithoutNullStreams
       try {
-        child = spawn(this.codexCommand, args, { cwd: task.workingDirectory, stdio: ['pipe', 'pipe', 'pipe'] })
+        child = spawn(this.codexCommand, args, { cwd: task.workingDirectory, stdio: ['pipe', 'pipe', 'pipe'], env })
       } catch (error) {
         reject(error)
         return

@@ -773,7 +773,7 @@ function tomlString(value: string): string {
   return JSON.stringify(value)
 }
 
-function createAgentRouterCodexHome(modelId: string): string {
+export function createAgentRouterCodexHome(modelId: string): string {
   const codexHome = mkdtempSync(join(tmpdir(), 'pm-agent-agentrouter-codex-'))
   writeFileSync(join(codexHome, 'config.toml'), [
     `model = ${tomlString(modelId)}`,
