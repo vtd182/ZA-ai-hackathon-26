@@ -232,7 +232,12 @@ Chỉ dùng intent khác conversation khi câu hiện tại yêu cầu hành đ�
   // Providers that carry systemPolicy in a native field (Anthropic `system`, Codex
   // `baseInstructions`) pass includeSystemPolicy:false so it is not billed twice per turn.
   const policyBlock = options.includeSystemPolicy === false ? '' : `${systemPolicy}\n\n`
-  return `${policyBlock}${responseInstruction}\n\nPhase hiện tại: ${request.phase}\n${selection}\n${canvas}\n${diff}\n\nLịch sử gần đây:\n${transcript}\n\nYêu cầu mới:\n${request.message}`
+  // The creative (draw/edit) pass resumes the SAME stateful thread the routing pass just ran on
+  // (remoteRef set) — that thread already holds the transcript, so re-sending it is pure waste.
+  // Stateless providers (no remoteRef) still get the transcript every call.
+  const includeTranscript = !(request.responseMode === 'creative' && request.remoteRef)
+  const transcriptBlock = includeTranscript ? `\n\nLịch sử gần đây:\n${transcript}` : ''
+  return `${policyBlock}${responseInstruction}\n\nPhase hiện tại: ${request.phase}\n${selection}\n${canvas}\n${diff}${transcriptBlock}\n\nYêu cầu mới:\n${request.message}`
 }
 
 function parseProviderText(text: string, phase: WorkflowView): PhaseReasoningResult {
