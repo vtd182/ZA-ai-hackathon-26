@@ -655,6 +655,14 @@
 - **Progress:** GitHub Release outputs now include installer-embedded minimal packaged skill packs + Figma MCP/plugin runtime. Release workflow now builds the OS-independent Figma plugin once, reuses it in macOS/Windows packaging, and publishes a single draft release with app installers plus `za-talk-to-figma-plugin.zip` and OS-specific `za-talk-to-figma-runtime-<os>-<arch>.zip` bundles. Local `./run.sh dist` rebuilt Go/plugin and produced `apps/desktop/release/DualMind-0.1.2-arm64.dmg` and `.dmg.blockmap` with no `.lock`; packaged app resources contain only minimal plugin manifest/dist plus runtime binary. `v0.1.1` showed Windows CI must build the nested plugin with Bun instead of ad hoc pnpm.
 - **Remaining:** clean-profile installed-app smoke and final timed demo rehearsal after the `v0.1.2` GitHub release run completes.
 
+### `P0-DEM-003` BGK install and Figma handoff guide
+
+- **Status:** DONE (2026-07-30)
+- **Depends on:** P0-DEM-002
+- **Deliver:** concise GitHub Release install guide for judges, including correct assets, macOS Gatekeeper bypass, Windows SmartScreen note, Figma plugin import, ZDS/no-ZDS selection and troubleshooting.
+- **Acceptance:** guide is linked from README and uses current release packaging names/contracts rather than dev-only setup.
+- **Evidence:** [docs/JUDGE_INSTALL_GUIDE.md](../docs/JUDGE_INSTALL_GUIDE.md) added and linked from README quick install section; `git diff --check` passes.
+
 ## P1 sau khi P0 ổn định
 
 | ID | Item | Điều kiện kéo vào |

@@ -17,6 +17,7 @@
 - [Tính năng chính](#tính-năng-chính)
 - [Kiến trúc tổng quan](#kiến-trúc-tổng-quan)
 - [Yêu cầu môi trường](#yêu-cầu-môi-trường)
+- [Cài nhanh cho BGK](#cài-nhanh-cho-bgk)
 - [Cài đặt & chạy (dev)](#cài-đặt--chạy-dev)
 - [Cấu hình Provider (LLM)](#cấu-hình-provider-llm)
 - [Kết nối Figma (tùy chọn)](#kết-nối-figma-tùy-chọn)
@@ -101,6 +102,19 @@ Monorepo **pnpm** + **TypeScript strict**:
 | **Figma desktop** + plugin `ZA Talk To Figma` | Kết nối Figma thật |
 | **Codex CLI** (đã đăng nhập) | Agentic Figma craft worker |
 | API key: OpenAI / Gemini / Anthropic / AgentRouter | Provider tương ứng |
+
+---
+
+## Cài nhanh cho BGK
+
+BGK có thể cài từ GitHub Release mà không cần clone repo:
+
+1. Mở `https://github.com/vtd182/ZA-ai-hackathon-26/releases`.
+2. Tải `DualMind-<version>-arm64.dmg` cho macOS Apple Silicon hoặc `DualMind-Setup-<version>.exe` cho Windows.
+3. Tải thêm `za-talk-to-figma-plugin.zip` nếu muốn kết nối Figma thật.
+4. Làm theo [docs/JUDGE_INSTALL_GUIDE.md](docs/JUDGE_INSTALL_GUIDE.md) để bypass Gatekeeper/SmartScreen khi cần và import plugin Figma.
+
+`latest.yml` và `*.blockmap` là metadata auto-update, không phải file cài thủ công.
 
 ---
 
@@ -245,7 +259,7 @@ Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) sẽ:
 2. Build runtime **Go** cho từng OS (`za-talk-to-figma` / `.exe`) vì binary native khác nhau giữa macOS và Windows.
 3. Chuẩn bị packaged resources gồm skill packs + Figma runtime/plugin minimal.
 4. Chạy `electron-vite build` + `electron-builder --publish never` trên **macos-latest** và **windows-latest** để tạo installer local trong job.
-5. Gom tất cả artifact vào một job publish duy nhất và tạo **GitHub Release draft** của tag, đính kèm `.dmg` (macOS) + `Setup .exe` (Windows) + `blockmap`/`latest*.yml` + `za-talk-to-figma-plugin.zip` + `za-talk-to-figma-runtime-<os>-<arch>.zip`.
+5. Gom tất cả artifact vào một job publish duy nhất và tạo **GitHub Release** của tag, đính kèm `.dmg` (macOS) + `Setup .exe` (Windows) + `blockmap`/`latest*.yml` + `za-talk-to-figma-plugin.zip` + `za-talk-to-figma-runtime-<os>-<arch>.zip`.
 
 > Bản `release/` là build artifact (đã gitignore) — không commit; luôn build lại qua tag hoặc `run dist`.
 
@@ -270,7 +284,7 @@ packages/                domain, agent-core, reasoning, canvas, connectors, pers
 fixtures/                synthetic ZDS + meal-ordering ProductSpec
 mcp-tool/za-talk-to-figma/  Go MCP runtime + plugin Figma
 skills/                  pm-lifecycle-canvas (bridge) + pm-lifecycle-figma-* (craft)
-docs/                    GETTING_STARTED, SKILL_PACKAGING
+docs/                    JUDGE_INSTALL_GUIDE, GETTING_STARTED, SKILL_PACKAGING
 .github/workflows/       release.yml (tag → build mac+win → GitHub Release)
 ```
 
