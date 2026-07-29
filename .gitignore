@@ -10,3 +10,6 @@ coverage/
 # electron-builder output
 release/
 apps/desktop/release/
+
+# ignored deployment scripts with secrets
+demo-page/auto_deploy.sh
