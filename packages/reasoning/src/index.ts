@@ -181,31 +181,123 @@ function outputSchemaFor(request: ReasoningRequest): Record<string, unknown> {
   })
 }
 
-function buildPrompt(request: ReasoningRequest, options: { includeSystemPolicy?: boolean; includeTranscript?: boolean } = {}): string {
+export type ReasoningTaskContextPack = 'route-chat' | 'canvas-draw' | 'canvas-edit' | 'canvas-sync' | 'figma-blueprint' | 'lifecycle'
+
+export interface PromptContextBudget {
+  taskPack: ReasoningTaskContextPack
+  transcriptMessages: number
+  selectionItems: number
+  canvasShapeLimit: number
+  canvasContentLines: number
+  diffChanges: number
+  includeCanvas: boolean
+  includeCanvasDiff: boolean
+}
+
+function inferTaskPack(request: ReasoningRequest): ReasoningTaskContextPack {
+  if (request.responseMode === 'figma') return 'figma-blueprint'
+  if (request.canvasDiff && request.responseMode === 'route') return 'canvas-sync'
+  if (request.responseMode === 'creative') return request.intentHint?.kind === 'edit' ? 'canvas-edit' : 'canvas-draw'
+  if (request.responseMode === 'route') return 'route-chat'
+  return 'lifecycle'
+}
+
+export function contextBudgetFor(request: ReasoningRequest): PromptContextBudget {
+  const taskPack = inferTaskPack(request)
+  if (taskPack === 'route-chat') {
+    return {
+      taskPack,
+      transcriptMessages: 6,
+      selectionItems: 6,
+      canvasShapeLimit: 0,
+      canvasContentLines: 0,
+      diffChanges: 0,
+      includeCanvas: Boolean(request.selection),
+      includeCanvasDiff: false,
+    }
+  }
+  if (taskPack === 'canvas-sync') {
+    return {
+      taskPack,
+      transcriptMessages: 6,
+      selectionItems: 12,
+      canvasShapeLimit: 36,
+      canvasContentLines: 1,
+      diffChanges: 24,
+      includeCanvas: Boolean(request.canvas),
+      includeCanvasDiff: true,
+    }
+  }
+  if (taskPack === 'canvas-edit') {
+    return {
+      taskPack,
+      transcriptMessages: 8,
+      selectionItems: 16,
+      canvasShapeLimit: 80,
+      canvasContentLines: 4,
+      diffChanges: 30,
+      includeCanvas: Boolean(request.canvas),
+      includeCanvasDiff: Boolean(request.canvasDiff),
+    }
+  }
+  if (taskPack === 'canvas-draw') {
+    return {
+      taskPack,
+      transcriptMessages: 8,
+      selectionItems: 12,
+      canvasShapeLimit: 64,
+      canvasContentLines: 3,
+      diffChanges: 20,
+      includeCanvas: Boolean(request.canvas),
+      includeCanvasDiff: Boolean(request.canvasDiff),
+    }
+  }
+  if (taskPack === 'figma-blueprint') {
+    return {
+      taskPack,
+      transcriptMessages: 4,
+      selectionItems: 0,
+      canvasShapeLimit: 0,
+      canvasContentLines: 0,
+      diffChanges: 0,
+      includeCanvas: false,
+      includeCanvasDiff: false,
+    }
+  }
+  return {
+    taskPack,
+    transcriptMessages: 8,
+    selectionItems: 8,
+    canvasShapeLimit: 24,
+    canvasContentLines: 1,
+    diffChanges: 12,
+    includeCanvas: Boolean(request.canvas),
+    includeCanvasDiff: Boolean(request.canvasDiff),
+  }
+}
+
+export function buildReasoningPrompt(request: ReasoningRequest, options: { includeSystemPolicy?: boolean; includeTranscript?: boolean } = {}): string {
+  const budget = contextBudgetFor(request)
   const transcript = request.recentMessages
-    .slice(-12)
+    .slice(-budget.transcriptMessages)
     .map((message) => `${message.role}: ${message.content}`)
     .join('\n')
   const selection = request.selection
     ? `Canvas đang chọn ${request.selection.selectedShapeCount ?? 1} shape: ${request.selection.label}. Ngữ cảnh vùng chọn: ${(request.selection.contextItems ?? [])
-      .slice(0, 12)
+      .slice(0, budget.selectionItems)
       .map((item) => `${item.entityId ?? item.shapeId}:${item.label}`)
       .join(' | ') || request.selection.entityId}`
     : 'Canvas không có entity được chọn.'
-  // The routing/conversation pass only needs canvas awareness, not draw-ready detail — cap it far
-  // tighter than the creative pass (which actually renders shapes) to avoid re-billing a full
-  // 80-shape dump on every turn (and twice on draw/edit turns that route then create).
-  const compactCanvas = request.responseMode === 'route'
-  const canvasShapeLimit = compactCanvas ? 40 : 80
-  const canvasContentLines = compactCanvas ? 1 : 4
-  const canvas = request.canvas
-    ? `Canvas revision ${request.canvas.revision}, ${request.canvas.shapes.length} shapes:\n${request.canvas.shapes.slice(0, canvasShapeLimit).map((shape) => {
-      const details = [shape.description, shape.lane ? `lane=${shape.lane}` : '', ...(shape.content ?? []).slice(0, canvasContentLines)].filter(Boolean).join(' · ')
+  const canvas = budget.includeCanvas && request.canvas
+    ? `Canvas context pack ${budget.taskPack}: revision ${request.canvas.revision}, ${request.canvas.shapes.length} shapes, gửi ${Math.min(request.canvas.shapes.length, budget.canvasShapeLimit)} shape:\n${request.canvas.shapes.slice(0, budget.canvasShapeLimit).map((shape) => {
+      const details = [shape.description, shape.lane ? `lane=${shape.lane}` : '', ...(shape.content ?? []).slice(0, budget.canvasContentLines)].filter(Boolean).join(' · ')
       return `- ${shape.semanticId ?? shape.id} [${shape.type}/${shape.visualRole ?? shape.nodeKind ?? 'free'}] ${shape.label || ''}${details ? ` — ${details}` : ''}`
     }).join('\n') || '- trống'}`
-    : 'Canvas chưa có read-back context.'
-  const diff = request.canvasDiff
-    ? `Thay đổi người dùng vừa Sync (${request.canvasDiff.fromRevision} -> ${request.canvasDiff.toRevision}): ${request.canvasDiff.summary}\n${request.canvasDiff.changes.slice(0, 30).map((item) => `- ${item.change}: ${item.id} ${item.label}`).join('\n')}`
+    : budget.taskPack === 'route-chat'
+      ? 'Canvas context không gửi trong lượt chat này. Dùng /canvas hoặc Sync vùng chọn nếu cần bàn trên canvas.'
+      : 'Canvas chưa có read-back context cho task này.'
+  const diff = budget.includeCanvasDiff && request.canvasDiff
+    ? `Thay đổi người dùng vừa Sync (${request.canvasDiff.fromRevision} -> ${request.canvasDiff.toRevision}): ${request.canvasDiff.summary}\n${request.canvasDiff.changes.slice(0, budget.diffChanges).map((item) => `- ${item.change}: ${item.id} ${item.label}`).join('\n')}`
     : 'Không có CanvasDiff mới trong lượt này.'
   const figmaPolicy = (request.figmaComponentRoles?.length ?? 0) === 0
     ? figmaFreeDesignPolicy
@@ -850,7 +942,7 @@ class OpenAIProvider implements ReasoningProvider {
     const client = new OpenAI({ apiKey })
     const response = await withProviderDeadline(signal, providerTimeoutMs(request), (deadlineSignal) => client.responses.create({
       model: config.modelId,
-      input: buildPrompt(request),
+      input: buildReasoningPrompt(request),
       store: false,
       text: {
         format: {
@@ -996,7 +1088,7 @@ class GeminiProvider implements ReasoningProvider {
     const client = new GoogleGenAI({ apiKey })
     const response = await withProviderDeadline(signal, providerTimeoutMs(request), (deadlineSignal) => client.models.generateContent({
       model: config.modelId,
-      contents: buildPrompt(request),
+      contents: buildReasoningPrompt(request),
       config: {
         abortSignal: deadlineSignal,
         responseMimeType: 'application/json',
@@ -1030,7 +1122,7 @@ class AnthropicProvider implements ReasoningProvider {
           : 1_400,
       // systemPolicy is static per session → cache it and don't also inline it in the user turn.
       system: [{ type: 'text', text: systemPolicy, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: buildPrompt(request, { includeSystemPolicy: false }) }],
+      messages: [{ role: 'user', content: buildReasoningPrompt(request, { includeSystemPolicy: false }) }],
       output_config: {
         format: { type: 'json_schema', schema: outputSchemaFor(request) },
       },
@@ -1189,7 +1281,7 @@ async function reasonWithCodexAppServer(input: {
       threadId,
       // systemPolicy is already the thread's baseInstructions — omit it here to avoid re-billing
       // the full policy on every turn/start (and every resume).
-      input: [{ type: 'text', text: buildPrompt(request, {
+      input: [{ type: 'text', text: buildReasoningPrompt(request, {
         includeSystemPolicy: false,
         includeTranscript: !resumedThread,
       }), text_elements: [] }],

@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  buildReasoningPrompt,
+  contextBudgetFor,
   createAgentRouterCodexHome,
   createScaffoldFigmaBlueprint,
   DEFAULT_AGENTROUTER_OPENAI_BASE_URL,
@@ -10,7 +12,7 @@ import {
   inferLocalCommands,
   resolveAgentRouterOpenAIBaseURL,
 } from './index'
-import { parseProductSpec } from '@pm-agent/domain'
+import { parseProductSpec, type CanvasDocumentContext } from '@pm-agent/domain'
 
 const creativeTestSpec = parseProductSpec({
   schemaVersion: 1,
@@ -48,9 +50,131 @@ const creativeTestSpec = parseProductSpec({
 })
 
 describe('mock provider command inference', () => {
+  const largeCanvas = {
+    schemaVersion: 1,
+    revision: 42,
+    selectedShapeIds: [],
+    shapes: Array.from({ length: 90 }, (_, index) => ({
+      id: `shape-${index}`,
+      type: 'geo',
+      label: `Shape ${index}`,
+      semanticId: `SHAPE-${index}`,
+      visualRole: 'workflow-node',
+      description: `Canvas detail ${index}`,
+      content: [`line A ${index}`, `line B ${index}`, `line C ${index}`, `line D ${index}`],
+      x: index * 10,
+      y: index * 4,
+      width: 160,
+      height: 72,
+    })),
+  } satisfies CanvasDocumentContext
+
   it('uses the official AgentRouter OpenAI-compatible endpoint', () => {
     expect(resolveAgentRouterOpenAIBaseURL('')).toBe(DEFAULT_AGENTROUTER_OPENAI_BASE_URL)
     expect(resolveAgentRouterOpenAIBaseURL('https://agentrouter.org/v1/')).toBe(DEFAULT_AGENTROUTER_OPENAI_BASE_URL)
+  })
+
+  it('keeps ordinary route chat off the full canvas context pack', () => {
+    const prompt = buildReasoningPrompt({
+      threadId: 'THREAD',
+      phase: 'discover',
+      message: 'Ý tưởng này có đáng làm không?',
+      recentMessages: Array.from({ length: 12 }, (_, index) => ({
+        id: `MSG-${index}`,
+        threadId: 'THREAD',
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `History ${index}`,
+        createdAt: '2026-07-30T00:00:00.000Z',
+      })),
+      responseMode: 'route',
+      canvas: largeCanvas,
+      remoteRef: null,
+    })
+
+    expect(contextBudgetFor({
+      threadId: 'THREAD',
+      phase: 'discover',
+      message: 'hi',
+      recentMessages: [],
+      responseMode: 'route',
+      canvas: largeCanvas,
+      remoteRef: null,
+    }).taskPack).toBe('route-chat')
+    expect(prompt).toContain('Canvas context không gửi trong lượt chat này')
+    expect(prompt).not.toContain('SHAPE-0')
+    expect(prompt).not.toContain('History 0')
+    expect(prompt).toContain('History 6')
+  })
+
+  it('sends a compact canvas and capped diff only when the user syncs canvas', () => {
+    const prompt = buildReasoningPrompt({
+      threadId: 'THREAD',
+      phase: 'discover',
+      message: 'Sync canvas và đọc giúp tôi phần vừa sửa',
+      recentMessages: [],
+      responseMode: 'route',
+      canvas: largeCanvas,
+      canvasDiff: {
+        schemaVersion: 1,
+        fromRevision: 41,
+        toRevision: 42,
+        selectedShapeIds: ['shape-2'],
+        summary: 'Người dùng vừa thêm nhánh lỗi',
+        changes: Array.from({ length: 40 }, (_, index) => ({
+          id: `shape-${index}`,
+          label: `Change ${index}`,
+          change: 'updated',
+        })),
+      },
+      remoteRef: null,
+    })
+
+    expect(contextBudgetFor({
+      threadId: 'THREAD',
+      phase: 'discover',
+      message: 'sync',
+      recentMessages: [],
+      responseMode: 'route',
+      canvas: largeCanvas,
+      canvasDiff: { schemaVersion: 1, fromRevision: 1, toRevision: 2, selectedShapeIds: [], summary: 'x', changes: [] },
+      remoteRef: null,
+    }).taskPack).toBe('canvas-sync')
+    expect(prompt).toContain('Canvas context pack canvas-sync')
+    expect(prompt).toContain('SHAPE-35')
+    expect(prompt).not.toContain('SHAPE-36')
+    expect(prompt).toContain('Thay đổi người dùng vừa Sync')
+    expect(prompt).toContain('Change 23')
+    expect(prompt).not.toContain('Change 24')
+    expect(prompt).toContain('line A 0')
+    expect(prompt).not.toContain('line B 0')
+  })
+
+  it('keeps Figma blueprint prompts ProductSpec-first instead of canvas-first', () => {
+    const prompt = buildReasoningPrompt({
+      threadId: 'THREAD',
+      phase: 'deliver',
+      message: 'Tạo Figma',
+      recentMessages: [],
+      responseMode: 'figma',
+      productSpec: creativeTestSpec,
+      figmaComponentRoles: [],
+      canvas: largeCanvas,
+      remoteRef: null,
+    })
+
+    expect(contextBudgetFor({
+      threadId: 'THREAD',
+      phase: 'deliver',
+      message: 'figma',
+      recentMessages: [],
+      responseMode: 'figma',
+      productSpec: creativeTestSpec,
+      canvas: largeCanvas,
+      remoteRef: null,
+    }).taskPack).toBe('figma-blueprint')
+    expect(prompt).toContain('ProductSpec:')
+    expect(prompt).toContain('KHÔNG dùng ZDS')
+    expect(prompt).not.toContain('SHAPE-0')
   })
 
   it('rejects the Anthropic-compatible AgentRouter endpoint for the OpenAI-compatible profile', () => {

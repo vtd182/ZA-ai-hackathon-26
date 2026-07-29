@@ -351,6 +351,13 @@ Intent:
   `figma-free`, and `artifact-verify`.
 - **Acceptance:** Normal chat sends only core policy, thread summary and last few messages; canvas read-back is attached only for draw/edit/sync; Figma skill pack is attached only to Figma craft worker.
 - **Tests:** prompt budget tests assert max payload sizes and absence/presence of Figma skill/canvas dumps by response mode.
+- **Status note 2026-07-30:** first reasoning-level budgeter implemented in
+  `packages/reasoning/src/index.ts`. It classifies turns into `route-chat`, `canvas-sync`,
+  `canvas-draw`, `canvas-edit`, `figma-blueprint` and `lifecycle`, then caps transcript,
+  selection, canvas shape detail and diff detail per task. Normal chat no longer sends a full
+  canvas dump; sync/draw/edit keep the relevant canvas context; Figma blueprint prompts stay
+  ProductSpec-first and do not inherit canvas context. This keeps AgentRouter/Codex useful for both
+  chat and Figma design while the app still owns approval, MCP execution and read-back verification.
 
 ### `P0-SHARP-009` AgentRouter managed Codex bridge
 

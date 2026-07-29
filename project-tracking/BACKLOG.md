@@ -494,6 +494,12 @@
 - **Acceptance:** audit document names what the product is and is not; identifies current flow/prompt/architecture gaps; defines the target end-to-end demo; decomposes fixes into task cards with owners, acceptance criteria and verification; becomes the source checklist for the next implementation slice.
 - **Evidence:** `project-tracking/PRODUCT_SHARPENING_AUDIT.md` created and linked from `project-tracking/README.md`. It defines product goal, differentiator versus a normal agent, ProductSpec mental model, clear-input/ambiguous-input paths, target demo narrative, current audit findings, principles and `P0-SHARP-001..009` task cards. Current implementation slice adds app-owned clear-brief extraction to Draft ProductSpec, visible Draft ProductSpec UI copy/surface labeling, and an app-managed persistent AgentRouter Codex bridge used by chat and Figma craft. Verification: `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, `pnpm exec vitest run packages/agent-core/src/product-spec-synthesis.test.ts`, and `pnpm exec vitest run packages/reasoning/src/index.test.ts apps/desktop/src/main/figma-design-worker.test.ts` pass.
 - **Evidence update:** ProductSpec confirmation is now explicit via `/spec confirm` and Delivery UI. Artifact preparation is blocked until `productSpec.status === 'approved'`, and the approved status is persisted to the current ProductSpec version. Verification: `pnpm exec vitest run packages/persistence/src/lifecycle-store.test.ts apps/desktop/src/main/slash-commands.test.ts`, `./run.sh typecheck`, `./run.sh test`, and `./run.sh build` pass.
+- **Evidence update:** Reasoning prompts now use task-scoped context packs (`route-chat`,
+  `canvas-sync`, `canvas-draw`, `canvas-edit`, `figma-blueprint`, `lifecycle`) so AgentRouter/Codex
+  chat does not receive a full canvas dump unless the turn is a canvas draw/edit/sync task. Figma
+  blueprint prompts remain ProductSpec-first while MCP/plugin execution stays in Agent Core.
+  Verification: `pnpm exec vitest run packages/reasoning/src/index.test.ts`, `./run.sh typecheck`,
+  `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
 
 ## Epic E7 - Change synchronization
 
