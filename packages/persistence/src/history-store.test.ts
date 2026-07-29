@@ -111,3 +111,31 @@ describe('deterministic demo reset', () => {
     history.close()
   })
 })
+
+describe('createThread reuses empty threads', () => {
+  it('focuses an existing message-less thread instead of spamming new ones', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pm-agent-reuse-'))
+    cleanup.push(directory)
+    const history = new HistoryStore(join(directory, 'app.db'))
+
+    const first = history.createThread()
+    // "New conversation" on an untouched thread must return the SAME thread, not a duplicate.
+    expect(history.createThread().id).toBe(first.id)
+    expect(history.createThread().id).toBe(first.id)
+    expect(history.listThreads().filter((thread) => thread.title === 'Ý tưởng chưa đặt tên')).toHaveLength(1)
+
+    // A blank canvas alone is not a conversation → still reusable.
+    history.saveCanvas(first.id, { store: { doodle: true } })
+    expect(history.createThread().id).toBe(first.id)
+
+    // Once it holds a real message, the next "new conversation" is a distinct thread.
+    // (A seeded demo thread also exists, so assert on the freshly-created default-title ones.)
+    history.addMessage(first.id, 'user', 'Ý tưởng đầu tiên')
+    const second = history.createThread()
+    expect(second.id).not.toBe(first.id)
+    // Exactly two user threads exist now (first + second), plus the seeded demo thread.
+    expect(history.listThreads().filter((thread) => thread.id !== DEMO_THREAD_ID)).toHaveLength(2)
+
+    history.close()
+  })
+})

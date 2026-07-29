@@ -888,12 +888,16 @@ export function App(): React.JSX.Element {
                       <small>{thread.id === runningThreadId ? 'Đang reasoning' : threadModeLabel(thread)} · {relativeTime(thread.updatedAt)}</small>
                     </button>
                   )}
-                  <button className="thread-archive" title="Đổi tên" onClick={() => { setRenameDraft(thread.title); setRenamingId(thread.id) }}>
-                    <Pencil size={14} />
-                  </button>
-                  <button className="thread-archive" title="Lưu trữ" onClick={() => void archiveThread(thread.id)}>
-                    <Archive size={15} />
-                  </button>
+                  {renamingId !== thread.id && (
+                    <div className="thread-actions">
+                      <button className="thread-action-button" title="Đổi tên" onClick={() => { setRenameDraft(thread.title); setRenamingId(thread.id) }}>
+                        <Pencil size={14} />
+                      </button>
+                      <button className="thread-action-button" title="Lưu trữ" onClick={() => void archiveThread(thread.id)}>
+                        <Archive size={15} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
               {threads.length === 0 && <div className="thread-empty">Chưa có hội thoại nào.</div>}
