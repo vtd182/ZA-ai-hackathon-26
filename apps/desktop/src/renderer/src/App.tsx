@@ -185,6 +185,8 @@ export function App(): React.JSX.Element {
 
   useEffect(() => { void window.pmAgent.devBridge.status().then(setDevBridge).catch(() => setDevBridge(null)) }, [])
 
+  useEffect(() => window.pmAgent.menu.onOpenSettings(() => setSettingsOpen(true)), [])
+
   useEffect(() => window.pmAgent.canvas.onExternalCommands((batch) => {
     void (async () => {
       setLoading(true)
@@ -612,9 +614,6 @@ export function App(): React.JSX.Element {
           <button className="icon-button" title="Cuộc hội thoại mới" onClick={() => void createThread()}>
             <Plus size={18} />
           </button>
-          <button className="icon-button" title="Lịch sử hội thoại" onClick={() => setHistoryOpen(true)}>
-            <History size={18} />
-          </button>
           <div className="thread-heading">
             {renamingId === activeThread?.id && activeThread ? (
               <input
@@ -671,7 +670,7 @@ export function App(): React.JSX.Element {
               <span>Figma</span>
               <i />
             </button>
-            <button className="icon-button" title="Cài đặt" onClick={() => setSettingsOpen(true)}>
+            <button className="icon-button settings-open-button" title="Cài đặt" onClick={() => setSettingsOpen(true)}>
               <Settings size={18} />
             </button>
           </div>
@@ -788,6 +787,7 @@ export function App(): React.JSX.Element {
         }}
         onShowBacklog={() => openKickoffViewer('backlog')}
         onShowZdoc={() => openKickoffViewer('zdoc')}
+        onOpenHistory={() => setHistoryOpen(true)}
         onExport={async () => {
           if (!activeThread) return
           try {
@@ -1148,6 +1148,7 @@ function ChatPanel({
   onShowBacklog,
   onShowZdoc,
   onExport,
+  onOpenHistory,
 }: {
   messages: ChatMessage[]
   suggestions: ConversationSuggestion[]
@@ -1189,6 +1190,7 @@ function ChatPanel({
   onShowBacklog(): Promise<void>
   onShowZdoc(): Promise<void>
   onExport(): Promise<void>
+  onOpenHistory(): void
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const [slashIndex, setSlashIndex] = useState(0)
@@ -1229,6 +1231,9 @@ function ChatPanel({
     <aside className="chat-panel">
       <div className="chat-header">
         <div><strong>Chat</strong><span>Product co-creation</span></div>
+        <button className="icon-button chat-history-button" title="Lịch sử hội thoại" onClick={onOpenHistory}>
+          <History size={16} />
+        </button>
         <button className="icon-button chat-export-button" title="Xuất log và tài liệu" disabled={disabled} onClick={() => void onExport()}>
           <Download size={16} />
         </button>
@@ -2027,7 +2032,7 @@ function SettingsDialog({
               <strong>Reset demo</strong>
               <span>Thay history/canvas/runs bằng fixture ban đầu</span>
             </div>
-            <button className="secondary-button danger" onClick={onResetDemo}>Reset</button>
+            <button className="secondary-button danger reset-demo-button" onClick={onResetDemo}>Reset</button>
           </div>
         </div>
       </section>

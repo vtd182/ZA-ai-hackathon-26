@@ -357,6 +357,9 @@ export interface DesktopApi {
   devBridge: {
     status(): Promise<DevBridgeStatus>
   }
+  menu: {
+    onOpenSettings(listener: () => void): () => void
+  }
 }
 
 export interface DevBridgeStatus {

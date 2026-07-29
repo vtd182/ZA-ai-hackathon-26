@@ -82,7 +82,7 @@ import { CodexFigmaDesignWorker, type FigmaDesignWorkerStage, type FigmaDesignWo
 import { loadFigmaCraftSkillPack } from './skill-packs'
 import { CANVAS_SKILL_ID, CANVAS_SKILL_VERSION, installCanvasSkill } from './skill-installer'
 
-const { app, BrowserWindow, ipcMain, shell } = electron
+const { app, BrowserWindow, ipcMain, shell, Menu } = electron
 if (process.env.PM_AGENT_REMOTE_DEBUG_PORT) {
   app.commandLine.appendSwitch('remote-debugging-port', process.env.PM_AGENT_REMOTE_DEBUG_PORT)
 }
@@ -2329,12 +2329,15 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     for (let index = 0; index < expectedResetCount; index += 1) {
       if (index === 0) {
         resetControlReady = await window.webContents.executeJavaScript(`(async () => {
+          const gear = document.querySelector('.settings-open-button');
+          gear?.click();
+          await new Promise((resolve) => setTimeout(resolve, 50));
           const open = document.querySelector('.reset-demo-button');
           open?.click();
           await new Promise((resolve) => setTimeout(resolve, 50));
           const confirm = document.querySelector('.confirm-reset-button');
           confirm?.click();
-          return Boolean(open && confirm);
+          return Boolean(gear && open && confirm);
         })()`) as boolean
         await wait(500)
       } else {
@@ -2357,7 +2360,7 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
     const reset = {
       count: expectedResetCount,
       controlReady: expectedResetCount === 0
-        ? await window.webContents.executeJavaScript(`Boolean(document.querySelector('.reset-demo-button'))`) as boolean
+        ? await window.webContents.executeJavaScript(`Boolean(document.querySelector('.settings-open-button'))`) as boolean
         : resetControlReady,
       deterministic: expectedResetCount === 0 || (resetSnapshots.length === expectedResetCount && new Set(resetSnapshots).size === 1),
     }
@@ -3200,6 +3203,42 @@ async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
   }
 }
 
+function buildApplicationMenu(): void {
+  const isMac = process.platform === 'darwin'
+  const openSettings = (): void => mainWindow?.webContents.send('menu:open-settings')
+  const settingsItem = { label: 'Cài đặt…', accelerator: 'CmdOrCtrl+,', click: openSettings }
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [{
+          label: app.name,
+          submenu: [
+            { role: 'about' as const },
+            { type: 'separator' as const },
+            settingsItem,
+            { type: 'separator' as const },
+            { role: 'services' as const },
+            { type: 'separator' as const },
+            { role: 'hide' as const },
+            { role: 'hideOthers' as const },
+            { role: 'unhide' as const },
+            { type: 'separator' as const },
+            { role: 'quit' as const },
+          ],
+        }]
+      : []),
+    {
+      label: 'File',
+      submenu: isMac
+        ? [{ role: 'close' as const }]
+        : [settingsItem, { type: 'separator' as const }, { role: 'quit' as const }],
+    },
+    { role: 'editMenu' as const },
+    { role: 'viewMenu' as const },
+    { role: 'windowMenu' as const },
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
 app.whenReady().then(() => {
   const databasePath = join(app.getPath('userData'), 'pm-lifecycle-agent.sqlite')
   const figmaPaths = figmaRuntimePaths()
@@ -3217,6 +3256,7 @@ app.whenReady().then(() => {
   secrets = new SecretStore(join(app.getPath('userData'), 'provider-secrets.json'))
   if (process.env.PM_AGENT_RESET_ON_START === '1') resetDemoWorkspace()
   registerIpc()
+  buildApplicationMenu()
   createWindow()
   canvasBridge = new CanvasBridge({
     homePath: app.getPath('home'),

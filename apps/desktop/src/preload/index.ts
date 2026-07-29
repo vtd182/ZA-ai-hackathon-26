@@ -77,6 +77,13 @@ const api: DesktopApi = {
   devBridge: {
     status: () => ipcRenderer.invoke('dev-bridge:status'),
   },
+  menu: {
+    onOpenSettings: (listener) => {
+      const handler = (): void => listener()
+      ipcRenderer.on('menu:open-settings', handler)
+      return () => ipcRenderer.removeListener('menu:open-settings', handler)
+    },
+  },
 }
 
 contextBridge.exposeInMainWorld('pmAgent', api)
