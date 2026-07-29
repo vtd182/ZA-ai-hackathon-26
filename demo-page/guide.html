@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Cài đặt & sử dụng DualMind: chạy offline bằng mock, chọn provider AI, kết nối Figma (tùy chọn).">
+    <meta name="description" content="Cài & dùng DualMind trong vài phút: chạy offline không cần key, chọn provider, nối Figma nếu thích.">
     <title>Hướng dẫn | DualMind</title>
     <link rel="icon" href="images/icon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=2">
 
     <script>
         (function() {
@@ -42,60 +42,83 @@
     <main class="article-page">
         <article class="deep-dive-content">
             <header class="article-header reveal-on-scroll">
-                <p class="eyebrow"><span class="lang-en">GETTING STARTED</span><span class="lang-vi">BẮT ĐẦU NHANH</span></p>
-                <h1><span class="lang-en">Install &amp; use DualMind</span><span class="lang-vi">Cài đặt &amp; sử dụng DualMind</span></h1>
-                <p class="subtitle"><span class="lang-en">Run it fully offline in under a minute, pick an AI brain, and optionally bridge Figma. No REST tokens required.</span><span class="lang-vi">Chạy hoàn toàn offline trong chưa đầy một phút, chọn "bộ não" AI, và kết nối Figma nếu muốn. Không cần REST token.</span></p>
+                <p class="eyebrow"><span class="lang-en">GETTING STARTED</span><span class="lang-vi">BẮT ĐẦU</span></p>
+                <h1><span class="lang-en">Get DualMind running in a few minutes</span><span class="lang-vi">Cài DualMind chạy trong vài phút</span></h1>
+                <p class="subtitle"><span class="lang-en">Tải về là chạy được ngay — không cần API key, không cần Figma. Khi nào rảnh thì nối thêm Figma để xem agent tự vẽ. Mình đi từng bước một nhé.</span><span class="lang-vi">Tải về là chạy được ngay — không cần API key, không cần Figma. Khi nào rảnh thì nối thêm Figma để xem agent tự vẽ. Mình đi từng bước một nhé.</span></p>
             </header>
 
             <section class="article-section reveal-on-scroll">
-                <h2><span class="lang-en">1. Install the desktop app</span><span class="lang-vi">1. Cài đặt ứng dụng</span></h2>
-                <p><span class="lang-en">Grab the latest build from <a href="https://github.com/vtd182/ZA-ai-hackathon-26/releases/latest" style="color: var(--accent);">Releases</a>. It ships the Figma runtime bundled — no extra install needed.</span><span class="lang-vi">Tải bản mới nhất ở <a href="https://github.com/vtd182/ZA-ai-hackathon-26/releases/latest" style="color: var(--accent);">Releases</a>. Bản này đã đóng gói sẵn runtime Figma — không cần cài thêm gì.</span></p>
-                <p style="font-weight:700;color:var(--text-primary);margin-bottom:0.5rem;"><span class="lang-en">macOS (unsigned hackathon build)</span><span class="lang-vi">macOS (bản hackathon chưa ký)</span></p>
-                <ol style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.8; color: var(--text-secondary);">
-                    <li><span class="lang-en">Open <strong>DualMind-x.x.x-arm64.dmg</strong> and drag <strong>DualMind</strong> into Applications.</span><span class="lang-vi">Mở <strong>DualMind-x.x.x-arm64.dmg</strong>, kéo <strong>DualMind</strong> vào Applications.</span></li>
-                    <li><span class="lang-en"><strong>Don't double-click.</strong> Right-click (or Control-click) the app → <strong>Open</strong> → <strong>Open</strong> again in the dialog. It launches normally after that.</span><span class="lang-vi"><strong>Đừng click đúp.</strong> Chuột phải (hoặc Control-click) vào app → <strong>Open</strong> → bấm <strong>Open</strong> lần nữa ở hộp thoại. Các lần sau mở bình thường.</span></li>
-                    <li><span class="lang-en">If the app still won't open, clear the quarantine flag: <code>xattr -dr com.apple.quarantine /Applications/DualMind.app</code></span><span class="lang-vi">Nếu vẫn không mở được, gỡ cờ quarantine: <code>xattr -dr com.apple.quarantine /Applications/DualMind.app</code></span></li>
-                </ol>
-                <p style="font-weight:700;color:var(--text-primary);margin-bottom:0.5rem;">Windows</p>
-                <ol style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.8; color: var(--text-secondary);">
-                    <li><span class="lang-en">Run <strong>DualMind-Setup-x.x.x.exe</strong>. If SmartScreen appears, choose <strong>More info → Run anyway</strong>.</span><span class="lang-vi">Chạy <strong>DualMind-Setup-x.x.x.exe</strong>. Nếu hiện SmartScreen, chọn <strong>More info → Run anyway</strong>.</span></li>
-                </ol>
-            </section>
-
-            <section class="article-section reveal-on-scroll">
-                <h2><span class="lang-en">2. First run — 100% offline, no key</span><span class="lang-vi">2. Lần chạy đầu — 100% offline, không cần key</span></h2>
-                <p><span class="lang-en">Out of the box, DualMind uses the <strong>Mock · Offline</strong> provider — deterministic and free. You can go through the whole flow (Idea → Discovery → Decision → Delivery → kickoff artifacts) without any account or API key. Just type an idea and follow the guided choices.</span><span class="lang-vi">Ngay khi mở, DualMind dùng provider <strong>Mock · Offline</strong> — deterministic và miễn phí. Bạn có thể đi hết luồng (Ý tưởng → Khám phá → Quyết định → Delivery → sinh artifact) mà không cần tài khoản hay API key. Chỉ cần gõ ý tưởng và bấm theo các lựa chọn.</span></p>
-                <p><span class="lang-en">Tip: use the stepper's <strong>"Next step →"</strong> button to advance phases yourself, and the collapse/resize controls to keep the chat readable.</span><span class="lang-vi">Mẹo: dùng nút <strong>"Sang bước tiếp →"</strong> trên stepper để tự chuyển bước, và các nút thu gọn / kéo dãn khung chat để dễ đọc.</span></p>
-            </section>
-
-            <section class="article-section reveal-on-scroll">
-                <h2><span class="lang-en">3. Pick an AI brain (optional)</span><span class="lang-vi">3. Chọn "bộ não" AI (tùy chọn)</span></h2>
-                <p><span class="lang-en">Open <strong>Settings</strong> (gear icon or <code>⌘,</code>) → Providers, or use the provider dropdown on the top bar. You can switch mid-session without losing context.</span><span class="lang-vi">Mở <strong>Cài đặt</strong> (icon bánh răng hoặc <code>⌘,</code>) → Providers, hoặc dùng dropdown provider trên thanh trên. Có thể đổi giữa phiên mà không mất ngữ cảnh.</span></p>
-                <ul style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.8; color: var(--text-secondary);">
-                    <li><strong style="color:var(--text-primary);">Mock · Offline</strong> — <span class="lang-en">no setup, deterministic, great for demos.</span><span class="lang-vi">không cần cấu hình, deterministic, hợp để demo.</span></li>
-                    <li><strong style="color:var(--text-primary);">AgentRouter</strong> — <span class="lang-en">recommended cloud brain. Open its <strong>Configure</strong> and paste your AgentRouter API key.</span><span class="lang-vi">bộ não cloud khuyến nghị. Mở <strong>Cấu hình</strong> và dán API key AgentRouter của bạn.</span></li>
-                    <li><strong style="color:var(--text-primary);">OpenAI / Gemini / Claude</strong> — <span class="lang-en">paste the matching API key in Configure. Keys are stored in the OS keychain only.</span><span class="lang-vi">dán API key tương ứng vào Cấu hình. Key chỉ lưu trong keychain của hệ điều hành.</span></li>
-                    <li><strong style="color:var(--text-primary);">Codex</strong> — <span class="lang-en">uses your local Codex CLI session; log in with the Codex CLI first and DualMind detects it.</span><span class="lang-vi">dùng phiên Codex CLI cục bộ; đăng nhập Codex CLI trước, DualMind sẽ tự nhận.</span></li>
+                <h2><span class="lang-en">1. Tải đúng file trên GitHub Release</span><span class="lang-vi">1. Tải đúng file trên GitHub Release</span></h2>
+                <p><span class="lang-en">Vào trang <a href="https://github.com/vtd182/ZA-ai-hackathon-26/releases/latest" style="color: var(--accent);">Releases</a>, mở bản mới nhất. Ở phần Assets có mấy file, bạn chỉ cần tải đúng cái mình dùng thôi:</span><span class="lang-vi">Vào trang <a href="https://github.com/vtd182/ZA-ai-hackathon-26/releases/latest" style="color: var(--accent);">Releases</a>, mở bản mới nhất. Ở phần Assets có mấy file, bạn chỉ cần tải đúng cái mình dùng thôi:</span></p>
+                <ul style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.9; color: var(--text-secondary);">
+                    <li><span class="lang-en">Máy Mac (Apple Silicon): <code>DualMind-&lt;version&gt;-arm64.dmg</code></span><span class="lang-vi">Máy Mac (Apple Silicon): <code>DualMind-&lt;version&gt;-arm64.dmg</code></span></li>
+                    <li><span class="lang-en">Máy Windows: <code>DualMind-Setup-&lt;version&gt;.exe</code></span><span class="lang-vi">Máy Windows: <code>DualMind-Setup-&lt;version&gt;.exe</code></span></li>
+                    <li><span class="lang-en">Muốn nối Figma thật: tải thêm <code>za-talk-to-figma-plugin.zip</code></span><span class="lang-vi">Muốn nối Figma thật: tải thêm <code>za-talk-to-figma-plugin.zip</code></span></li>
                 </ul>
-                <p style="font-size:0.95rem;"><span class="lang-en">Cost-bearing providers require an explicit confirmation before the first paid turn.</span><span class="lang-vi">Các provider tính phí sẽ yêu cầu xác nhận rõ ràng trước lượt trả phí đầu tiên.</span></p>
+                <p><span class="lang-en">Mấy file <code>latest.yml</code>, <code>*.blockmap</code> hay <code>Source code</code> thì bỏ qua — chúng là đồ dùng cho auto-update và mã nguồn, không phải để cài tay.</span><span class="lang-vi">Mấy file <code>latest.yml</code>, <code>*.blockmap</code> hay <code>Source code</code> thì bỏ qua — chúng là đồ dùng cho auto-update và mã nguồn, không phải để cài tay.</span></p>
             </section>
 
             <section class="article-section reveal-on-scroll">
-                <h2><span class="lang-en">4. Connect Figma (optional)</span><span class="lang-vi">4. Kết nối Figma (tùy chọn)</span></h2>
-                <p><span class="lang-en">No Figma? DualMind still ships Jira, Confluence and the PRD via a mock preview. To craft real, clickable ZDS prototypes, bridge Figma once. We never ask for a Figma REST token — the bundled runtime auto-starts locally and you import a dev plugin.</span><span class="lang-vi">Không có Figma? DualMind vẫn xuất đủ Jira, Confluence và PRD qua bản preview mock. Muốn craft prototype ZDS thật, bấm được, thì nối Figma một lần. Chúng tôi không hỏi Figma REST token — runtime đóng gói tự chạy cục bộ và bạn import một dev plugin.</span></p>
-                <p style="font-size:0.95rem;font-weight:700;color:var(--text-primary);"><span class="lang-en">Requires Figma Desktop (dev plugin import isn't available in the browser).</span><span class="lang-vi">Cần Figma Desktop (import dev plugin không chạy trên trình duyệt).</span></p>
-                <ol style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.8; color: var(--text-secondary);">
-                    <li><span class="lang-en">In DualMind, open the <strong>Figma</strong> panel. The local runtime auto-starts (127.0.0.1).</span><span class="lang-vi">Trong DualMind, mở panel <strong>Figma</strong>. Runtime cục bộ tự khởi động (127.0.0.1).</span></li>
-                    <li><span class="lang-en">Click <strong>Open manifest</strong> — it reveals the bundled <code>manifest.json</code> (inside the app's Resources).</span><span class="lang-vi">Bấm <strong>Mở manifest</strong> — nó hiện file <code>manifest.json</code> đóng gói (trong Resources của app).</span></li>
-                    <li><span class="lang-en">In Figma Desktop: <strong>Plugins → Development → Import plugin from manifest…</strong> → choose that file, then run <strong>ZA Talk To Figma</strong>.</span><span class="lang-vi">Trong Figma Desktop: <strong>Plugins → Development → Import plugin from manifest…</strong> → chọn file đó, rồi chạy plugin <strong>ZA Talk To Figma</strong>.</span></li>
-                    <li><span class="lang-en">Back in DualMind, confirm the source:</span><span class="lang-vi">Quay lại DualMind, xác nhận nguồn:</span>
-                        <ul style="margin-top:0.5rem;">
-                            <li><span class="lang-en"><strong>Use this page</strong> on a ZDS component page → craft follows the Zalo Design System.</span><span class="lang-vi"><strong>Dùng Page đang mở</strong> ở trang chứa component ZDS → craft bám Zalo Design System.</span></li>
-                            <li><span class="lang-en"><strong>Không dùng ZDS</strong> → free-creative: the agent designs from scratch, no ZDS reference needed.</span><span class="lang-vi"><strong>Không dùng ZDS</strong> → free-creative: agent tự thiết kế, không cần thư viện ZDS.</span></li>
-                        </ul>
-                    </li>
+                <h2><span class="lang-en">2. Cài vào máy</span><span class="lang-vi">2. Cài vào máy</span></h2>
+                <p style="font-weight:700;color:var(--text-primary);margin-bottom:0.5rem;">macOS</p>
+                <p><span class="lang-en">Mở file <code>.dmg</code>, kéo <strong>DualMind</strong> vào thư mục <strong>Applications</strong> là xong phần cài. Vì đây là app hackathon mới build, chưa kịp ký (notarize) với Apple, nên lần đầu mở macOS sẽ hơi "làm khó" một chút — bình thường thôi, làm thế này:</span><span class="lang-vi">Mở file <code>.dmg</code>, kéo <strong>DualMind</strong> vào thư mục <strong>Applications</strong> là xong phần cài. Vì đây là app hackathon mới build, chưa kịp ký (notarize) với Apple, nên lần đầu mở macOS sẽ hơi "làm khó" một chút — bình thường thôi, làm thế này:</span></p>
+                <ol style="margin-left: 2rem; margin-bottom: 1rem; line-height: 1.9; color: var(--text-secondary);">
+                    <li><span class="lang-en">Vào <strong>Finder → Applications</strong>, <strong>chuột phải</strong> vào DualMind → chọn <strong>Open</strong>.</span><span class="lang-vi">Vào <strong>Finder → Applications</strong>, <strong>chuột phải</strong> vào DualMind → chọn <strong>Open</strong>.</span></li>
+                    <li><span class="lang-en">Hộp thoại hiện ra thì bấm <strong>Open</strong> lần nữa. Từ lần sau click đúp mở như app thường.</span><span class="lang-vi">Hộp thoại hiện ra thì bấm <strong>Open</strong> lần nữa. Từ lần sau click đúp mở như app thường.</span></li>
                 </ol>
-                <p style="font-size:0.95rem;"><span class="lang-en">Switching Figma file/page requires allowlisting again — a guardrail so the agent never writes to the wrong place.</span><span class="lang-vi">Đổi file/page Figma thì phải allowlist lại — một guardrail để agent không bao giờ ghi nhầm chỗ.</span></p>
+                <p><span class="lang-en">Nếu vẫn bị chặn, vào <strong>System Settings → Privacy &amp; Security</strong> bấm <strong>Open Anyway</strong>. Hoặc mở Terminal gõ đúng một dòng này rồi mở lại app:</span><span class="lang-vi">Nếu vẫn bị chặn, vào <strong>System Settings → Privacy &amp; Security</strong> bấm <strong>Open Anyway</strong>. Hoặc mở Terminal gõ đúng một dòng này rồi mở lại app:</span></p>
+                <pre style="background: var(--surface-color); padding: 1.25rem 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); overflow-x: auto; margin-bottom: 1.5rem;"><code>xattr -dr com.apple.quarantine /Applications/DualMind.app</code></pre>
+                <p style="font-weight:700;color:var(--text-primary);margin-bottom:0.5rem;">Windows</p>
+                <p><span class="lang-en">Chạy file <code>.exe</code>. Nếu SmartScreen nhảy ra cảnh báo, bấm <strong>More info → Run anyway</strong>, rồi mở DualMind từ Start Menu. Cũng nhanh thôi.</span><span class="lang-vi">Chạy file <code>.exe</code>. Nếu SmartScreen nhảy ra cảnh báo, bấm <strong>More info → Run anyway</strong>, rồi mở DualMind từ Start Menu. Cũng nhanh thôi.</span></p>
+            </section>
+
+            <section class="article-section reveal-on-scroll">
+                <h2><span class="lang-en">3. Chạy thử ngay — không cần cấu hình gì</span><span class="lang-vi">3. Chạy thử ngay — không cần cấu hình gì</span></h2>
+                <p><span class="lang-en">Đây là phần vui nhất: bạn không cần API key, không cần đăng nhập, không cần Figma vẫn trải nghiệm được trọn luồng. App mặc định dùng provider <strong>Mock · Offline</strong> — chạy hẳn trên máy, kết quả ổn định để demo.</span><span class="lang-vi">Đây là phần vui nhất: bạn không cần API key, không cần đăng nhập, không cần Figma vẫn trải nghiệm được trọn luồng. App mặc định dùng provider <strong>Mock · Offline</strong> — chạy hẳn trên máy, kết quả ổn định để demo.</span></p>
+                <ol style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.9; color: var(--text-secondary);">
+                    <li><span class="lang-en">Mở app, để nguyên provider <strong>Mock · Offline</strong>.</span><span class="lang-vi">Mở app, để nguyên provider <strong>Mock · Offline</strong>.</span></li>
+                    <li><span class="lang-en">Bấm <strong>+</strong> tạo cuộc trò chuyện mới, gõ một ý tưởng (ví dụ: "Mini App đặt suất ăn trưa cho văn phòng").</span><span class="lang-vi">Bấm <strong>+</strong> tạo cuộc trò chuyện mới, gõ một ý tưởng (ví dụ: "Mini App đặt suất ăn trưa cho văn phòng").</span></li>
+                    <li><span class="lang-en">Bấm <strong>"Sang bước tiếp →"</strong> trên thanh tiến trình để đi qua Khám phá → Quyết định, chọn vài lựa chọn có sẵn.</span><span class="lang-vi">Bấm <strong>"Sang bước tiếp →"</strong> trên thanh tiến trình để đi qua Khám phá → Quyết định, chọn vài lựa chọn có sẵn.</span></li>
+                    <li><span class="lang-en">Chốt ProductSpec, rồi bấm <strong>"Tạo kickoff package"</strong> và duyệt. Xong — bạn có Figma (bản mock), backlog, tài liệu và PRD, tất cả trỏ về một ProductSpec.</span><span class="lang-vi">Chốt ProductSpec, rồi bấm <strong>"Tạo kickoff package"</strong> và duyệt. Xong — bạn có Figma (bản mock), backlog, tài liệu và PRD, tất cả trỏ về một ProductSpec.</span></li>
+                </ol>
+                <p><span class="lang-en">Muốn dùng model thật? Mở <strong>Cài đặt</strong> (bánh răng hoặc <code>⌘,</code>) → chọn provider (AgentRouter, OpenAI, Gemini, Claude, hoặc Codex) và dán key vào ô Cấu hình. Đổi provider giữa chừng cũng không mất ngữ cảnh.</span><span class="lang-vi">Muốn dùng model thật? Mở <strong>Cài đặt</strong> (bánh răng hoặc <code>⌘,</code>) → chọn provider (AgentRouter, OpenAI, Gemini, Claude, hoặc Codex) và dán key vào ô Cấu hình. Đổi provider giữa chừng cũng không mất ngữ cảnh.</span></p>
+            </section>
+
+            <section class="article-section reveal-on-scroll">
+                <h2><span class="lang-en">4. Nối Figma để xem agent tự vẽ (tùy chọn)</span><span class="lang-vi">4. Nối Figma để xem agent tự vẽ (tùy chọn)</span></h2>
+                <p><span class="lang-en">Phần này để dành cho ai muốn xem "phép thuật": agent dựng prototype thật, bấm được ngay trong file Figma của bạn. Yên tâm — bọn mình <strong>không hỏi Figma token</strong> gì cả. App đã nhúng sẵn runtime chạy ngầm trên máy, bạn chỉ cần nạp một plugin nhỏ vào Figma. Nhớ dùng <strong>Figma Desktop</strong> nhé (bản web không import được plugin dev).</span><span class="lang-vi">Phần này để dành cho ai muốn xem "phép thuật": agent dựng prototype thật, bấm được ngay trong file Figma của bạn. Yên tâm — bọn mình <strong>không hỏi Figma token</strong> gì cả. App đã nhúng sẵn runtime chạy ngầm trên máy, bạn chỉ cần nạp một plugin nhỏ vào Figma. Nhớ dùng <strong>Figma Desktop</strong> nhé (bản web không import được plugin dev).</span></p>
+                <ol style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.9; color: var(--text-secondary);">
+                    <li><span class="lang-en">Giải nén <code>za-talk-to-figma-plugin.zip</code> vừa tải — bên trong có <code>manifest.json</code> và thư mục <code>dist/</code>.</span><span class="lang-vi">Giải nén <code>za-talk-to-figma-plugin.zip</code> vừa tải — bên trong có <code>manifest.json</code> và thư mục <code>dist/</code>.</span></li>
+                    <li><span class="lang-en">Mở Figma Desktop → <strong>Plugins → Development → Import plugin from manifest…</strong> → chọn file <code>manifest.json</code> đó.</span><span class="lang-vi">Mở Figma Desktop → <strong>Plugins → Development → Import plugin from manifest…</strong> → chọn file <code>manifest.json</code> đó.</span></li>
+                    <li><span class="lang-en">Chạy plugin <strong>ZA Talk To Figma</strong> (trong Plugins → Development). Giữ cửa sổ plugin mở.</span><span class="lang-vi">Chạy plugin <strong>ZA Talk To Figma</strong> (trong Plugins → Development). Giữ cửa sổ plugin mở.</span></li>
+                    <li><span class="lang-en">Quay lại DualMind, mở panel <strong>Figma</strong> — thấy báo "đã kết nối" là ngon.</span><span class="lang-vi">Quay lại DualMind, mở panel <strong>Figma</strong> — thấy báo "đã kết nối" là ngon.</span></li>
+                </ol>
+            </section>
+
+            <section class="article-section reveal-on-scroll">
+                <h2><span class="lang-en">5. Bám ZDS hay để agent tự do?</span><span class="lang-vi">5. Bám ZDS hay để agent tự do?</span></h2>
+                <p><span class="lang-en">Sau khi plugin kết nối, bạn chọn một trong hai kiểu — tùy bạn muốn giao diện chuẩn Zalo hay để agent thỏa sức:</span><span class="lang-vi">Sau khi plugin kết nối, bạn chọn một trong hai kiểu — tùy bạn muốn giao diện chuẩn Zalo hay để agent thỏa sức:</span></p>
+                <ul style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.9; color: var(--text-secondary);">
+                    <li><span class="lang-en"><strong>Dùng ZDS</strong> — mở page có component Zalo Mini App Framework/ZDS trong Figma, rồi bấm <strong>"Dùng Page đang mở"</strong>. Agent sẽ vẽ bám đúng component/icon/style của Zalo.</span><span class="lang-vi"><strong>Dùng ZDS</strong> — mở page có component Zalo Mini App Framework/ZDS trong Figma, rồi bấm <strong>"Dùng Page đang mở"</strong>. Agent sẽ vẽ bám đúng component/icon/style của Zalo.</span></li>
+                    <li><span class="lang-en"><strong>Không dùng ZDS</strong> — mở một page trống, bấm <strong>"Không dùng ZDS"</strong>. Agent tự do thiết kế theo ProductSpec, vẽ lên page đó, không bắt buộc mobile hay component Zalo.</span><span class="lang-vi"><strong>Không dùng ZDS</strong> — mở một page trống, bấm <strong>"Không dùng ZDS"</strong>. Agent tự do thiết kế theo ProductSpec, vẽ lên page đó, không bắt buộc mobile hay component Zalo.</span></li>
+                </ul>
+                <p><span class="lang-en">Đổi file/page trong Figma thì nhớ chọn lại trong DualMind — đây là "chốt chặn" để agent không lỡ tay ghi nhầm vào file của bạn.</span><span class="lang-vi">Đổi file/page trong Figma thì nhớ chọn lại trong DualMind — đây là "chốt chặn" để agent không lỡ tay ghi nhầm vào file của bạn.</span></p>
+            </section>
+
+            <section class="article-section reveal-on-scroll">
+                <h2><span class="lang-en">6. Lỡ có trục trặc thì xử thế này</span><span class="lang-vi">6. Lỡ có trục trặc thì xử thế này</span></h2>
+                <ul style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.9; color: var(--text-secondary);">
+                    <li><span class="lang-en"><strong>Mac không cho mở app:</strong> chuột phải → Open, hoặc "Open Anyway" trong Privacy &amp; Security, hoặc chạy dòng <code>xattr</code> ở mục 2.</span><span class="lang-vi"><strong>Mac không cho mở app:</strong> chuột phải → Open, hoặc "Open Anyway" trong Privacy &amp; Security, hoặc chạy dòng <code>xattr</code> ở mục 2.</span></li>
+                    <li><span class="lang-en"><strong>Figma không thấy plugin:</strong> nhớ dùng Figma Desktop, giải nén zip trước rồi mới import đúng <code>manifest.json</code>.</span><span class="lang-vi"><strong>Figma không thấy plugin:</strong> nhớ dùng Figma Desktop, giải nén zip trước rồi mới import đúng <code>manifest.json</code>.</span></li>
+                    <li><span class="lang-en"><strong>App báo chưa kết nối Figma:</strong> mở lại plugin ZA Talk To Figma và giữ cửa sổ plugin mở trong lúc tạo design.</span><span class="lang-vi"><strong>App báo chưa kết nối Figma:</strong> mở lại plugin ZA Talk To Figma và giữ cửa sổ plugin mở trong lúc tạo design.</span></li>
+                    <li><span class="lang-en"><strong>Figma vẽ hơi lâu:</strong> design thật có thể mất vài phút — cứ để yên, đừng đóng app/plugin khi đang chạy "Figma craft".</span><span class="lang-vi"><strong>Figma vẽ hơi lâu:</strong> design thật có thể mất vài phút — cứ để yên, đừng đóng app/plugin khi đang chạy "Figma craft".</span></li>
+                    <li><span class="lang-en"><strong>Provider/API lỗi:</strong> quay về <strong>Mock · Offline</strong> để demo luồng local, rồi khi rảnh cấu hình lại key trong Settings.</span><span class="lang-vi"><strong>Provider/API lỗi:</strong> quay về <strong>Mock · Offline</strong> để demo luồng local, rồi khi rảnh cấu hình lại key trong Settings.</span></li>
+                </ul>
+            </section>
+
+            <section class="article-section reveal-on-scroll">
+                <h2><span class="lang-en">7. Muốn demo nhanh 1 phút?</span><span class="lang-vi">7. Muốn demo nhanh 1 phút?</span></h2>
+                <p><span class="lang-en">Cứ theo mạch này là ra: mở app → tạo chat, mô tả một ý tưởng → bấm qua từng bước và chọn phương án → chốt ProductSpec → vẽ user flow trên canvas → tạo kickoff package rồi duyệt. Cuối cùng nhìn read-back: Figma, Jira, Confluence và PRD cùng trỏ về một ProductSpec. Gọn gàng, đủ sức thuyết phục.</span><span class="lang-vi">Cứ theo mạch này là ra: mở app → tạo chat, mô tả một ý tưởng → bấm qua từng bước và chọn phương án → chốt ProductSpec → vẽ user flow trên canvas → tạo kickoff package rồi duyệt. Cuối cùng nhìn read-back: Figma, Jira, Confluence và PRD cùng trỏ về một ProductSpec. Gọn gàng, đủ sức thuyết phục.</span></p>
             </section>
         </article>
 
