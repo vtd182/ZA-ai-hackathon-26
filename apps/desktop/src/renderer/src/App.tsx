@@ -611,7 +611,9 @@ export function App(): React.JSX.Element {
   }
 
   return (
-    <main className="app-shell">
+    <div className="app-frame">
+      <div className="app-titlebar"><span>ZA-ai-hackathon-26 — DualMind</span></div>
+      <main className="app-shell">
       <section className="center-panel">
         <header className="topbar">
           <div className="thread-heading">
@@ -927,7 +929,8 @@ export function App(): React.JSX.Element {
           }}
         />
       )}
-    </main>
+      </main>
+    </div>
   )
 }
 

@@ -2311,6 +2311,20 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  // Right-click clipboard menu — Chromium ships no default context menu in Electron, so without
+  // this users perceive "no copy/paste" even though the Edit-menu accelerators work.
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const canText = params.isEditable || Boolean(params.selectionText)
+    if (!canText) return
+    Menu.buildFromTemplate([
+      { role: 'cut', enabled: params.isEditable && Boolean(params.selectionText) },
+      { role: 'copy', enabled: Boolean(params.selectionText) },
+      { role: 'paste', enabled: params.isEditable },
+      { type: 'separator' },
+      { role: 'selectAll' },
+    ]).popup({ window: mainWindow! })
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
