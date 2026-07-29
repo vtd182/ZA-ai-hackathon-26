@@ -353,8 +353,9 @@ Intent:
   verification count and ProductSpec hash are visible before the user approves the write. Execution
   progress labels now use the Agent Core contract names (`ArtifactBrief + plan`, `Guard preflight`,
   `Write có approval`, `Read-back`, `Verify read-back`) instead of generic AI/status wording.
-  Remaining polish: add renderer smoke coverage and richer failure cards that classify contract
-  errors by ProductSpec, ArtifactBrief, MCP execution and read-back.
+  Error toasts now classify failures by ProductSpec, ArtifactBrief, Figma MCP, Figma craft,
+  read-back verification, provider, canvas or runtime, and include the next action. Remaining
+  polish: renderer smoke coverage for the visual error card and per-target failure drill-down.
 
 ### `P0-SHARP-007` Demo script and rehearsal matrix
 

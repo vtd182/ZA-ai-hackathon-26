@@ -2234,11 +2234,11 @@ a:focus-visible,
   left: auto;
   top: auto;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-height: 38px;
   max-width: min(420px, calc(100vw - 32px));
-  padding: 6px 6px 6px 12px;
+  padding: 9px 6px 9px 12px;
   border: 1px solid #f1b5b9;
   border-radius: 8px;
   color: var(--danger);
@@ -2247,15 +2247,30 @@ a:focus-visible,
   font-size: 12px;
 }
 
-.error-banner span {
+.error-copy {
+  display: grid;
   flex: 1;
-  overflow-wrap: anywhere;
-  max-height: 160px;
-  overflow-y: auto;
+  gap: 3px;
+  min-width: 0;
 }
 
-.error-banner span {
-  flex: 1;
+.error-copy strong {
+  color: #9f1e2d;
+  font-size: 12px;
+}
+
+.error-copy span,
+.error-copy small {
+  overflow-wrap: anywhere;
+  max-height: 120px;
+  overflow-y: auto;
+  color: #a23a44;
+  line-height: 1.35;
+}
+
+.error-copy small {
+  color: #70454a;
+  font-size: 11px;
 }
 
 .modal-backdrop {

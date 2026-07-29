@@ -59,6 +59,7 @@ import type {
   PlannedAction,
   PhaseReasoningResult,
 } from '@pm-agent/domain'
+import { classifyErrorText } from './error-classifier'
 
 const noCanvasProgram: CanvasProgram = { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null }
 // Curated set surfaced in the "/" menu — draw first, then the Figma artifact.
@@ -652,6 +653,7 @@ export function App(): React.JSX.Element {
   }
 
   const activeProfile = profiles.find((profile) => profile.id === activeThread?.providerId)
+  const classifiedError = error ? classifyErrorText(error) : null
 
   const resetDemo = async (): Promise<void> => {
     setLoading(true)
@@ -743,10 +745,14 @@ export function App(): React.JSX.Element {
           </div>
         </header>
 
-        {error && (
+        {classifiedError && (
           <div className="error-banner">
             <CircleAlert size={17} />
-            <span>{error}</span>
+            <div className="error-copy">
+              <strong>{classifiedError.title}</strong>
+              <span>{classifiedError.contract} · {classifiedError.detail}</span>
+              <small>{classifiedError.nextAction}</small>
+            </div>
             <button className="icon-button" title="Đóng" onClick={() => setError(null)}><X size={16} /></button>
           </div>
         )}
