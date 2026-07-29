@@ -2629,6 +2629,41 @@ a:focus-visible,
   background: #eef4f2;
 }
 
+.runtime-contract {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 12px;
+  border: 1px solid #d8e5ef;
+  border-radius: 8px;
+  background: #f7fbff;
+  color: #3e535d;
+  font-size: 11.5px;
+  line-height: 17px;
+}
+
+.runtime-contract > strong {
+  color: #18303b;
+  font-size: 12px;
+}
+
+.runtime-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.runtime-tags i {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #e6f1ff;
+  color: #0b62cf;
+  font-style: normal;
+  font-size: 10.5px;
+  line-height: 14px;
+}
+
 .probe-result {
   display: flex;
   flex-direction: column;
@@ -2846,6 +2881,14 @@ a:focus-visible,
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #8a969b;
+  font-size: 11px;
+}
+
+.settings-provider-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #5c6c72;
   font-size: 11px;
 }
 

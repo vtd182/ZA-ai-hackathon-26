@@ -60,6 +60,7 @@ import type {
   PhaseReasoningResult,
 } from '@pm-agent/domain'
 import { classifyErrorText } from './error-classifier'
+import { providerRuntimeCopy } from './provider-runtime-copy'
 
 const noCanvasProgram: CanvasProgram = { schemaVersion: 1, mode: 'none', summary: '', operations: [], script: null }
 // Curated set surfaced in the "/" menu — draw first, then the Figma artifact.
@@ -2021,6 +2022,7 @@ function ProviderSettings({
   const [probe, setProbe] = useState<ProviderProbe | null>(null)
   const [busy, setBusy] = useState(false)
   const needsKey = profile.costMode === 'api_paid'
+  const runtime = providerRuntimeCopy(profile)
 
   const save = async (): Promise<void> => {
     setBusy(true)
@@ -2081,6 +2083,15 @@ function ProviderSettings({
               ? 'API key được mã hóa bằng Keychain; không lưu trong SQLite hoặc renderer.'
               : 'Provider offline deterministic, không gửi dữ liệu ra ngoài.'}
         </div>
+        <div className="runtime-contract" aria-label="Provider runtime contract">
+          <strong>Runtime contract</strong>
+          <span>{runtime.role}</span>
+          <span>{runtime.storage}</span>
+          <span>{runtime.artifactBoundary}</span>
+          <div className="runtime-tags">
+            {runtime.tags.map((tag) => <i key={tag}>{tag}</i>)}
+          </div>
+        </div>
         {probe && <div className={probe.available ? 'probe-result ready' : 'probe-result'}><strong>{probe.label}</strong><span>{probe.detail}</span></div>}
         <footer>
           <button className="secondary-button" disabled={busy} onClick={() => void runProbe()}>Kiểm tra</button>
@@ -2119,16 +2130,20 @@ function SettingsDialog({
         <div className="settings-section">
           <h4>Reasoning providers</h4>
           <div className="settings-provider-list">
-            {profiles.map((profile) => (
-              <div key={profile.id} className={profile.id === activeProfile?.id ? 'settings-provider-row active' : 'settings-provider-row'}>
-                <span className={profile.hasCredential ? 'status-dot ready' : 'status-dot'} />
-                <div className="settings-provider-copy">
-                  <strong>{profile.displayName}</strong>
-                  <span>{profile.modelId} · {profile.costMode}{profile.id === activeProfile?.id ? ' · đang dùng' : ''}</span>
+            {profiles.map((profile) => {
+              const runtime = providerRuntimeCopy(profile)
+              return (
+                <div key={profile.id} className={profile.id === activeProfile?.id ? 'settings-provider-row active' : 'settings-provider-row'}>
+                  <span className={profile.hasCredential ? 'status-dot ready' : 'status-dot'} />
+                  <div className="settings-provider-copy">
+                    <strong>{profile.displayName}</strong>
+                    <span>{profile.modelId} · {profile.costMode}{profile.id === activeProfile?.id ? ' · đang dùng' : ''}</span>
+                    <small>{runtime.role}</small>
+                  </div>
+                  <button className="secondary-button" onClick={() => onConfigureProfile(profile)}>Cấu hình</button>
                 </div>
-                <button className="secondary-button" onClick={() => onConfigureProfile(profile)}>Cấu hình</button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 

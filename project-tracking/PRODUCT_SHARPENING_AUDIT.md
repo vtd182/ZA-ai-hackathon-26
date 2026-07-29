@@ -356,6 +356,10 @@ Intent:
   Error toasts now classify failures by ProductSpec, ArtifactBrief, Figma MCP, Figma craft,
   read-back verification, provider, canvas or runtime, and include the next action. Remaining
   polish: renderer smoke coverage for the visual error card and per-target failure drill-down.
+- **Status note 2026-07-30 update:** provider settings now include a visible `Runtime contract`
+  card per provider. AgentRouter is explicitly described as reasoning + Figma craft through the
+  managed Codex Responses bridge, while external writes stay behind Agent Core approval, Figma MCP
+  and read-back. The settings provider list also previews each provider's role.
 
 ### `P0-SHARP-007` Demo script and rehearsal matrix
 
@@ -408,6 +412,9 @@ Intent:
   managed Codex app-server bridge behavior where remote refs can be persisted outside the user's
   personal `~/.codex`. Figma craft can run on AgentRouter by routing the creative blueprint worker
   through that bridge, while Agent Core still owns approval, Figma MCP write and read-back.
+- **Status note 2026-07-30 update:** renderer copy now makes that boundary visible: AgentRouter can
+  craft Figma, but cannot directly execute connector writes. This keeps the demo honest about why
+  the product is more governed than a normal provider chat.
 
 ## 9. Prompt Audit Checklist
 

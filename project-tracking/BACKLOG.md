@@ -529,6 +529,11 @@
   preflight issue, plus AgentRouter resume capability and ProductSpec-first Figma prompt budget.
   Verification: `./run.sh demo-rehearsal`, `./run.sh typecheck`, `./run.sh test`,
   `./run.sh build`, and `git diff --check` pass.
+- **Evidence update:** Provider settings now show a product-readable runtime contract for each
+  provider. AgentRouter is presented as reasoning + Figma craft through the managed Codex Responses
+  bridge, while Figma/Jira/Zdoc writes remain Agent Core approval/MCP/read-back responsibilities.
+  Verification: `pnpm exec vitest run apps/desktop/src/renderer/src/provider-runtime-copy.test.ts`,
+  `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
 
 ## Epic E7 - Change synchronization
 
