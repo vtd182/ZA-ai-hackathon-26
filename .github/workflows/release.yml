@@ -47,14 +47,21 @@ jobs:
           node-version: '24'
           cache: pnpm
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
 
       - name: Build Figma plugin bundle
         working-directory: mcp-tool/za-talk-to-figma/plugin
+        shell: bash
         run: |
-          pnpm install --no-frozen-lockfile
-          pnpm build
+          bun install --frozen-lockfile
+          bunx tsc --noEmit -p tsconfig.json
+          bun run build
 
       - name: Prepare packaged resources
         run: node scripts/prepare-package-assets.mjs --strict-figma

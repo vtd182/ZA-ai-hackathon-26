@@ -521,8 +521,8 @@
 - **Depends on:** P0-DEM-001, P0-QA-003
 - **Deliver:** macOS package, demo script, backup screenshots/video, timing notes.
 - **Acceptance:** clean-profile smoke test pass; full demo nằm trong timebox đã chọn.
-- **Progress:** GitHub Release outputs now include installer-embedded minimal packaged skill packs + Figma MCP/plugin runtime, plus standalone `za-talk-to-figma-<os>-<arch>.tar.gz` bundles per OS. Local `./run.sh dist` rebuilt Go/plugin and produced `apps/desktop/release/ZSpector-0.1.1-arm64.dmg` and `.dmg.blockmap` with no `.lock`; packaged app resources contain only minimal plugin manifest/dist plus runtime binary.
-- **Remaining:** clean-profile installed-app smoke and final timed demo rehearsal after the `v0.1.1` GitHub release run completes.
+- **Progress:** GitHub Release outputs now include installer-embedded minimal packaged skill packs + Figma MCP/plugin runtime, plus standalone `za-talk-to-figma-<os>-<arch>.tar.gz` bundles per OS. Local `./run.sh dist` rebuilt Go/plugin and produced `apps/desktop/release/ZSpector-0.1.2-arm64.dmg` and `.dmg.blockmap` with no `.lock`; packaged app resources contain only minimal plugin manifest/dist plus runtime binary. `v0.1.1` showed Windows CI must build the nested plugin with Bun instead of ad hoc pnpm.
+- **Remaining:** clean-profile installed-app smoke and final timed demo rehearsal after the `v0.1.2` GitHub release run completes.
 
 ## P1 sau khi P0 ổn định
 
