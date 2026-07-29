@@ -54,8 +54,10 @@ no-source, plus a no-host-path-leak assertion).
 
 ## Packaging checklist
 
-1. `./run.sh dist` or CI release builds the Figma MCP binary/plugin first, then runs
-   `node scripts/prepare-package-assets.mjs --strict-figma`.
+1. `./run.sh dist` builds the Figma MCP binary/plugin first, then runs
+   `node scripts/prepare-package-assets.mjs --strict-figma`. CI release builds the
+   Figma plugin once, then reuses that artifact while building each OS-specific Go
+   runtime.
 2. `apps/desktop/out/package-resources/` contains `skill-packs/`, `figma-runtime/`
    and `README.md`. The Figma runtime folder is intentionally minimal: binary,
    `plugin/manifest.json`, `plugin/dist/code.js` and `plugin/dist/index.html`.
@@ -64,8 +66,10 @@ no-source, plus a no-host-path-leak assertion).
    - `resources/skill-packs/pm-lifecycle-figma-design/SKILL.md` exists (Figma worker), and
    - `resources/skill-packs/pm-lifecycle-canvas/SKILL.md` exists (canvas installer source), and
    - `resources/figma-runtime/plugin/manifest.json` plus the OS binary exist.
-4. GitHub Release also attaches `za-talk-to-figma-<os>-<arch>.tar.gz` as a standalone
-   MCP/plugin bundle for users who want to import/run the bridge outside the app.
+4. GitHub Release also attaches `za-talk-to-figma-plugin.zip` plus
+   `za-talk-to-figma-runtime-<os>-<arch>.zip` bundles for users who want to import/run
+   the bridge outside the app. The plugin zip is OS-independent; runtime zips include
+   the OS-specific Go binary.
 5. First launch on the new machine auto-installs `~/.claude/skills/pm-lifecycle-canvas`.
    Nothing else is required for the AI-on-canvas surface.
 6. Target machine needs `node` and `curl` on PATH for the helper (both are already

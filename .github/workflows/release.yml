@@ -12,7 +12,47 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  figma-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build Figma plugin bundle
+        working-directory: mcp-tool/za-talk-to-figma/plugin
+        shell: bash
+        run: |
+          bun install --frozen-lockfile
+          bunx tsc --noEmit -p tsconfig.json
+          bun run build
+
+      - name: Stage Figma plugin files
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/figma-plugin-files/dist" apps/desktop/release
+          cp mcp-tool/za-talk-to-figma/plugin/manifest.json "$RUNNER_TEMP/figma-plugin-files/manifest.json"
+          cp mcp-tool/za-talk-to-figma/plugin/dist/code.js "$RUNNER_TEMP/figma-plugin-files/dist/code.js"
+          cp mcp-tool/za-talk-to-figma/plugin/dist/index.html "$RUNNER_TEMP/figma-plugin-files/dist/index.html"
+          (cd "$RUNNER_TEMP" && zip -qr "$GITHUB_WORKSPACE/apps/desktop/release/za-talk-to-figma-plugin.zip" figma-plugin-files)
+
+      - name: Upload Figma plugin files
+        uses: actions/upload-artifact@v4
+        with:
+          name: figma-plugin-files
+          path: ${{ runner.temp }}/figma-plugin-files
+
+      - name: Upload Figma plugin release zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-figma-plugin
+          path: apps/desktop/release/za-talk-to-figma-plugin.zip
+
+  build-app:
+    needs: figma-plugin
     strategy:
       fail-fast: false
       matrix:
@@ -47,42 +87,65 @@ jobs:
           node-version: '24'
           cache: pnpm
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
 
-      - name: Build Figma plugin bundle
-        working-directory: mcp-tool/za-talk-to-figma/plugin
-        shell: bash
-        run: |
-          bun install --frozen-lockfile
-          bunx tsc --noEmit -p tsconfig.json
-          bun run build
+      - name: Download Figma plugin bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: figma-plugin-files
+          path: ${{ runner.temp }}/figma-plugin-files
 
       - name: Prepare packaged resources
+        env:
+          PM_AGENT_FIGMA_PLUGIN_SOURCE: ${{ runner.temp }}/figma-plugin-files
         run: node scripts/prepare-package-assets.mjs --strict-figma
 
       - name: Package standalone Figma runtime
         shell: bash
         run: |
           mkdir -p apps/desktop/release
-          tar -czf "apps/desktop/release/za-talk-to-figma-${RUNNER_OS}-${RUNNER_ARCH}.tar.gz" \
-            -C apps/desktop/out/package-resources figma-runtime
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            powershell -NoProfile -Command "Compress-Archive -Path apps/desktop/out/package-resources/figma-runtime -DestinationPath apps/desktop/release/za-talk-to-figma-runtime-${RUNNER_OS}-${RUNNER_ARCH}.zip -Force"
+          else
+            (cd apps/desktop/out/package-resources && zip -qr "$GITHUB_WORKSPACE/apps/desktop/release/za-talk-to-figma-runtime-${RUNNER_OS}-${RUNNER_ARCH}.zip" figma-runtime)
+          fi
 
-      - name: Build + publish ZSpector
+      - name: Build ZSpector
         working-directory: apps/desktop
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pnpm exec electron-vite build
-          pnpm exec electron-builder --publish always
+          pnpm exec electron-builder --publish never
 
-      - name: Attach standalone Figma runtime to GitHub Release
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.dmg.blockmap
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.exe.blockmap
+            apps/desktop/release/latest*.yml
+            apps/desktop/release/za-talk-to-figma-runtime-*.zip
+          if-no-files-found: error
+
+  publish-release:
+    needs: [figma-plugin, build-app]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Publish GitHub Release draft
         uses: softprops/action-gh-release@v2
         with:
-          files: apps/desktop/release/za-talk-to-figma-${{ runner.os }}-${{ runner.arch }}.tar.gz
+          name: ${{ github.ref_name }}
+          body: Release ${{ github.ref_name }}
+          draft: true
+          files: release-assets/*

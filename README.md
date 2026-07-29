@@ -193,8 +193,9 @@ Build cho **hệ điều hành hiện tại** (electron‑builder tự nhận OS
 ```
 
 - macOS → `apps/desktop/release/ZSpector-<version>-arm64.dmg`
-- Windows → `apps/desktop/release/ZSpector Setup <version>.exe`
-- Standalone Figma runtime/plugin bundle → `apps/desktop/release/za-talk-to-figma-<os>-<arch>.tar.gz` in CI
+- Windows → `apps/desktop/release/ZSpector-Setup-<version>.exe`
+- Standalone Figma plugin bundle → `za-talk-to-figma-plugin.zip` in CI
+- Standalone Figma runtime bundle → `za-talk-to-figma-runtime-<os>-<arch>.zip` in CI
 
 **Cài trên macOS:** mở `.dmg` → kéo **ZSpector** vào Applications. App **chưa ký** → lần đầu **chuột phải → Open** (Gatekeeper).
 
@@ -220,11 +221,11 @@ git push origin v0.1.1
 ```
 
 Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) sẽ:
-1. Build runtime **Go** cho từng OS (`za-talk-to-figma` / `.exe`).
-2. Build **plugin Figma** bundle.
+1. Build **plugin Figma** bundle một lần trên Ubuntu vì `manifest.json` + `dist/*` là platform-independent.
+2. Build runtime **Go** cho từng OS (`za-talk-to-figma` / `.exe`) vì binary native khác nhau giữa macOS và Windows.
 3. Chuẩn bị packaged resources gồm skill packs + Figma runtime/plugin minimal.
-4. Chạy `electron-vite build` + `electron-builder --publish always` trên **macos-latest** và **windows-latest**.
-5. Tạo/ cập nhật **GitHub Release** của tag, đính kèm `.dmg` (macOS) + `Setup .exe` (Windows) + `blockmap`/`latest.yml` + `za-talk-to-figma-<os>-<arch>.tar.gz`.
+4. Chạy `electron-vite build` + `electron-builder --publish never` trên **macos-latest** và **windows-latest** để tạo installer local trong job.
+5. Gom tất cả artifact vào một job publish duy nhất và tạo **GitHub Release draft** của tag, đính kèm `.dmg` (macOS) + `Setup .exe` (Windows) + `blockmap`/`latest*.yml` + `za-talk-to-figma-plugin.zip` + `za-talk-to-figma-runtime-<os>-<arch>.zip`.
 
 > Bản `release/` là build artifact (đã gitignore) — không commit; luôn build lại qua tag hoặc `run dist`.
 

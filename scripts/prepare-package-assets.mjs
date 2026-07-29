@@ -7,6 +7,9 @@ const sourceRoot = join(root, 'skills')
 const outputRoot = join(root, 'apps', 'desktop', 'out', 'package-resources')
 const skillOutputRoot = join(outputRoot, 'skill-packs')
 const figmaRuntimeSourceRoot = join(root, 'mcp-tool', 'za-talk-to-figma')
+const figmaPluginSourceRoot = process.env.PM_AGENT_FIGMA_PLUGIN_SOURCE
+  ? resolve(process.env.PM_AGENT_FIGMA_PLUGIN_SOURCE)
+  : join(figmaRuntimeSourceRoot, 'plugin')
 const figmaRuntimeOutputRoot = join(outputRoot, 'figma-runtime')
 const strictFigma = process.argv.includes('--strict-figma')
 const skillFolders = [
@@ -34,7 +37,7 @@ for (const folder of skillFolders) {
 function copyFigmaRuntime() {
   const binName = process.platform === 'win32' ? 'za-talk-to-figma.exe' : 'za-talk-to-figma'
   const binarySource = join(figmaRuntimeSourceRoot, 'bin', binName)
-  const pluginSource = join(figmaRuntimeSourceRoot, 'plugin')
+  const pluginSource = figmaPluginSourceRoot
   const required = [
     binarySource,
     join(pluginSource, 'manifest.json'),
