@@ -1,4 +1,5 @@
 :root {
+    /* Dark theme (default) */
     --bg-color: #050505;
     --surface-color: #111111;
     --surface-hover: #1a1a1a;
@@ -8,6 +9,21 @@
     --accent-hover: #0046CC;
     --border-color: #222222;
 }
+
+:root[data-theme="light"] {
+    /* Light theme */
+    --bg-color: #ffffff;
+    --surface-color: #f9f9f9;
+    --surface-hover: #f0f0f0;
+    --text-primary: #111111;
+    --text-secondary: #666666;
+    --accent: #0057FF;
+    --accent-hover: #0046CC;
+    --border-color: #e5e5e5;
+}
+
+html[data-lang="en"] .lang-vi { display: none !important; }
+html[data-lang="vi"] .lang-en { display: none !important; }
 
 * {
     margin: 0;
@@ -26,6 +42,7 @@ body {
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
+    transition: background-color 0.3s, color 0.3s;
 }
 
 /* Navbar */
@@ -37,7 +54,7 @@ body {
     border-bottom: 1px solid var(--border-color);
     position: sticky;
     top: 0;
-    background-color: rgba(5, 5, 5, 0.8);
+    background-color: var(--bg-color);
     backdrop-filter: blur(12px);
     z-index: 100;
 }
@@ -62,6 +79,35 @@ body {
 .nav-links a:hover, .nav-links a.active {
     color: var(--text-primary);
 }
+
+.controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-left: 1rem;
+    border-left: 1px solid var(--border-color);
+    padding-left: 1.5rem;
+}
+
+.btn-icon {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.5rem;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+.btn-icon:hover {
+    background: var(--surface-hover);
+}
+
 .btn-nav {
     background: transparent;
     color: var(--text-primary) !important;
@@ -158,7 +204,7 @@ body {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    opacity: 0.5; /* Dim for placeholder effect, set to 1 when real video is added */
+    opacity: 0.5;
 }
 .media-overlay {
     position: relative;
@@ -170,6 +216,20 @@ body {
     padding: 1rem;
     background: rgba(0, 0, 0, 0.6);
     border: 1px solid var(--border-color);
+}
+:root[data-theme="light"] .media-overlay {
+    background: rgba(255, 255, 255, 0.8);
+}
+
+/* Mermaid Wrapper */
+.mermaid-wrapper {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    padding: 2rem;
+    margin: 2rem 0;
+    display: flex;
+    justify-content: center;
+    overflow-x: auto;
 }
 
 /* Hero */
@@ -219,7 +279,6 @@ body {
     color: var(--text-secondary);
     margin-bottom: 2rem;
 }
-
 .logo-wall {
     display: flex;
     justify-content: center;
@@ -228,6 +287,10 @@ body {
 }
 .logo-wall img {
     height: 28px;
+    filter: invert(0);
+}
+:root[data-theme="light"] .logo-wall img {
+    filter: invert(1);
 }
 
 /* Features */

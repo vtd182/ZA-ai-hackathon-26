@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-lang="vi" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,82 +9,168 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
+    
+    <!-- Mermaid Diagram script -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            let currentTheme = localStorage.getItem('theme') || (prefersDark ? 'dark' : 'light');
+            
+            mermaid.initialize({
+                startOnLoad: true,
+                theme: currentTheme === 'dark' ? 'dark' : 'default',
+                fontFamily: 'Outfit, sans-serif'
+            });
+
+            // Store original data to allow re-render on theme toggle
+            document.querySelectorAll('.mermaid').forEach(el => {
+                el.setAttribute('data-original', el.innerHTML);
+            });
+        });
+    </script>
 </head>
 <body>
     <nav class="navbar">
         <a href="index.html" class="logo">Zalo Kickoff Agent</a>
         <div class="nav-links">
-            <a href="index.html#features">Features</a>
-            <a href="project.html" class="active">Deep Dive</a>
+            <a href="index.html#features">
+                <span class="lang-en">Features</span>
+                <span class="lang-vi">Tính năng</span>
+            </a>
+            <a href="project.html" class="active">
+                <span class="lang-en">Deep Dive</span>
+                <span class="lang-vi">Chi tiết Dự án</span>
+            </a>
             <a href="https://github.com/vtd182/ZA-ai-hackathon-26" target="_blank" rel="noopener noreferrer" class="btn-nav">GitHub</a>
+            
+            <div class="controls">
+                <button id="theme-toggle" class="btn-icon" aria-label="Toggle Theme">☀️</button>
+                <button id="lang-toggle" class="btn-icon" aria-label="Toggle Language">🇺🇸 EN</button>
+            </div>
         </div>
     </nav>
 
     <main class="article-page">
         <article class="deep-dive-content reveal-on-scroll">
             <header class="article-header">
-                <p class="eyebrow">PROJECT DEEP DIVE</p>
-                <h1>How the Kickoff Agent transforms your product lifecycle.</h1>
-                <p class="subtitle">An in-depth look at the architecture, workflow, and engineering decisions behind the Zalo Product Kickoff Agent.</p>
+                <p class="eyebrow">
+                    <span class="lang-en">PROJECT DEEP DIVE</span>
+                    <span class="lang-vi">PHÂN TÍCH CHUYÊN SÂU</span>
+                </p>
+                <h1>
+                    <span class="lang-en">How the Kickoff Agent transforms your product lifecycle.</span>
+                    <span class="lang-vi">Cách Kickoff Agent chuyển đổi vòng đời sản phẩm của bạn.</span>
+                </h1>
+                <p class="subtitle">
+                    <span class="lang-en">An in-depth look at the architecture, workflow, and engineering decisions behind the Zalo Product Kickoff Agent.</span>
+                    <span class="lang-vi">Một cái nhìn sâu hơn về kiến trúc hệ thống, luồng công việc và các quyết định kỹ thuật đằng sau Zalo Product Kickoff Agent.</span>
+                </p>
             </header>
 
-            <section class="article-section">
-                <h2>1. The Context Switching Problem</h2>
-                <p>In modern product development, information is highly fragmented. Product Managers write requirements in Docs. Designers create visuals in Figma. Developers track tasks in Jira. When it's time to "kick off" a sprint, ensuring all these platforms are perfectly synchronized is a manual, error-prone nightmare.</p>
+            <section class="article-section reveal-on-scroll">
+                <h2>
+                    <span class="lang-en">1. The Context Switching Problem</span>
+                    <span class="lang-vi">1. Vấn nạn Chuyển đổi Ngữ cảnh (Context Switching)</span>
+                </h2>
+                <p>
+                    <span class="lang-en">In modern product development, information is highly fragmented. Product Managers write requirements in Docs. Designers create visuals in Figma. Developers track tasks in Jira. When it's time to "kick off" a sprint, ensuring all these platforms are perfectly synchronized is a manual, error-prone nightmare.</span>
+                    <span class="lang-vi">Trong phát triển sản phẩm hiện đại, thông tin thường xuyên bị phân mảnh. PM viết Requirement trên Docs. Designer vẽ UI trên Figma. Dev quản lý Task trên Jira. Mỗi lần "kick off" một tính năng mới, việc giữ cho tất cả các nền tảng này đồng bộ là một ác mộng phải làm bằng tay và rất dễ sai sót.</span>
+                </p>
                 
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
                     <div class="media-overlay">
-                        <span>[ PROBLEM VISUALIZATION / MEME GIF ]<br>Show the pain of jumping between Jira and Figma</span>
+                        <span class="lang-en">[ PROBLEM VISUALIZATION / MEME GIF ]<br>Show the pain of jumping between Jira and Figma</span>
+                        <span class="lang-vi">[ ẢNH CHẾ HOẶC MINH HỌA VẤN ĐỀ ]<br>Thể hiện sự ức chế khi phải copy qua lại giữa Jira và Figma</span>
                     </div>
                 </div>
             </section>
 
-            <section class="article-section">
-                <h2>2. The Spatial Agent Solution</h2>
-                <p>Instead of building another chatbot sidebar, we built a <strong>Spatial Canvas</strong>. Using `tldraw`, you interact with AI agents visually. You drop a Figma link onto the canvas, ask the agent to extract the UI components, and the agent visually maps out the Jira tickets right in front of you.</p>
+            <section class="article-section reveal-on-scroll">
+                <h2>
+                    <span class="lang-en">2. The Spatial Agent Solution</span>
+                    <span class="lang-vi">2. Giải pháp Không gian Agent (Spatial Canvas)</span>
+                </h2>
+                <p>
+                    <span class="lang-en">Instead of building another chatbot sidebar, we built a <strong>Spatial Canvas</strong>. Using `tldraw`, you interact with AI agents visually. You drop a Figma link onto the canvas, ask the agent to extract the UI components, and the agent visually maps out the Jira tickets right in front of you.</span>
+                    <span class="lang-vi">Thay vì làm một khung Chatbot Sidebar nhàm chán nữa, chúng tôi đã tạo ra một <strong>Bảng vẽ Không gian (Spatial Canvas)</strong>. Bằng cách sử dụng `tldraw`, bạn tương tác với các Agent AI một cách trực quan. Kéo thả link Figma vào bảng vẽ, ra lệnh cho Agent bóc tách component, và xem Agent vẽ các thẻ Jira ra ngay trước mắt bạn.</span>
+                </p>
                 
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
                     <div class="media-overlay">
-                        <span>[ DEMO: MULTI-AGENT CANVAS ]<br>Show agents drawing on the tldraw canvas</span>
+                        <span class="lang-en">[ DEMO: MULTI-AGENT CANVAS ]<br>Show agents drawing on the tldraw canvas</span>
+                        <span class="lang-vi">[ DEMO: BẢNG VẼ ĐA AGENT ]<br>Hiển thị cảnh các agent đang tự vẽ lên Canvas</span>
                     </div>
                 </div>
             </section>
 
-            <section class="article-section">
-                <h2>3. Secure, Local-First Execution</h2>
-                <p>Enterprise data is sensitive. The Kickoff Agent operates as a local Electron desktop application. We use a <strong>Local SQLite Outbox</strong> pattern for all state management.</p>
-                <p>When the agent proposes creating 15 Jira tickets, it doesn't just fire API calls blindly. It prepares the payloads and pauses for <strong>Human Approval</strong>. You review the immutable Payload Hash, click "Approve", and only then does the data leave your machine.</p>
+            <section class="article-section reveal-on-scroll">
+                <h2>
+                    <span class="lang-en">3. Secure, Local-First Architecture</span>
+                    <span class="lang-vi">3. Kiến trúc Bảo mật & Local-First</span>
+                </h2>
+                <p>
+                    <span class="lang-en">Enterprise data is sensitive. The Kickoff Agent operates as a local Electron desktop application. We use a <strong>Local SQLite Outbox</strong> pattern for all state management. When the agent proposes creating 15 Jira tickets, it doesn't just fire API calls blindly. It prepares the payloads and pauses for <strong>Human Approval</strong>.</span>
+                    <span class="lang-vi">Dữ liệu doanh nghiệp là vô cùng nhạy cảm. Vì vậy Kickoff Agent hoạt động như một ứng dụng Desktop (Electron) hoàn toàn nội bộ. Chúng tôi dùng kiến trúc <strong>SQLite Outbox</strong> để quản lý trạng thái. Khi Agent đề xuất tạo 15 Jira tickets, nó không gọi API ngay lập tức, mà chuẩn bị sẵn Payload và chờ <strong>Người dùng phê duyệt</strong>.</span>
+                </p>
+
+                <!-- Mermaid Diagram -->
+                <div class="mermaid-wrapper">
+                    <div class="mermaid">
+                        graph TD
+                            A[Figma / tldraw Canvas] -->|Figma MCP / UI Agent| B(Kickoff Agent Core)
+                            B -->|Draft Specs| C[(SQLite Local Outbox)]
+                            C -->|Wait for Human Approval| D{Payload Hash Verified?}
+                            D -->|Approved| E[Jira API]
+                            D -->|Approved| F[Other Integrations]
+                            D -->|Rejected| B
+                    </div>
+                </div>
                 
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
                     <div class="media-overlay">
-                        <span>[ DEMO: APPROVAL WORKFLOW ]<br>Show the SQLite Outbox UI and Approval button</span>
+                        <span class="lang-en">[ DEMO: APPROVAL WORKFLOW ]<br>Show the SQLite Outbox UI and Approval button</span>
+                        <span class="lang-vi">[ DEMO: LUỒNG PHÊ DUYỆT ]<br>Hiển thị giao diện Outbox nơi con người duyệt thay đổi</span>
                     </div>
                 </div>
             </section>
 
-            <section class="article-section">
-                <h2>4. Figma MCP Integration</h2>
-                <p>Our custom Figma Model Context Protocol (MCP) server bridges the gap between raw pixel data and semantic meaning. The agent doesn't just "look at an image" – it deeply inspects the Figma node tree to understand the design system tokens, text styles, and layout structures to generate pixel-perfect specifications.</p>
+            <section class="article-section reveal-on-scroll">
+                <h2>
+                    <span class="lang-en">4. Figma MCP Integration</span>
+                    <span class="lang-vi">4. Sức mạnh của Figma MCP</span>
+                </h2>
+                <p>
+                    <span class="lang-en">Our custom Figma Model Context Protocol (MCP) server bridges the gap between raw pixel data and semantic meaning. The agent doesn't just "look at an image" – it deeply inspects the Figma node tree to understand the design system tokens, text styles, and layout structures to generate pixel-perfect specifications.</span>
+                    <span class="lang-vi">Máy chủ Figma MCP (Model Context Protocol) tùy biến của chúng tôi là cầu nối giữa dữ liệu pixel thô và ý nghĩa ngữ nghĩa. AI không chỉ "nhìn vào bức ảnh" - nó đi sâu vào phân tích các node của Figma để hiểu design system, text styles, từ đó xuất ra tài liệu chuẩn chỉnh nhất.</span>
+                </p>
                 
                 <div class="media-placeholder large-media">
                     <video autoplay loop muted playsinline class="media-content"></video>
                     <div class="media-overlay">
-                        <span>[ DEMO: FIGMA MCP ]<br>Show the agent reading a Figma file and outputting specs</span>
+                        <span class="lang-en">[ DEMO: FIGMA MCP ]<br>Show the agent reading a Figma file and outputting specs</span>
+                        <span class="lang-vi">[ DEMO: FIGMA MCP ]<br>Hiển thị cảnh Agent đọc trực tiếp từ file Figma</span>
                     </div>
                 </div>
             </section>
         </article>
         
         <div class="back-home text-center reveal-on-scroll">
-            <a href="index.html" class="btn-primary">Return to Homepage</a>
+            <a href="index.html" class="btn-primary">
+                <span class="lang-en">Return to Homepage</span>
+                <span class="lang-vi">Trở về Trang chủ</span>
+            </a>
         </div>
     </main>
 
     <footer class="site-footer">
-        <p>&copy; 2026 ZA AI Hackathon - Team 3. Crafted with precision.</p>
+        <p>
+            <span class="lang-en">&copy; 2026 ZA AI Hackathon - Team 3. Crafted with precision.</span>
+            <span class="lang-vi">&copy; 2026 ZA AI Hackathon - Đội 3. Xây dựng bằng sự tỉ mỉ.</span>
+        </p>
     </footer>
 
     <script src="js/script.js"></script>
