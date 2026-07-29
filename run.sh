@@ -79,6 +79,11 @@ case "$MODE" in
     "${PNPM[@]}" build
     "${PNPM[@]}" package:assets
     ;;
+  demo-rehearsal)
+    "${PNPM[@]}" exec vitest run \
+      apps/desktop/src/main/demo-rehearsal.test.ts \
+      packages/reasoning/src/index.test.ts -t "AgentRouter|demo rehearsal|Figma blueprint prompts"
+    ;;
   dist)
     prepare_figma
     "${PNPM[@]}" --filter @pm-agent/desktop run dist
@@ -138,7 +143,7 @@ case "$MODE" in
     exec "${PNPM[@]}" typecheck
     ;;
   *)
-    echo "Usage: ./run.sh [setup|dev|reset|build|dist|test|typecheck|smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas|smoke-ambiguity|smoke-flow|smoke-canvas-agent|smoke-codex-canvas]" >&2
+    echo "Usage: ./run.sh [setup|dev|reset|build|demo-rehearsal|dist|test|typecheck|smoke|smoke-recovery|smoke-reset|smoke-lifecycle|smoke-reject|smoke-canvas|smoke-ambiguity|smoke-flow|smoke-canvas-agent|smoke-codex-canvas]" >&2
     exit 2
     ;;
 esac

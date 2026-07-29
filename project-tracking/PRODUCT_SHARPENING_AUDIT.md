@@ -364,6 +364,13 @@ Intent:
 - **Implementation direction:** Script clear-input web dashboard path plus ZDS Mini App path. Include expected screenshots/log exports.
 - **Acceptance:** Demo can run in timebox with deterministic fallback if provider/Figma worker is unavailable.
 - **Tests:** smoke for clear brief, canvas refine, ProductSpec confirm, no-ZDS Figma prepare.
+- **Status note 2026-07-30:** `project-tracking/DEMO_REHEARSAL.md` now defines the primary
+  AgentRouter/no-ZDS admin dashboard demo, the ZDS Mini App path, fallback behavior and timebox
+  expectations. `./run.sh demo-rehearsal` verifies the fast contract path without opening Electron:
+  clear brief -> approved `admin_dashboard` ProductSpec -> no-ZDS `free_adaptive` ArtifactBrief ->
+  selected-page Figma plan with zero component roles and no `MISSING_COMPONENT_ROLE` preflight
+  issue. The same command also checks that AgentRouter advertises resume through the managed Codex
+  bridge and that Figma blueprint prompts stay ProductSpec-first.
 
 ### `P0-SHARP-008` Context Budgeter and task context packs
 
@@ -397,6 +404,10 @@ Intent:
   Codex home. No API key is written to TOML or project files.
 - **Tests:** unit test verifies managed AgentRouter Codex config generation without secrets; provider
   smoke can be run with `PM_AGENT_AGENTROUTER_LIVE=1`.
+- **Status note 2026-07-30:** AgentRouter capabilities now expose `remoteResume: true`, matching the
+  managed Codex app-server bridge behavior where remote refs can be persisted outside the user's
+  personal `~/.codex`. Figma craft can run on AgentRouter by routing the creative blueprint worker
+  through that bridge, while Agent Core still owns approval, Figma MCP write and read-back.
 
 ## 9. Prompt Audit Checklist
 

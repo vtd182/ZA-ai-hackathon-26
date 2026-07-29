@@ -197,6 +197,12 @@ describe('mock provider command inference', () => {
     }
   })
 
+  it('advertises AgentRouter resume because the Codex bridge persists remote refs', () => {
+    const provider = new ProviderRegistry().get('agentrouter')
+
+    expect(provider.capabilities.remoteResume).toBe(true)
+  })
+
   it('maps Vietnamese remove-payment intent', () => {
     const result = inferLocalCommands('Bỏ payment khỏi MVP')
     expect(result.commands).toEqual([{ type: 'remove_card', query: 'payment' }])

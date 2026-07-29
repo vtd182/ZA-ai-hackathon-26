@@ -522,6 +522,13 @@
   `Runtime`) and show a next action instead of only a raw error string. Verification:
   `pnpm exec vitest run apps/desktop/src/renderer/src/error-classifier.test.ts`,
   `./run.sh typecheck`, `./run.sh test`, `./run.sh build`, and `git diff --check` pass.
+- **Evidence update:** Demo rehearsal is now a first-class contract path. `project-tracking/DEMO_REHEARSAL.md`
+  scripts the AgentRouter/no-ZDS admin dashboard path, ZDS Mini App path, fallback behavior and timing
+  expectations. `./run.sh demo-rehearsal` verifies clear brief -> approved admin ProductSpec ->
+  `free_adaptive` ArtifactBrief -> selected-page Figma plan with zero ZDS roles and no missing-role
+  preflight issue, plus AgentRouter resume capability and ProductSpec-first Figma prompt budget.
+  Verification: `./run.sh demo-rehearsal`, `./run.sh typecheck`, `./run.sh test`,
+  `./run.sh build`, and `git diff --check` pass.
 
 ## Epic E7 - Change synchronization
 

@@ -97,7 +97,7 @@ const codexCapabilities: ProviderCapabilities = { structuredOutput: true, stream
 const openAiCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: true, remoteResume: false, usage: true }
 const geminiCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: false, remoteResume: false, usage: true }
 const anthropicCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: true, remoteResume: false, usage: true }
-const agentRouterCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: true, remoteResume: false, usage: true }
+const agentRouterCapabilities: ProviderCapabilities = { structuredOutput: true, streaming: false, cancellation: true, remoteResume: true, usage: true }
 
 export const DEFAULT_AGENTROUTER_OPENAI_BASE_URL = 'https://agentrouter.org/v1'
 

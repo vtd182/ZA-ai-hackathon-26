@@ -25,6 +25,7 @@ MVP dùng:
 | [UI_HISTORY_AND_PERFORMANCE.md](UI_HISTORY_AND_PERFORMANCE.md) | History, resume, chat-canvas và performance budgets | Khi đổi interaction model hoặc persistence hot path |
 | [FIGMA_MCP_INTEGRATION.md](FIGMA_MCP_INTEGRATION.md) | Review và kế hoạch mở rộng MCP Figma hiện có | Khi sửa connector/MCP/plugin Figma |
 | [TEST_AND_DEMO_PLAN.md](TEST_AND_DEMO_PLAN.md) | Test matrix, demo script, fallback | Khi thêm behavior hoặc sửa demo |
+| [DEMO_REHEARSAL.md](DEMO_REHEARSAL.md) | Primary/fallback demo rehearsal path và quick contract command | Khi đổi kịch bản demo hoặc AgentRouter/Figma path |
 | [READINESS_AUDIT.md](READINESS_AUDIT.md) | Evidence map và khoảng trống P0 thực tế | Sau mỗi completion audit lớn |
 | [PRODUCT_SHARPENING_AUDIT.md](PRODUCT_SHARPENING_AUDIT.md) | Product goal, differentiator, ProductSpec clarity, prompt/flow audit và task cards làm nét sản phẩm | Khi sửa chat/ProductSpec/canvas/Figma/prompt để làm nét giá trị |
 | [DECISIONS.md](DECISIONS.md) | Quyết định kiến trúc/sản phẩm đã chốt | Trước hoặc ngay sau quyết định quan trọng |
