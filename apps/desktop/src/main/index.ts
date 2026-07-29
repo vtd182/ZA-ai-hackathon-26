@@ -178,9 +178,10 @@ function canvasReceiptMessage(program: CanvasProgram, receipt: CanvasExecutionRe
 }
 
 function figmaRuntimePaths(): { binaryPath: string; manifestPath: string } {
+  const binName = process.platform === 'win32' ? 'za-talk-to-figma.exe' : 'za-talk-to-figma'
   if (app.isPackaged) {
     const root = join(process.resourcesPath, 'figma-runtime')
-    return { binaryPath: join(root, 'za-talk-to-figma'), manifestPath: join(root, 'plugin', 'manifest.json') }
+    return { binaryPath: join(root, binName), manifestPath: join(root, 'plugin', 'manifest.json') }
   }
   const candidates = [
     process.env.PM_AGENT_REPO_ROOT,
@@ -192,7 +193,7 @@ function figmaRuntimePaths(): { binaryPath: string; manifestPath: string } {
     ?? candidates[0]!
   const runtimeRoot = join(root, 'mcp-tool', 'za-talk-to-figma')
   return {
-    binaryPath: join(runtimeRoot, 'bin', 'za-talk-to-figma'),
+    binaryPath: join(runtimeRoot, 'bin', binName),
     manifestPath: join(runtimeRoot, 'plugin', 'manifest.json'),
   }
 }

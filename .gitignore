@@ -10,4 +10,3 @@ coverage/
 # electron-builder output
 release/
 apps/desktop/release/
-apps/desktop/build/icon.png

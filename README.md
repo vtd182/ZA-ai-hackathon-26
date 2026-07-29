@@ -1,40 +1,269 @@
-# PM Lifecycle Agent
+<div align="center">
 
-Local-first Electron workspace cho PM discovery, decision, delivery mapping và change impact.
+# ZSpector
 
-## Chạy ứng dụng
+**Biến một ý tưởng sản phẩm thô thành thiết kế Zalo Mini App chuẩn‑ship — có agent dẫn dắt bằng lựa chọn, canvas tự phản biện, và Figma craft thật.**
 
-Lần đầu trên một máy mới:
+Ứng dụng desktop **local‑first** (Electron + React) cho toàn bộ vòng đời PM:
+`Idea → Discovery → Decision → Delivery → Change Impact`.
+
+</div>
+
+---
+
+## Mục lục
+
+- [ZSpector là gì](#zspector-là-gì)
+- [Tính năng chính](#tính-năng-chính)
+- [Kiến trúc tổng quan](#kiến-trúc-tổng-quan)
+- [Yêu cầu môi trường](#yêu-cầu-môi-trường)
+- [Cài đặt & chạy (dev)](#cài-đặt--chạy-dev)
+- [Cấu hình Provider (LLM)](#cấu-hình-provider-llm)
+- [Kết nối Figma (tùy chọn)](#kết-nối-figma-tùy-chọn)
+- [Canvas & cộng tác với AI ngoài](#canvas--cộng-tác-với-ai-ngoài)
+- [Đóng gói (.dmg / .exe)](#đóng-gói-dmg--exe)
+- [Release & versioning](#release--versioning)
+- [Mô hình bảo mật](#mô-hình-bảo-mật)
+- [Cấu trúc dự án](#cấu-trúc-dự-án)
+- [Kiểm thử](#kiểm-thử)
+- [Ghi chú license](#ghi-chú-license)
+
+---
+
+## ZSpector là gì
+
+ZSpector là workspace PM chạy hoàn toàn **trên máy** (dữ liệu lưu SQLite local). Bạn mô tả một ý tưởng, agent dẫn bạn qua **Discovery → Decision → Delivery** bằng các bước có **lựa chọn bấm được** (không phải chatbot hỏi mở), dựng **user‑flow trên canvas** và **tự phản biện** tính đầy đủ của flow, rồi sinh **gói kickoff**: thiết kế **Figma chuẩn ZDS + prototype**, **backlog Jira**, **tài liệu Confluence**, và **PRD Markdown** — mọi thao tác ghi ra ngoài đều **qua duyệt + hash bất biến**.
+
+Tên gọi = **Z** (Zalo) + **inspector** (soi/kiểm) — biểu tượng là chiếc kính lúp.
+
+---
+
+## Tính năng chính
+
+### 1. Agent dẫn dắt bằng lựa chọn (không phải chatbot)
+- Mô tả ý tưởng → agent trao đổi tự nhiên, **không tự ý** nhảy vào flow.
+- Nút **“Bắt đầu Discovery”** kích hoạt guided flow: **3 clarification có lựa chọn sẵn** → **phương án MVP** (có “Đề xuất”) → vào Delivery.
+- Máy trạng thái vòng đời có kiểm soát: `IDEA_INTAKE → DISCOVERY → DECISION → DELIVERY → CHANGE_IMPACT`.
+
+### 2. Canvas semantic + tự phản biện flow
+- Canvas dựng trên **tldraw 5** (self‑host asset, không gọi CDN).
+- Node semantic: `note / process / decision / screen`; layout tự động bằng **dagre**.
+- **Logical flow linter**: coi flow là đồ thị có hướng và tự gắn cờ **ngõ cụt, thiếu nhánh quyết định, nhánh không nhãn, vòng lặp không lối thoát, thiếu điểm kết thúc** — hiện ngay trong read‑back và badge canvas.
+- **Free‑form primitives** (rect/ellipse/text/line/arrow, chart…) để phác nhanh; chỉ node semantic mới “promote” vào ProductSpec.
+
+### 3. Figma craft chuẩn‑ship (tùy chọn, agentic)
+- Nối một **ZDS reference file** → capture **component + icon** thật (vd 33 component, 240 icon `zi_zds_ic_*`).
+- **Agentic craft worker** (qua Codex CLI) dựng thiết kế thật: component ZDS, icon thật, bố cục có gu, **prototype điều hướng bấm được**, tự QA (screenshot → refine → audit).
+- **`/figma refine`**: sửa **tại chỗ** bản hiện tại. **`/figma regenerate`**: tạo bản mới, giữ bản cũ.
+- **Không có Figma vẫn chạy**: nếu chưa kết nối / Figma lỗi, tự **hạ xuống mock** — gói kickoff vẫn ra **Jira + Confluence + PRD**.
+
+### 4. Gói kickoff đa artifact
+- **Figma** (thật hoặc mock) · **Jira backlog** (mock) · **Confluence/Zdoc** (mock) · **PRD Markdown** (export local).
+- Nút **“Mở PRD.md / Mở backlog / Mở tài liệu Confluence”** để xem output.
+
+### 5. ProductSpec là single source of truth
+- Canvas → **Promote** → mỗi node semantic thành 1 requirement + 1 screen → Figma/Jira/Confluence sinh **từ chính ProductSpec đó**.
+- **Change Impact**: sửa/loại scope hiển thị preview tác động trước khi áp dụng.
+
+### 6. Đa provider LLM
+- `Mock · Offline` (deterministic, không mạng) · `Codex · Local` · **OpenAI** · **Gemini** · **Claude** · **AgentRouter** (gateway OpenAI‑compatible tới 30+ model).
+
+---
+
+## Kiến trúc tổng quan
+
+Monorepo **pnpm** + **TypeScript strict**:
+
+| Package | Vai trò |
+|---|---|
+| `apps/desktop` | Electron app (main / preload / renderer React) |
+| `packages/domain` | Zod schema + types (ProductSpec, plans, canvas, provider…) |
+| `packages/agent-core` | Máy trạng thái vòng đời, approval, impact, execution |
+| `packages/reasoning` | Provider LLM (Mock/Codex/OpenAI/Gemini/Anthropic/**AgentRouter**) + prompt |
+| `packages/canvas` | Layout dagre + **flow linter** + canvas program |
+| `packages/connectors` | Figma pipeline (capture ZDS, plan, apply), mock Jira/Zdoc, PRD markdown |
+| `packages/persistence` | SQLite (threads, messages, provider profiles, lifecycle, outbox) |
+| `mcp-tool/za-talk-to-figma` | Runtime **Go** (MCP) + **plugin Figma** cho craft |
+| `skills/` | Skill packs (Figma craft) + **pm-lifecycle-canvas** (bridge cho AI ngoài) |
+
+---
+
+## Yêu cầu môi trường
+
+| Bắt buộc | Ghi chú |
+|---|---|
+| **Node.js 24** + **pnpm 11** | Corepack tự bật pnpm |
+| macOS (Apple Silicon) hoặc Windows | Bản build hiện có: macOS arm64 |
+
+| Tùy chọn (theo tính năng) | Dùng cho |
+|---|---|
+| **Go 1.26+** | Build lại runtime `za-talk-to-figma` (Figma MCP) |
+| **Figma desktop** + plugin `ZA Talk To Figma` | Kết nối Figma thật |
+| **Codex CLI** (đã đăng nhập) | Agentic Figma craft worker |
+| API key: OpenAI / Gemini / Anthropic / AgentRouter | Provider tương ứng |
+
+---
+
+## Cài đặt & chạy (dev)
+
+Cách nhanh nhất (script tự lo pnpm/Corepack, cài deps, rebuild `better-sqlite3` đúng Electron ABI):
 
 ```bash
-./run.sh setup
-./run.sh
+./run.sh setup     # lần đầu trên máy mới
+./run.sh           # chạy dev (electron-vite)
 ```
 
-Các lần sau chỉ cần `./run.sh`. Xem [hướng dẫn cài đặt và import Figma plugin](docs/GETTING_STARTED.md).
-
-Script tự dùng `pnpm` hoặc Corepack, cài dependencies khi cần và rebuild `better-sqlite3` đúng Electron ABI.
-
-Các mode kiểm tra:
+Hoặc dùng pnpm trực tiếp:
 
 ```bash
-./run.sh typecheck
-./run.sh test
-./run.sh build
-./run.sh smoke
+pnpm install
+pnpm --filter @pm-agent/desktop dev
 ```
 
-## Provider
+Các lệnh kiểm tra:
 
-- `Mock · Offline` chạy ngay, deterministic và không gọi mạng.
-- `Codex · Local login` dùng `codex app-server` và phiên Codex CLI hiện có.
-- OpenAI, Gemini và Claude dùng native SDK; API key nhập trong Settings được mã hóa qua Electron `safeStorage`.
-- Có thể dùng biến môi trường `OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY` thay cho Keychain.
+```bash
+pnpm typecheck        # hoặc ./run.sh typecheck
+pnpm test             # hoặc ./run.sh test   (vitest)
+pnpm build            # build tất cả package
+./run.sh smoke        # smoke test luồng
+```
 
-Model ID là cấu hình có thể sửa cho từng provider. Lịch sử, message, provider segment và canvas snapshot được lưu local trong SQLite tại Electron user data directory.
+> Xem thêm [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) để import plugin Figma.
 
-## tldraw
+---
 
-Canvas dùng SDK phát hành chính thức `tldraw@5.2.5`; icon, font và translation được self-host từ `@tldraw/assets@5.2.5`, không gọi CDN lúc chạy. Không clone cả monorepo `tldraw/tldraw` vì app đang consume SDK, không sửa source upstream.
+## Cấu hình Provider (LLM)
 
-Development/testing được phép theo tldraw license. Trước khi phát hành production, cấu hình trial/commercial/hobby license key phù hợp và giữ nguyên license notices.
+Mở **Settings** trong app → chọn provider → nhập API key (mã hóa bằng Electron **`safeStorage`**). Hoặc dùng biến môi trường.
+
+| Provider | Env key | Ghi chú |
+|---|---|---|
+| Mock · Offline | — | Chạy ngay, deterministic |
+| Codex · Local | — | Dùng phiên `codex` CLI hiện có |
+| OpenAI | `OPENAI_API_KEY` | Responses API |
+| Gemini | `GEMINI_API_KEY` | |
+| Claude | `ANTHROPIC_API_KEY` | |
+| **AgentRouter** | `AGENTROUTER_API_KEY` | Gateway OpenAI‑compatible → GPT‑5/Claude/DeepSeek… |
+
+**AgentRouter** — thêm sẵn, cách dùng:
+1. Lấy API key tại **https://agentrouter.org/console/token**.
+2. Chọn provider **AgentRouter** trong app → dán key (hoặc set `AGENTROUTER_API_KEY`).
+3. **Đặt đúng model** trong ô cấu hình model của profile (mặc định `gpt-5`) theo catalog AgentRouter.
+
+> Model ID sửa được cho từng provider. Nếu model được route không hỗ trợ `json_schema strict`, đổi sang model hỗ trợ (GPT‑5 / Claude thường OK).
+
+---
+
+## Kết nối Figma (tùy chọn)
+
+1. Mở **Figma desktop** → import plugin: `Plugins → Development → Import plugin from manifest` → chọn `mcp-tool/za-talk-to-figma/plugin/manifest.json`.
+2. Chạy plugin **ZA Talk To Figma** (kết nối runtime local `127.0.0.1:1802`).
+3. Trong app → mở **Page chứa component ZDS** (không phải Page output `ZSpector · …`) → bấm **“Dùng Page đang mở”** để allowlist nguồn.
+4. Panel hiện **“Live Design System · N components · M icons”** → sẵn sàng generate.
+
+> Không kết nối Figma **vẫn dùng được**: gói kickoff tự hạ Figma xuống mock, vẫn ra Jira + Confluence + PRD.
+
+---
+
+## Canvas & cộng tác với AI ngoài
+
+Bất kỳ AI nào (Claude Code, Codex…) đọc/vẽ được canvas hiện tại qua **Canvas Bridge** (loopback + bearer token, tự sinh mỗi lần chạy).
+
+Skill **global** đã cài tại `~/.claude/skills/pm-lifecycle-canvas/` (app tự cài kiểu tldraw). Ví dụ:
+
+```bash
+# App phải đang mở (bridge descriptor ở ~/.pm-lifecycle-agent/canvas-bridge.json)
+sh "$HOME/.claude/skills/pm-lifecycle-canvas/pm-canvas.sh" GET  /api/threads
+sh "$HOME/.claude/skills/pm-lifecycle-canvas/pm-canvas.sh" GET  /api/threads/THREAD_ID/canvas
+sh "$HOME/.claude/skills/pm-lifecycle-canvas/pm-canvas.sh" POST /api/threads/THREAD_ID/programs '{"program":{...}}'
+sh "$HOME/.claude/skills/pm-lifecycle-canvas/pm-canvas.sh" POST /api/threads/THREAD_ID/scripts  '{"script":"canvas.node(...)"}'
+```
+
+Quy tắc vẽ flow (đầy đủ + dễ nhìn) ở [`skills/pm-lifecycle-canvas/references/flow-craft.md`](skills/pm-lifecycle-canvas/references/flow-craft.md) — dùng chung cho cả agent lẫn AI ngoài. Bridge chỉ vẽ canvas trình bày; **không** đụng ProductSpec; JS chạy **sandbox** (không network/fs/Node).
+
+---
+
+## Đóng gói (.dmg / .exe)
+
+Build cho **hệ điều hành hiện tại** (electron‑builder tự nhận OS):
+
+```bash
+pnpm --filter @pm-agent/desktop run dist
+```
+
+- macOS → `apps/desktop/release/ZSpector-<version>-arm64.dmg`
+- Windows → `apps/desktop/release/ZSpector Setup <version>.exe`
+
+**Cài trên macOS:** mở `.dmg` → kéo **ZSpector** vào Applications. App **chưa ký** → lần đầu **chuột phải → Open** (Gatekeeper).
+
+Đóng gói gồm: app bundle + native `better-sqlite3` (asar‑unpack) + `resources/skill-packs` + `resources/figma-runtime` (binary Go + plugin, đúng theo OS). Icon lấy từ `build/icon.icns` (mac) / `build/icon.png` → `.ico` (win).
+
+> Ký/notarize để phân phối rộng cần **Apple Developer ID** — bổ sung `mac.identity` + notarize khi có cert.
+
+---
+
+## Release & versioning
+
+CI tự build **macOS + Windows** và tạo **GitHub Release** khi bạn push một **tag version**.
+
+**Quy trình cập nhật:**
+
+```bash
+# 1) Bump version trong apps/desktop/package.json  (vd 0.1.0 -> 0.1.1)
+# 2) Commit
+git commit -am "release: v0.1.1"
+# 3) Tag khớp version rồi push tag
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+Workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) sẽ:
+1. Build runtime **Go** cho từng OS (`za-talk-to-figma` / `.exe`).
+2. Build **plugin Figma** bundle.
+3. Chạy `electron-vite build` + `electron-builder --publish always` trên **macos-latest** và **windows-latest**.
+4. Tạo/ cập nhật **GitHub Release** của tag, đính kèm `.dmg` (macOS) + `Setup .exe` (Windows) + `blockmap`/`latest.yml`.
+
+> Bản `release/` là build artifact (đã gitignore) — không commit; luôn build lại qua tag hoặc `run dist`.
+
+---
+
+## Mô hình bảo mật
+
+- **Local‑first**: threads, messages, provider profiles, lifecycle, canvas snapshot lưu SQLite trong Electron user‑data. API key mã hóa qua `safeStorage`.
+- **Duyệt + hash bất biến**: mọi write ra ngoài (Figma/Jira/Confluence) phải được **approve**, payload gắn **hash bất biến**; execution độc lập per‑target (một target lỗi không kéo sập target khác).
+- **Renderer khóa CSP** (không `unsafe-eval`), font/asset **self‑host** (không CDN lúc chạy).
+- **Canvas Bridge**: chỉ loopback + bearer token ephemeral; script JS chạy sandbox (`node:vm`, không network/fs/Node/Electron).
+- **Dữ liệu sandbox tổng hợp** — không dùng PII/production; Jira/Confluence là mock.
+
+---
+
+## Cấu trúc dự án
+
+```
+apps/desktop/            Electron app (main, preload, renderer)
+  build/                 icon.icns / icon.png / icon.svg (nguồn icon)
+packages/                domain, agent-core, reasoning, canvas, connectors, persistence, shared
+fixtures/                synthetic ZDS + meal-ordering ProductSpec
+mcp-tool/za-talk-to-figma/  Go MCP runtime + plugin Figma
+skills/                  pm-lifecycle-canvas (bridge) + pm-lifecycle-figma-* (craft)
+docs/                    GETTING_STARTED, SKILL_PACKAGING
+.github/workflows/       release.yml (tag → build mac+win → GitHub Release)
+```
+
+---
+
+## Kiểm thử
+
+```bash
+pnpm test                 # vitest (toàn workspace)
+pnpm typecheck            # tsc strict tất cả package
+# plugin Figma (bun):
+cd mcp-tool/za-talk-to-figma/plugin && bun test
+```
+
+---
+
+## Ghi chú license
+
+Canvas dùng SDK phát hành chính thức **`tldraw@5.2.5`**, asset self‑host từ `@tldraw/assets@5.2.5`. Development/testing được phép theo license tldraw; **trước khi phát hành production**, cấu hình trial/commercial/hobby license key phù hợp và giữ nguyên license notices.

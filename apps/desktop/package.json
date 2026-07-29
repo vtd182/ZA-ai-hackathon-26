@@ -9,7 +9,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "dist": "node ../../scripts/prepare-package-assets.mjs && electron-vite build && electron-builder --mac"
+    "dist": "node ../../scripts/prepare-package-assets.mjs && electron-vite build && electron-builder"
   },
   "build": {
     "appId": "com.zspector.desktop",
@@ -17,16 +17,26 @@
     "directories": { "output": "release", "buildResources": "build" },
     "asarUnpack": ["**/*.node"],
     "files": ["out/main/**/*", "out/preload/**/*", "out/renderer/**/*", "package.json"],
-    "extraResources": [
-      { "from": "out/package-resources/skill-packs", "to": "skill-packs" },
-      { "from": "../../mcp-tool/za-talk-to-figma/bin/za-talk-to-figma", "to": "figma-runtime/za-talk-to-figma" },
-      { "from": "../../mcp-tool/za-talk-to-figma/plugin", "to": "figma-runtime/plugin" }
-    ],
+    "publish": [{ "provider": "github", "owner": "vtd182", "repo": "ZA-ai-hackathon-26" }],
     "mac": {
       "target": "dmg",
       "category": "public.app-category.productivity",
       "icon": "build/icon.icns",
-      "identity": null
+      "identity": null,
+      "extraResources": [
+        { "from": "out/package-resources/skill-packs", "to": "skill-packs" },
+        { "from": "../../mcp-tool/za-talk-to-figma/plugin", "to": "figma-runtime/plugin" },
+        { "from": "../../mcp-tool/za-talk-to-figma/bin/za-talk-to-figma", "to": "figma-runtime/za-talk-to-figma" }
+      ]
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "extraResources": [
+        { "from": "out/package-resources/skill-packs", "to": "skill-packs" },
+        { "from": "../../mcp-tool/za-talk-to-figma/plugin", "to": "figma-runtime/plugin" },
+        { "from": "../../mcp-tool/za-talk-to-figma/bin/za-talk-to-figma.exe", "to": "figma-runtime/za-talk-to-figma.exe" }
+      ]
     }
   },
   "dependencies": {

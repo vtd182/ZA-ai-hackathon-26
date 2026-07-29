@@ -1,0 +1,67 @@
+name: release
+
+# Push a version tag (e.g. v0.1.0) to build ZSpector for macOS + Windows and publish a
+# GitHub Release with the .dmg and .exe installers. The app version comes from
+# apps/desktop/package.json — bump it before tagging so the tag matches.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Build Figma runtime (Go, per-OS)
+        working-directory: mcp-tool/za-talk-to-figma
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            go build -o bin/za-talk-to-figma.exe ./cmd/za-talk-to-figma
+          else
+            go build -o bin/za-talk-to-figma ./cmd/za-talk-to-figma
+          fi
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install workspace deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Figma plugin bundle
+        working-directory: mcp-tool/za-talk-to-figma/plugin
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm build
+
+      - name: Build + publish ZSpector
+        working-directory: apps/desktop
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node ../../scripts/prepare-package-assets.mjs
+          pnpm exec electron-vite build
+          pnpm exec electron-builder --publish always
