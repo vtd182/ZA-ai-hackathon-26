@@ -1,3 +1,8 @@
+@font-face { font-family: 'Gilroy'; font-weight: 400; font-style: normal; src: url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-Gilroy.eot) format("embedded-opentype"); src: url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-Gilroy.eot?#iefix) format("embedded-opentype"), url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-Gilroy.woff) format("woff"), url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-Gilroy.ttf) format("ttf"), url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-Gilroy.svg#Gilroy) format("svg"); }
+@font-face { font-family: 'Gilroy'; font-weight: 500; font-style: normal; src: url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyMedium.eot) format("embedded-opentype"); src: url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyMedium.eot?#iefix) format("embedded-opentype"), url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyMedium.woff) format("woff"), url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyMedium.ttf) format("ttf"), url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyMedium.svg#Gilroy) format("svg"); }
+@font-face { font-family: 'Gilroy'; font-weight: 700; font-style: normal; src: url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyBold.eot) format("embedded-opentype"); src: url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyBold.eot?#iefix) format("embedded-opentype"), url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyBold.woff) format("woff"), url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyBold.ttf) format("ttf"), url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyBold.svg#Gilroy) format("svg"); }
+@font-face { font-family: 'Gilroy'; font-weight: 900; font-style: normal; src: url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyXBold.eot) format("embedded-opentype"); src: url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyXBold.eot?#iefix) format("embedded-opentype"), url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyXBold.woff) format("woff"), url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyXBold.ttf) format("ttf"), url(https://stc-zalo-careers.zdn.vn/v2/fonts/SVN-GilroyXBold.svg#Gilroy) format("svg"); }
+
 :root {
     /* Dark theme (default) */
     --bg-color: #050505;
@@ -36,7 +41,7 @@ html {
 }
 
 body {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Gilroy', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: var(--bg-color);
     color: var(--text-primary);
     line-height: 1.5;
@@ -59,8 +64,8 @@ body {
     z-index: 100;
 }
 .logo {
-    font-weight: 600;
-    font-size: 1.125rem;
+    font-weight: 700;
+    font-size: 1.25rem;
     letter-spacing: -0.02em;
     color: var(--text-primary);
     text-decoration: none;
@@ -144,6 +149,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 0.75rem;
+    border-radius: 4px;
 }
 .btn-primary:hover {
     background: var(--accent-hover);
@@ -165,6 +171,7 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    border-radius: 4px;
 }
 .btn-secondary:hover {
     background: var(--surface-color);
@@ -245,10 +252,10 @@ body {
     max-width: 600px;
 }
 .hero h1 {
-    font-size: clamp(3rem, 5vw, 5rem);
-    font-weight: 600;
-    line-height: 1.05;
-    letter-spacing: -0.03em;
+    font-size: clamp(2.5rem, 4vw, 4rem);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
     margin-bottom: 1.5rem;
 }
 .hero p {
@@ -273,9 +280,10 @@ body {
     text-align: center;
 }
 .trust-label, .eyebrow {
-    font-size: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.15em;
     color: var(--text-secondary);
     margin-bottom: 2rem;
 }
@@ -302,8 +310,8 @@ body {
 }
 .section-header h2 {
     font-size: clamp(2rem, 3vw, 3rem);
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    font-weight: 700;
+    letter-spacing: -0.01em;
 }
 
 /* Bento Grid */
@@ -341,7 +349,7 @@ body {
 }
 .bento-cell h3 {
     font-size: 1.5rem;
-    font-weight: 500;
+    font-weight: 700;
     margin-bottom: 0.75rem;
     letter-spacing: -0.01em;
 }
@@ -366,10 +374,10 @@ body {
     margin-bottom: 6rem;
 }
 .article-header h1 {
-    font-size: clamp(2.5rem, 4vw, 4rem);
-    font-weight: 600;
-    line-height: 1.1;
-    letter-spacing: -0.03em;
+    font-size: clamp(2.5rem, 4vw, 3.5rem);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
     margin-bottom: 1.5rem;
 }
 .article-header .subtitle {
@@ -383,8 +391,8 @@ body {
 }
 .article-section h2 {
     font-size: 2rem;
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     margin-bottom: 1.5rem;
 }
 .article-section p {
@@ -395,7 +403,7 @@ body {
 }
 .article-section strong {
     color: var(--text-primary);
-    font-weight: 500;
+    font-weight: 700;
 }
 .large-media {
     margin-top: 3rem;
@@ -425,8 +433,8 @@ body {
 }
 .cta-box h2 {
     font-size: clamp(2rem, 3vw, 3rem);
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     margin-bottom: 2.5rem;
 }
 
