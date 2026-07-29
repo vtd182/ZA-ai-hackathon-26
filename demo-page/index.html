@@ -3,72 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Zalo Product Kickoff Agent - AI Agent giúp PM/PO biến ý tưởng thành kickoff package nhất quán với traceability và verified sync.">
-    <title>Zalo Product Kickoff Agent | PM Lifecycle Agent</title>
+    <meta name="description" content="Zalo Product Kickoff Agent. The workflow automation agent for the Zalo ecosystem.">
+    <title>Zalo Product Kickoff Agent</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <header class="hero">
-        <div class="hero-content">
-            <div class="badge">✨ Agentic AI in Zalo Ecosystem</div>
-            <h1>Biến ý tưởng thành <br><span>Kickoff Package</span><br> chỉ trong 30 phút</h1>
-            <p>Zalo Product Kickoff Agent giúp PM/PO điều phối vòng đời sản phẩm có kiểm soát, sinh tài liệu nhất quán với human approval và verified sync sang Figma/Jira.</p>
-            <div class="cta-group">
-                <button class="btn-primary" id="startBtn">Trải nghiệm ngay</button>
-                <button class="btn-secondary">Xem Demo</button>
-            </div>
+    <nav class="navbar">
+        <div class="logo">Zalo Kickoff Agent</div>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <button class="btn-nav">Get Started</button>
         </div>
-        <div class="hero-visual">
-            <div class="glass-card mockup-card">
-                <div class="mockup-header">
-                    <span class="dot red"></span>
-                    <span class="dot yellow"></span>
-                    <span class="dot green"></span>
-                </div>
-                <div class="mockup-body">
-                    <p class="typing-text">> Tự động phân tích impact của việc "Bỏ thanh toán khỏi MVP"...</p>
-                    <div class="loading-bar"></div>
-                    <p class="success-text">✔ ProductSpec updated</p>
-                    <p class="success-text">✔ Figma read-back verified</p>
+    </nav>
+
+    <main>
+        <section class="hero">
+            <div class="hero-content">
+                <h1>From raw idea to verified kickoff package.</h1>
+                <p>Automate your product lifecycle with traceability, human approval, and guaranteed sync across Figma and Jira. Stop syncing artifacts manually.</p>
+                <div class="cta-group">
+                    <button class="btn-primary">Start a Project</button>
                 </div>
             </div>
-        </div>
-    </header>
+            <div class="hero-visual">
+                <img src="https://picsum.photos/seed/zalo-agent/1200/900" alt="Agent dashboard generating product specifications" class="hero-image">
+            </div>
+        </section>
 
-    <section class="features" id="features">
-        <div class="section-title">
-            <h2>Tính năng đột phá</h2>
-            <p>Không chỉ là Chatbot AI, đây là Workflow Automation Agent thực thụ.</p>
-        </div>
-        <div class="feature-grid">
-            <div class="feature-card glass-card">
-                <div class="icon">🔄</div>
-                <h3>Verified Change Loop</h3>
-                <p>Quản lý thay đổi chặt chẽ. Preview Before/After, phê duyệt bằng hash, và verify kết quả đọc lại (read-back) từ Figma.</p>
+        <section class="trusted-by">
+            <p class="trust-label">BUILT FOR THE ZALO ECOSYSTEM</p>
+            <div class="logo-wall">
+                <img src="https://cdn.simpleicons.org/jira/ffffff" alt="Jira">
+                <img src="https://cdn.simpleicons.org/figma/ffffff" alt="Figma">
+                <img src="https://cdn.simpleicons.org/zalo/ffffff" alt="Zalo">
             </div>
-            <div class="feature-card glass-card">
-                <div class="icon">🤝</div>
-                <h3>Multi-agent Canvas</h3>
-                <p>Nhiều agent cùng tương tác trên một canvas. "AI Canvas Bridge" hiển thị trực tiếp nét vẽ của agent lên giao diện.</p>
-            </div>
-            <div class="feature-card glass-card">
-                <div class="icon">🔒</div>
-                <h3>Local-first & Secure</h3>
-                <p>Chạy an toàn trên máy với SQLite. Mọi thao tác ghi ra ngoài đều yêu cầu sự phê duyệt của con người.</p>
-            </div>
-            <div class="feature-card glass-card">
-                <div class="icon">🧩</div>
-                <h3>Provider-agnostic</h3>
-                <p>Tương thích với Codex/Mock offline, OpenAI, Gemini, Anthropic. Chuyển đổi an toàn tại các checkpoint.</p>
-            </div>
-        </div>
-    </section>
+        </section>
 
-    <footer>
-        <p>&copy; 2026 ZA AI Hackathon - Team 3. All rights reserved.</p>
+        <section class="features" id="features">
+            <div class="section-header">
+                <h2>Workflow automation, not just a chatbot.</h2>
+            </div>
+            
+            <div class="bento-grid">
+                <!-- Cell 1: Large -->
+                <div class="bento-cell cell-large dark-surface">
+                    <h3>Verified Change Loop</h3>
+                    <p>Scope changes trigger impact analysis, before/after previews, and read-back verified syncs.</p>
+                </div>
+                <!-- Cell 2: Accent color -->
+                <div class="bento-cell accent-surface">
+                    <h3>Multi-agent Canvas</h3>
+                    <p>Terminal agents and UI agents collaborating on the same visual canvas.</p>
+                </div>
+                <!-- Cell 3 -->
+                <div class="bento-cell dark-surface">
+                    <h3>Local-first Security</h3>
+                    <p>SQLite outbox. All external writes require payload-hash approval.</p>
+                </div>
+                <!-- Cell 4 -->
+                <div class="bento-cell dark-surface">
+                    <h3>Provider-agnostic</h3>
+                    <p>Switch between Codex, Gemini, or Anthropic at any safe checkpoint.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <p>&copy; 2026 ZA AI Hackathon - Team 3. Built with anti-slop principles.</p>
     </footer>
 
     <script src="js/script.js"></script>
