@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Hướng dẫn sử dụng DualMind.">
-    <title>Hướng dẫn Sử dụng | DualMind</title>
+    <meta name="description" content="Hướng dẫn cài đặt và sử dụng DualMind.">
+    <title>Hướng dẫn | DualMind</title>
+    <link rel="icon" href="images/icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="css/style.css">
     
     <script>
@@ -22,7 +23,10 @@
 </head>
 <body>
     <nav class="navbar">
-        <a href="index.html" class="logo">DualMind</a>
+        <a href="index.html" class="logo">
+            <img src="images/icon.svg" alt="DualMind Icon" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px; border-radius: 4px;">
+            DualMind
+        </a>
         <div class="nav-links">
             <a href="index.html#features">
                 <span class="lang-en">Features</span>
@@ -57,63 +61,66 @@
                     <span class="lang-vi">Hướng dẫn Cài đặt & Sử dụng DualMind</span>
                 </h1>
                 <p class="subtitle">
-                    <span class="lang-en">Everything you need to compile, run, and connect the agent to Figma.</span>
-                    <span class="lang-vi">Mọi bước cần thiết để biên dịch, khởi chạy và kết nối Agent trực tiếp vào Figma.</span>
+                    <span class="lang-en">Bypass Gatekeeper, configure the Codex CLI, and bridge your Figma workspace.</span>
+                    <span class="lang-vi">Chi tiết cách vượt qua Gatekeeper của macOS, cài đặt môi trường Codex CLI và nối cầu trực tiếp vào Figma.</span>
                 </p>
             </header>
 
             <section class="article-section reveal-on-scroll">
                 <h2>
-                    <span class="lang-en">1. Prerequisites & First-time setup</span>
-                    <span class="lang-vi">1. Môi trường & Khởi tạo ban đầu</span>
+                    <span class="lang-en">1. Install the Desktop App (macOS Gatekeeper)</span>
+                    <span class="lang-vi">1. Cài đặt Ứng dụng (Vượt lỗi Gatekeeper trên macOS)</span>
                 </h2>
                 <p>
-                    <span class="lang-en">To run DualMind locally from the source, ensure you have macOS with Figma Desktop, Node.js 22+, Go 1.24+, and Bun 1.3+. Run the following commands from the repository root:</span>
-                    <span class="lang-vi">Để biên dịch DualMind từ mã nguồn, máy của bạn cần có macOS với Figma Desktop, Node.js 22+, Go 1.24+ và Bun 1.3+. Hãy mở Terminal tại thư mục gốc của dự án và chạy:</span>
-                </p>
-                <pre style="background: var(--surface-color); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); overflow-x: auto; margin-bottom: 1.5rem;"><code>./run.sh setup
-./run.sh</code></pre>
-                <p>
-                    <span class="lang-en">The `setup` command automatically installs workspace dependencies, rebuilds the native SQLite module, builds the local Go runtime, and compiles the Figma plugin bundle.</span>
-                    <span class="lang-vi">Lệnh `setup` sẽ tự động tải các thư viện cần thiết, build lại module SQLite, build Go runtime nội bộ và đóng gói plugin Figma.</span>
-                </p>
-            </section>
-
-            <section class="article-section reveal-on-scroll">
-                <h2>
-                    <span class="lang-en">2. Connect the Figma Plugin</span>
-                    <span class="lang-vi">2. Kết nối Plugin Figma</span>
-                </h2>
-                <p>
-                    <span class="lang-en">To allow the agent to read and draw in your Figma workspace, you must bridge it using our local plugin. No REST tokens required!</span>
-                    <span class="lang-vi">Để Agent có quyền "đọc hiểu" và tự động vẽ giao diện vào không gian làm việc của bạn, hãy làm theo các bước sau (không cần cung cấp API token nguy hiểm):</span>
+                    <span class="lang-en">Since DualMind is a newly compiled hackathon app, it does not have an Apple Developer Signature yet. macOS Gatekeeper will try to block it. Follow these steps:</span>
+                    <span class="lang-vi">Vì DualMind là ứng dụng thi Hackathon được build "nóng hổi", nó chưa có chữ ký điện tử (Signature) của Apple Developer. Do đó, hệ thống bảo mật Gatekeeper của macOS sẽ chặn khi bạn click đúp mở app. Hãy làm theo các bước sau:</span>
                 </p>
                 <ol style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.8; color: var(--text-secondary);">
-                    <li>Trong DualMind, click vào tab <strong>Figma</strong> trên thanh công cụ.</li>
-                    <li>Xác nhận rằng <strong>Runtime local</strong> và <strong>Plugin build</strong> đang ở trạng thái sẵn sàng (ready).</li>
-                    <li>Bấm vào <strong>Open manifest</strong>.</li>
-                    <li>Mở app Figma Desktop, chọn <strong>Plugins → Development → Import plugin from manifest…</strong></li>
-                    <li>Trỏ tới file `manifest.json` vừa được mở ra ở bước 3.</li>
-                    <li>Khởi chạy plugin <strong>ZA Talk To Figma</strong> ngay trong màn hình Figma của bạn.</li>
-                    <li>Quay lại DualMind và bấm nút <strong>Use this page</strong> để cấp quyền ghi cụ thể cho page này.</li>
+                    <li>Tải file <strong>DualMind-x.x.x-arm64.dmg</strong> từ trang <a href="https://github.com/vtd182/ZA-ai-hackathon-26/releases/latest" style="color: var(--accent);">Releases</a>.</li>
+                    <li>Click đúp vào file `.dmg` để mở, sau đó <strong>kéo thả icon DualMind vào thư mục Applications</strong>.</li>
+                    <li>Mở thư mục Applications (Ứng dụng) trong Finder.</li>
+                    <li><strong style="color: var(--text-primary);">ĐỪNG click đúp (Double-Click)</strong> vào app. Thay vào đó, hãy <strong>Chuột phải (Right-Click)</strong> hoặc giữ phím <code>Control</code> rồi click vào icon DualMind.</li>
+                    <li>Chọn <strong>Open (Mở)</strong> từ menu xổ xuống.</li>
+                    <li>Một bảng cảnh báo sẽ hiện ra, lúc này bạn tiếp tục bấm <strong>Open (Mở)</strong> một lần nữa. Từ các lần sau, bạn có thể click đúp mở app bình thường.</li>
                 </ol>
+            </section>
+
+            <section class="article-section reveal-on-scroll">
+                <h2>
+                    <span class="lang-en">2. Set up Codex CLI (For Agentic Crafting)</span>
+                    <span class="lang-vi">2. Cài đặt Codex CLI (Bắt buộc để tự động vẽ Figma)</span>
+                </h2>
                 <p>
-                    <span class="lang-en">Once the plugin is connected, the UI will change to "Ready for preflight". If you switch Figma pages, you must re-allowlist the target to ensure the agent never overwrites the wrong file.</span>
-                    <span class="lang-vi">Sau khi kết nối thành công, DualMind sẽ báo "Ready for preflight". Xin lưu ý: Mỗi khi bạn chuyển sang file hoặc page Figma khác, bạn phải bấm cấp quyền lại. Điều này đảm bảo Agent <strong>tuyệt đối không bao giờ ghi đè nhầm</strong> vào dữ liệu quan trọng của team.</span>
+                    <span class="lang-en">To allow DualMind to actively craft Figma components, you need the Codex CLI runtime running locally.</span>
+                    <span class="lang-vi">Để tính năng đỉnh cao nhất của DualMind (tự động vẽ giao diện Figma) hoạt động, bạn cần cài đặt môi trường CLI cục bộ.</span>
+                </p>
+                <pre style="background: var(--surface-color); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); overflow-x: auto; margin-bottom: 1.5rem;"><code># Mở Terminal và cài đặt global qua npm
+npm install -g @zalo/codex-cli
+
+# Sau khi cài xong, tiến hành đăng nhập
+codex login</code></pre>
+                <p>
+                    <span class="lang-en">Once logged in, DualMind will automatically detect the Codex session and use it to execute advanced crafting tasks.</span>
+                    <span class="lang-vi">Sau khi đăng nhập thành công ở Terminal, DualMind sẽ tự động nhận diện phiên làm việc và dùng nó để thực thi các tác vụ vẽ phức tạp.</span>
                 </p>
             </section>
 
             <section class="article-section reveal-on-scroll">
                 <h2>
-                    <span class="lang-en">3. Troubleshooting</span>
-                    <span class="lang-vi">3. Xử lý sự cố thường gặp</span>
+                    <span class="lang-en">3. Connect the Figma Plugin</span>
+                    <span class="lang-vi">3. Kết nối Plugin Figma (Model Context Protocol)</span>
                 </h2>
-                <ul style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.8; color: var(--text-secondary);">
-                    <li><strong>Lỗi "Runtime missing":</strong> Chạy lại lệnh `./run.sh setup` và kiểm tra xem Go / Bun đã được thêm vào biến môi trường PATH chưa.</li>
-                    <li><strong>Mãi kẹt ở "Waiting for plugin":</strong> Đảm bảo bạn đang chạy plugin "ZA Talk To Figma" ở cùng một cửa sổ Figma chứa file sandbox cần tương tác.</li>
-                    <li><strong>Lỗi cổng 1802 bị chiếm:</strong> Mở "Runtime console" từ hộp thoại setup, hệ thống có thể tái sử dụng một tiến trình cũ đang hoạt động ổn định trên cổng đó.</li>
-                    <li><strong>Electron hiển thị màn hình trắng:</strong> Tắt app, chạy `./run.sh build` sau đó chạy `./run.sh smoke`. Đảm bảo kết quả smoke test hiển thị `passed: true`.</li>
-                </ul>
+                <p>
+                    <span class="lang-en">We do not ask for your Figma REST tokens. DualMind uses a local bridge plugin to ensure absolute security.</span>
+                    <span class="lang-vi">Chúng tôi KHÔNG đòi hỏi Figma REST token nguy hiểm của bạn. DualMind sử dụng giao thức nối cầu cục bộ (Local Bridge) đảm bảo an toàn tuyệt đối:</span>
+                </p>
+                <ol style="margin-left: 2rem; margin-bottom: 1.5rem; line-height: 1.8; color: var(--text-secondary);">
+                    <li>Trong app DualMind, click vào tab <strong>Figma</strong> trên thanh công cụ.</li>
+                    <li>Bấm vào <strong>Open manifest</strong>. Một thư mục chứa file `manifest.json` sẽ hiện ra.</li>
+                    <li>Mở app Figma Desktop, chọn <strong>Plugins → Development → Import plugin from manifest…</strong> và chọn file `manifest.json` đó.</li>
+                    <li>Khởi chạy plugin <strong>ZA Talk To Figma</strong> trong cửa sổ Figma của bạn.</li>
+                    <li>Quay lại app DualMind và bấm nút <strong>Use this page (Cấp quyền trang này)</strong> để cho phép Agent hoạt động.</li>
+                </ol>
             </section>
         </article>
         
