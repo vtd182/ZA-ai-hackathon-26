@@ -22,6 +22,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const hero = document.querySelector('.hero');
     if (hero) setTimeout(() => hero.classList.add('is-visible'), 100);
 
+    const articleHeader = document.querySelector('.article-header');
+    if (articleHeader) setTimeout(() => articleHeader.classList.add('is-visible'), 100);
+
     // 2. Theme Toggle
     const themeToggleBtn = document.getElementById('theme-toggle');
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
