@@ -1441,6 +1441,7 @@ function registerIpc(): void {
   ipcMain.handle('threads:messages', (_event, threadId: string, cursor?: string, limit?: number) => history.listMessagesPage(threadId, cursor, limit))
   ipcMain.handle('threads:export-bundle', (_event, threadId: string) => exportThreadBundle(threadId))
   ipcMain.handle('threads:archive', (_event, threadId: string) => history.archiveThread(threadId))
+  ipcMain.handle('threads:rename', (_event, threadId: string, title: string) => threadForRenderer(history.renameThread(threadId, title)))
   ipcMain.handle('threads:set-provider', (_event, threadId: string, profileId: string, confirmPaid = false) => {
     const thread = history.getThread(threadId)
     if (thread.providerId === profileId) return threadForRenderer(thread)
@@ -1580,6 +1581,20 @@ function registerIpc(): void {
     const path = markdownArtifactPath(workspaceFor(threadId).runState.productSpec)
     if (!existsSync(path)) throw new Error('PRD Markdown chưa được tạo')
     shell.showItemInFolder(path)
+  })
+  // In-app review data: the task decomposition (Jira epic + stories) and the Confluence/Zdoc
+  // document, derived directly from the current ProductSpec so a PM can review BEFORE export/push.
+  ipcMain.handle('lifecycle:get-backlog', (_event, threadId: string) => {
+    const state = workspaceFor(threadId).runState
+    return createMockJiraPlan(state.productSpec, {
+      runId: state.id, threadId, actionId: `review:jira:${state.id}`, idempotencyKey: `jira:${state.id}:v${state.productSpec.version}`,
+    })
+  })
+  ipcMain.handle('lifecycle:get-zdoc', (_event, threadId: string) => {
+    const state = workspaceFor(threadId).runState
+    return createMockZdocPlan(state.productSpec, {
+      runId: state.id, threadId, actionId: `review:zdoc:${state.id}`, idempotencyKey: `zdoc:${state.id}:v${state.productSpec.version}`,
+    })
   })
   ipcMain.handle('lifecycle:show-backlog', async (_event, threadId: string) => {
     const path = await exportKickoffSideArtifact(threadId, 'backlog')

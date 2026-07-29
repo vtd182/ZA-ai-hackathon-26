@@ -3,6 +3,7 @@ import type { FigmaSetupStatus } from './figma-setup'
 import type { ApproveChangeOutput, CanvasCommandOutput, CanvasGestureCommand, ChangePreview, LifecycleWorkspaceState, PlannedAction } from './lifecycle'
 import type { ProductSpec } from './product-spec'
 import type { ArtifactProgressEvent } from './execution'
+import type { MockJiraPlan, MockZdocPlan } from './mock-artifact'
 import { canvasProgramJsonSchema, canvasProgramSchema, emptyCanvasProgram, normalizeCanvasProgram, type CanvasDiffContext, type CanvasDocumentContext, type CanvasExecutionFailure, type CanvasExecutionReceipt, type CanvasProgram, type CanvasPromotionPreview } from './canvas-program'
 import { figmaCreativeBlueprintJsonSchema, figmaCreativeBlueprintSchema } from './figma-creative'
 
@@ -300,6 +301,7 @@ export interface DesktopApi {
     create(): Promise<ThreadDetail>
     get(threadId: string): Promise<ThreadDetail>
     archive(threadId: string): Promise<void>
+    rename(threadId: string, title: string): Promise<ThreadDetail>
     setProvider(threadId: string, profileId: string, confirmPaid?: boolean): Promise<ThreadDetail>
     messages(threadId: string, cursor?: string, limit?: number): Promise<MessagePage>
     exportBundle(threadId: string): Promise<ThreadExportResult>
@@ -325,6 +327,8 @@ export interface DesktopApi {
     regenerateArtifacts(threadId: string, feedback?: string): Promise<LifecycleWorkspaceState>
     approveArtifacts(threadId: string): Promise<ApproveChangeOutput>
     rejectArtifacts(threadId: string): Promise<ApproveChangeOutput>
+    getBacklog(threadId: string): Promise<MockJiraPlan>
+    getZdoc(threadId: string): Promise<MockZdocPlan>
     showDocument(threadId: string): Promise<void>
     showBacklog(threadId: string): Promise<void>
     showZdoc(threadId: string): Promise<void>

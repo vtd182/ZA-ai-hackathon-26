@@ -6,7 +6,6 @@ import {
   Cable,
   CheckCircle2,
   Maximize2,
-  ChevronLeft,
   ChevronRight,
   CircleAlert,
   Download,
@@ -14,9 +13,12 @@ import {
   FileText,
   FolderOpen,
   GitCompareArrows,
+  History,
   LayoutTemplate,
+  ListChecks,
   LoaderCircle,
   MessageSquareText,
+  Pencil,
   Plus,
   RefreshCw,
   Route,
@@ -45,6 +47,8 @@ import type {
   FigmaSetupStatus,
   ExecutionSummary,
   LifecycleWorkspaceState,
+  MockJiraPlan,
+  MockZdocPlan,
   ProviderProbe,
   ProviderProfile,
   ThreadDetail,
@@ -102,7 +106,12 @@ export function App(): React.JSX.Element {
   const [activeThread, setActiveThread] = useState<ThreadDetail | null>(null)
   const [profiles, setProfiles] = useState<ProviderProfile[]>([])
   const [search, setSearch] = useState('')
-  const [historyOpen, setHistoryOpen] = useState(true)
+  // History is now a dialog (not an always-on sidebar); default closed so a fresh chat opens compact.
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [viewer, setViewer] = useState<{ kind: 'backlog'; data: MockJiraPlan } | { kind: 'zdoc'; data: MockZdocPlan } | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
   const [loading, setLoading] = useState(true)
   const [runningThreadId, setRunningThreadId] = useState<string | null>(null)
   const [approving, setApproving] = useState(false)
@@ -164,8 +173,9 @@ export function App(): React.JSX.Element {
         setThreads(initialThreads)
         setProfiles(initialProfiles)
         setFigmaStatus(initialFigmaStatus)
-        if (initialThreads[0]) await openThread(initialThreads[0].id)
-        else setLoading(false)
+        // Open a fresh chat by default (createThread reuses an existing empty thread, so this
+        // never spams duplicates) — compact, extension-style entry instead of the last thread.
+        await createThread()
       })
       .catch((nextError) => {
         setError(errorText(nextError))
@@ -268,6 +278,29 @@ export function App(): React.JSX.Element {
         activeThreadIdRef.current = null
         setActiveThread(null)
       }
+    }
+  }
+
+  const commitRename = async (threadId: string): Promise<void> => {
+    const title = renameDraft.trim()
+    setRenamingId(null)
+    if (!title) return
+    try {
+      const detail = await window.pmAgent.threads.rename(threadId, title)
+      if (activeThread?.id === threadId) setActiveThread((current) => (current ? { ...current, title: detail.title } : current))
+      await refreshThreads()
+    } catch (nextError) {
+      setError(errorText(nextError))
+    }
+  }
+
+  const openKickoffViewer = async (kind: 'backlog' | 'zdoc'): Promise<void> => {
+    if (!activeThread) return
+    try {
+      if (kind === 'backlog') setViewer({ kind, data: await window.pmAgent.lifecycle.getBacklog(activeThread.id) })
+      else setViewer({ kind, data: await window.pmAgent.lifecycle.getZdoc(activeThread.id) })
+    } catch (nextError) {
+      setError(errorText(nextError))
     }
   }
 
@@ -572,54 +605,40 @@ export function App(): React.JSX.Element {
   }
 
   return (
-    <main className={historyOpen ? 'app-shell' : 'app-shell history-collapsed'}>
-      <aside className="history-panel">
-        <div className="brand-row">
-          <div className="brand-mark">ZS</div>
-          <div className="brand-copy">
-            <strong>DualMind</strong>
-            <span>Local workspace</span>
-          </div>
-          <button className="icon-button reset-demo-button" title="Reset demo" onClick={() => setResetOpen(true)}>
-            <RotateCcw size={17} />
-          </button>
-          <button className="icon-button collapse-button" title="Thu gọn lịch sử" onClick={() => setHistoryOpen(false)}>
-            <ChevronLeft size={18} />
-          </button>
-        </div>
-        <button className="new-thread-button" onClick={() => void createThread()}>
-          <Plus size={17} />
-          Cuộc hội thoại mới
-        </button>
-        <label className="search-field">
-          <Search size={16} />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm history" />
-        </label>
-        <div className="thread-list">
-          {threads.map((thread) => (
-            <div data-thread-id={thread.id} className={thread.id === activeThread?.id ? 'thread-row active' : 'thread-row'} key={thread.id}>
-              <button className="thread-main" onClick={() => void openThread(thread.id)}>
-                <strong>{thread.title}</strong>
-                <span>{thread.lastMessage ?? 'Canvas trống'}</span>
-                <small>{thread.id === runningThreadId ? 'Đang reasoning' : threadModeLabel(thread)} · {relativeTime(thread.updatedAt)}</small>
-              </button>
-              <button className="thread-archive" title="Lưu trữ" onClick={() => void archiveThread(thread.id)}>
-                <Archive size={15} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </aside>
-
+    <main className="app-shell">
       <section className="center-panel">
         <header className="topbar">
-          {!historyOpen && (
-            <button className="icon-button" title="Mở lịch sử" onClick={() => setHistoryOpen(true)}>
-              <ChevronRight size={18} />
-            </button>
-          )}
+          <div className="brand-mark topbar-brand" title="DualMind">DM</div>
+          <button className="icon-button" title="Cuộc hội thoại mới" onClick={() => void createThread()}>
+            <Plus size={18} />
+          </button>
+          <button className="icon-button" title="Lịch sử hội thoại" onClick={() => setHistoryOpen(true)}>
+            <History size={18} />
+          </button>
           <div className="thread-heading">
-            <strong>{activeThread?.title ?? 'DualMind'}</strong>
+            {renamingId === activeThread?.id && activeThread ? (
+              <input
+                className="thread-rename-input"
+                autoFocus
+                value={renameDraft}
+                onChange={(event) => setRenameDraft(event.target.value)}
+                onBlur={() => void commitRename(activeThread.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void commitRename(activeThread.id)
+                  if (event.key === 'Escape') setRenamingId(null)
+                }}
+              />
+            ) : (
+              <button
+                className="thread-title-button"
+                disabled={!activeThread}
+                title={activeThread ? 'Đổi tên hội thoại' : undefined}
+                onClick={() => { if (activeThread) { setRenameDraft(activeThread.title); setRenamingId(activeThread.id) } }}
+              >
+                <strong>{activeThread?.title ?? 'DualMind'}</strong>
+                {activeThread && <Pencil size={13} className="rename-hint" />}
+              </button>
+            )}
             <span>{activeThread ? (activeThread.collaborationMode === 'studio' ? 'Studio · tự do khám phá' : `Phase · ${activeThread.phase}`) : 'Tạo thread để bắt đầu'}</span>
           </div>
           <div className="provider-controls">
@@ -633,14 +652,6 @@ export function App(): React.JSX.Element {
               {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.displayName}</option>)}
             </select>
             <span className="model-label">{activeProfile?.modelId ?? 'No provider'}</span>
-            <button
-              className="icon-button"
-              title="Cấu hình provider"
-              disabled={!activeProfile}
-              onClick={() => activeProfile && setSettingsProfile(activeProfile)}
-            >
-              <Settings size={18} />
-            </button>
             {devBridge?.running && (
               <span
                 className="integration-button connected dev-bridge-chip"
@@ -659,6 +670,9 @@ export function App(): React.JSX.Element {
               <Cable size={17} />
               <span>Figma</span>
               <i />
+            </button>
+            <button className="icon-button" title="Cài đặt" onClick={() => setSettingsOpen(true)}>
+              <Settings size={18} />
             </button>
           </div>
         </header>
@@ -772,12 +786,8 @@ export function App(): React.JSX.Element {
         onShowDocument={async () => {
           if (activeThread) await window.pmAgent.lifecycle.showDocument(activeThread.id)
         }}
-        onShowBacklog={async () => {
-          if (activeThread) await window.pmAgent.lifecycle.showBacklog(activeThread.id)
-        }}
-        onShowZdoc={async () => {
-          if (activeThread) await window.pmAgent.lifecycle.showZdoc(activeThread.id)
-        }}
+        onShowBacklog={() => openKickoffViewer('backlog')}
+        onShowZdoc={() => openKickoffViewer('zdoc')}
         onExport={async () => {
           if (!activeThread) return
           try {
@@ -837,6 +847,84 @@ export function App(): React.JSX.Element {
             </footer>
           </section>
         </div>
+      )}
+
+      {historyOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setHistoryOpen(false)}>
+          <section className="history-dialog" role="dialog" aria-modal="true" aria-label="Lịch sử hội thoại" onMouseDown={(event) => event.stopPropagation()}>
+            <header>
+              <div className="figma-dialog-title"><History size={20} /><div><strong>Lịch sử hội thoại</strong><span>Chọn để mở · đổi tên · lưu trữ</span></div></div>
+              <button className="icon-button" title="Đóng" onClick={() => setHistoryOpen(false)}><X size={18} /></button>
+            </header>
+            <button className="new-thread-button" onClick={() => { setHistoryOpen(false); void createThread() }}>
+              <Plus size={17} /> Cuộc hội thoại mới
+            </button>
+            <label className="search-field">
+              <Search size={16} />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm hội thoại" />
+            </label>
+            <div className="thread-list">
+              {threads.map((thread) => (
+                <div data-thread-id={thread.id} className={thread.id === activeThread?.id ? 'thread-row active' : 'thread-row'} key={thread.id}>
+                  {renamingId === thread.id ? (
+                    <input
+                      className="thread-rename-input"
+                      autoFocus
+                      value={renameDraft}
+                      onChange={(event) => setRenameDraft(event.target.value)}
+                      onBlur={() => void commitRename(thread.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void commitRename(thread.id)
+                        if (event.key === 'Escape') setRenamingId(null)
+                      }}
+                    />
+                  ) : (
+                    <button className="thread-main" onClick={() => { setHistoryOpen(false); void openThread(thread.id) }}>
+                      <strong>{thread.title}</strong>
+                      <span>{thread.lastMessage ?? 'Canvas trống'}</span>
+                      <small>{thread.id === runningThreadId ? 'Đang reasoning' : threadModeLabel(thread)} · {relativeTime(thread.updatedAt)}</small>
+                    </button>
+                  )}
+                  <button className="thread-archive" title="Đổi tên" onClick={() => { setRenameDraft(thread.title); setRenamingId(thread.id) }}>
+                    <Pencil size={14} />
+                  </button>
+                  <button className="thread-archive" title="Lưu trữ" onClick={() => void archiveThread(thread.id)}>
+                    <Archive size={15} />
+                  </button>
+                </div>
+              ))}
+              {threads.length === 0 && <div className="thread-empty">Chưa có hội thoại nào.</div>}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <SettingsDialog
+          profiles={profiles}
+          activeProfile={activeProfile}
+          figmaConnected={Boolean(figmaStatus?.target && figmaStatus.designSystem?.mode === 'live')}
+          onClose={() => setSettingsOpen(false)}
+          onConfigureProfile={(profile) => setSettingsProfile(profile)}
+          onOpenFigma={() => { setSettingsOpen(false); setFigmaSetupOpen(true) }}
+          onResetDemo={() => { setSettingsOpen(false); setResetOpen(true) }}
+        />
+      )}
+
+      {viewer && (
+        <KickoffViewer
+          viewer={viewer}
+          onClose={() => setViewer(null)}
+          onOpenFile={async () => {
+            if (!activeThread) return
+            try {
+              if (viewer.kind === 'backlog') await window.pmAgent.lifecycle.showBacklog(activeThread.id)
+              else await window.pmAgent.lifecycle.showZdoc(activeThread.id)
+            } catch (nextError) {
+              setError(errorText(nextError))
+            }
+          }}
+        />
       )}
     </main>
   )
@@ -1865,6 +1953,160 @@ function ProviderSettings({
           <button className="secondary-button" disabled={busy} onClick={() => void runProbe()}>Kiểm tra</button>
           <button className="primary-button" disabled={busy || !modelId.trim()} onClick={() => void save()}>{busy ? 'Đang xử lý' : 'Lưu cấu hình'}</button>
         </footer>
+      </section>
+    </div>
+  )
+}
+
+function SettingsDialog({
+  profiles,
+  activeProfile,
+  figmaConnected,
+  onClose,
+  onConfigureProfile,
+  onOpenFigma,
+  onResetDemo,
+}: {
+  profiles: ProviderProfile[]
+  activeProfile: ProviderProfile | null | undefined
+  figmaConnected: boolean
+  onClose(): void
+  onConfigureProfile(profile: ProviderProfile): void
+  onOpenFigma(): void
+  onResetDemo(): void
+}): React.JSX.Element {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="settings-dialog app-settings-dialog" role="dialog" aria-modal="true" aria-label="Cài đặt" onMouseDown={(event) => event.stopPropagation()}>
+        <header>
+          <div className="figma-dialog-title"><Settings size={20} /><div><strong>Cài đặt</strong><span>Provider · tích hợp · workspace</span></div></div>
+          <button className="icon-button" title="Đóng" onClick={onClose}><X size={18} /></button>
+        </header>
+
+        <div className="settings-section">
+          <h4>Reasoning providers</h4>
+          <div className="settings-provider-list">
+            {profiles.map((profile) => (
+              <div key={profile.id} className={profile.id === activeProfile?.id ? 'settings-provider-row active' : 'settings-provider-row'}>
+                <span className={profile.hasCredential ? 'status-dot ready' : 'status-dot'} />
+                <div className="settings-provider-copy">
+                  <strong>{profile.displayName}</strong>
+                  <span>{profile.modelId} · {profile.costMode}{profile.id === activeProfile?.id ? ' · đang dùng' : ''}</span>
+                </div>
+                <button className="secondary-button" onClick={() => onConfigureProfile(profile)}>Cấu hình</button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <h4>Tích hợp</h4>
+          <div className="settings-provider-row">
+            <span className={figmaConnected ? 'status-dot ready' : 'status-dot'} />
+            <div className="settings-provider-copy">
+              <strong>Figma</strong>
+              <span>{figmaConnected ? 'Đã kết nối · Live ZDS' : 'Chưa kết nối / mock'}</span>
+            </div>
+            <button className="secondary-button" onClick={onOpenFigma}>Mở setup</button>
+          </div>
+          <div className="settings-provider-row">
+            <span className="status-dot" />
+            <div className="settings-provider-copy">
+              <strong>Jira / Confluence (Atlassian)</strong>
+              <span>Đẩy trực tiếp qua REST — sắp có (đợt 2)</span>
+            </div>
+            <button className="secondary-button" disabled>Sắp có</button>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <h4>Workspace</h4>
+          <div className="settings-provider-row">
+            <RotateCcw size={16} />
+            <div className="settings-provider-copy">
+              <strong>Reset demo</strong>
+              <span>Thay history/canvas/runs bằng fixture ban đầu</span>
+            </div>
+            <button className="secondary-button danger" onClick={onResetDemo}>Reset</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function KickoffViewer({
+  viewer,
+  onClose,
+  onOpenFile,
+}: {
+  viewer: { kind: 'backlog'; data: MockJiraPlan } | { kind: 'zdoc'; data: MockZdocPlan }
+  onClose(): void
+  onOpenFile(): Promise<void>
+}): React.JSX.Element {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="kickoff-viewer" role="dialog" aria-modal="true" aria-label={viewer.kind === 'backlog' ? 'Phân rã task' : 'Tài liệu'} onMouseDown={(event) => event.stopPropagation()}>
+        <header>
+          <div className="figma-dialog-title">
+            {viewer.kind === 'backlog' ? <ListChecks size={20} /> : <FileText size={20} />}
+            <div>
+              <strong>{viewer.kind === 'backlog' ? 'Phân rã task (Jira backlog)' : 'Tài liệu (Confluence)'}</strong>
+              <span>Xem lại trước khi export/đẩy MCP</span>
+            </div>
+          </div>
+          <div className="kickoff-viewer-actions">
+            <button className="secondary-button" onClick={() => void onOpenFile()}><FolderOpen size={14} /> Mở file .md</button>
+            <button className="icon-button" title="Đóng" onClick={onClose}><X size={18} /></button>
+          </div>
+        </header>
+
+        {viewer.kind === 'backlog' ? (
+          <div className="kickoff-viewer-body">
+            <div className="kickoff-epic"><span className="kickoff-tag">EPIC</span> {viewer.data.epic.title}</div>
+            <div className="kickoff-stories">
+              {viewer.data.stories.map((story) => (
+                <div key={story.storyId} className={story.status === 'removed' ? 'kickoff-story removed' : 'kickoff-story'}>
+                  <div className="kickoff-story-head">
+                    <strong>{story.title}</strong>
+                    <span className="kickoff-chip">{story.storyId}</span>
+                    {story.status === 'removed' && <span className="kickoff-chip danger">đã gỡ</span>}
+                  </div>
+                  <div className="kickoff-req">Requirements: {story.requirementIds.join(', ') || '—'}</div>
+                  {story.acceptanceCriteria.length > 0 && (
+                    <ul className="kickoff-ac">
+                      {story.acceptanceCriteria.map((criterion, index) => <li key={index}>{criterion}</li>)}
+                    </ul>
+                  )}
+                </div>
+              ))}
+              {viewer.data.stories.length === 0 && <div className="thread-empty">Chưa có story nào — hãy promote canvas thành ProductSpec trước.</div>}
+            </div>
+          </div>
+        ) : (
+          <div className="kickoff-viewer-body">
+            <h3 className="kickoff-doc-title">{viewer.data.title}</h3>
+            <p className="kickoff-doc-summary">{viewer.data.summary}</p>
+            {viewer.data.requirementSections.map((section) => (
+              <div key={section.requirementId} className={section.status === 'removed' ? 'kickoff-section removed' : 'kickoff-section'}>
+                <div className="kickoff-story-head">
+                  <strong>{section.title}</strong>
+                  <span className="kickoff-chip">{section.requirementId}</span>
+                  <span className="kickoff-chip">{section.priority}</span>
+                  {section.status === 'removed' && <span className="kickoff-chip danger">đã gỡ</span>}
+                </div>
+                <p className="kickoff-section-desc">{section.description}</p>
+                {section.acceptanceCriteria.length > 0 && (
+                  <ul className="kickoff-ac">
+                    {section.acceptanceCriteria.map((criterion, index) => <li key={index}>{criterion}</li>)}
+                  </ul>
+                )}
+                <div className="kickoff-req">Screens: {section.screenIds.join(', ') || '—'} · Stories: {section.storyIds.join(', ') || '—'}</div>
+              </div>
+            ))}
+            {viewer.data.requirementSections.length === 0 && <div className="thread-empty">Chưa có nội dung — hãy promote canvas thành ProductSpec trước.</div>}
+          </div>
+        )}
       </section>
     </div>
   )

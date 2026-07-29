@@ -247,6 +247,14 @@ export class HistoryStore {
     this.db.prepare("UPDATE conversation_threads SET status = 'archived', updated_at = ? WHERE id = ?").run(now(), threadId)
   }
 
+  renameThread(threadId: string, title: string): ThreadDetail {
+    const trimmed = title.trim()
+    if (!trimmed) throw new Error('Tên hội thoại không được để trống')
+    this.db.prepare('UPDATE conversation_threads SET title = ?, updated_at = ? WHERE id = ?')
+      .run(trimmed.slice(0, 120), now(), threadId)
+    return this.getThread(threadId)
+  }
+
   setThreadProvider(threadId: string, profileId: string): ThreadDetail {
     const profile = this.getProfile(profileId)
     this.db.prepare(`
