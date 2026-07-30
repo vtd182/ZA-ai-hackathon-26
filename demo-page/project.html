@@ -92,9 +92,8 @@
             <section class="article-section reveal-on-scroll">
                 <h2><span class="lang-en">2. Infinity Canvas &amp; self-critique</span><span class="lang-vi">2. Bảng vẽ Vô cực &amp; tự phản biện</span></h2>
                 <p><span class="lang-en">The user flow is laid out with a semantic dagre layout, then treated as a directed graph. A <strong>Logical Flow Linter</strong> flags dead ends, branches without decisions, and infinite loops right on the canvas. Select any node and chat about just that region - logic gets bulletproof before design or code.</span><span class="lang-vi">User flow được bố cục bằng thuật toán dagre ngữ nghĩa, rồi coi như một đồ thị có hướng. <strong>Logical Flow Linter</strong> tô đỏ ngõ cụt, nhánh thiếu điều kiện và vòng lặp vô tận ngay trên canvas. Chọn một node bất kỳ và chat đúng về vùng đó - logic được bít kín trước khi thiết kế hay code.</span></p>
-                <div class="media-placeholder large-media">
-                    <video autoplay loop muted playsinline class="media-content"></video>
-                    <div class="media-overlay"><span class="lang-en">[ DEMO: CANVAS LINTER ]<br>Canvas highlighting a dead-end / missing branch</span><span class="lang-vi">[ DEMO: CANVAS LINTER ]<br>Canvas tự báo ngõ cụt / nhánh thiếu điều kiện</span></div>
+                <div class="large-media">
+                    <img src="images/app-canvas.png?v=2" alt="User-flow on the Infinity Canvas with the flow linter flagging an issue" style="width: 100%; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                 </div>
             </section>
 
@@ -128,9 +127,8 @@
             <section class="article-section reveal-on-scroll">
                 <h2><span class="lang-en">6. Local-first &amp; provider-agnostic</span><span class="lang-vi">6. Local-first &amp; đa provider</span></h2>
                 <p><span class="lang-en">DualMind is an Electron desktop app that stores all execution memory in local <strong>SQLite</strong> - synthetic/sandbox data only, no cloud round-trip for state. It runs fully offline on a deterministic mock (<strong>no API key</strong>), or you can switch between <strong>Mock, Codex, OpenAI, Gemini, Claude and AgentRouter</strong> mid-session without losing context. Credentials live in the OS keychain, never in SQLite or the renderer.</span><span class="lang-vi">DualMind là app desktop Electron lưu toàn bộ execution memory trong <strong>SQLite</strong> cục bộ - chỉ dữ liệu synthetic/sandbox, không round-trip cloud cho state. Chạy hoàn toàn offline bằng mock deterministic (<strong>không cần API key</strong>), hoặc đổi giữa <strong>Mock, Codex, OpenAI, Gemini, Claude, AgentRouter</strong> ngay giữa phiên mà không mất ngữ cảnh. Credential nằm trong keychain của OS, không lưu trong SQLite hay renderer.</span></p>
-                <div class="media-placeholder large-media">
-                    <video autoplay loop muted playsinline class="media-content"></video>
-                    <div class="media-overlay"><span class="lang-en">[ DEMO: PROVIDER SWITCH &amp; APPROVAL ]<br>Switch LLM provider, then approve a hashed payload</span><span class="lang-vi">[ DEMO: ĐỔI PROVIDER &amp; DUYỆT ]<br>Đổi provider LLM rồi duyệt payload đã hash</span></div>
+                <div class="large-media">
+                    <img src="images/app-providers.png?v=2" alt="Settings: six switchable AI providers plus Figma and Atlassian integrations" style="width: 100%; border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                 </div>
             </section>
         </article>
