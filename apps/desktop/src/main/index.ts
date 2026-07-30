@@ -2655,6 +2655,28 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(join(moduleDirectory, '../renderer/index.html'))
   }
+
+  // Dev-only offscreen capture harness: PM_AGENT_CAPTURE=/path.png renders the UI, optionally
+  // drives it via DOM (PM_AGENT_CAPTURE_SCRIPT), then writes a PNG and quits. No display / screen
+  // recording permission needed — capturePage() reads the offscreen surface.
+  if (process.env.PM_AGENT_CAPTURE) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      void (async () => {
+        try {
+          const drive = process.env.PM_AGENT_CAPTURE_SCRIPT
+          if (drive) { try { await mainWindow!.webContents.executeJavaScript(drive) } catch (error) { console.error('[capture] drive failed', error) } }
+          await new Promise((resolve) => setTimeout(resolve, Number(process.env.PM_AGENT_CAPTURE_DELAY ?? 6000)))
+          const image = await mainWindow!.webContents.capturePage()
+          writeFileSync(process.env.PM_AGENT_CAPTURE!, image.toPNG())
+          console.log(`[capture] wrote ${process.env.PM_AGENT_CAPTURE}`)
+        } catch (error) {
+          console.error('[capture] failed', error)
+        } finally {
+          app.quit()
+        }
+      })()
+    })
+  }
 }
 
 async function runSmokeCheck(window: BrowserWindowType): Promise<void> {
