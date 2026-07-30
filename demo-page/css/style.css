@@ -461,7 +461,7 @@ body {
 /* Stat row (differentiators) */
 .stat-row {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
     padding: 4rem 5%;
     border-bottom: 1px solid var(--border-color);
