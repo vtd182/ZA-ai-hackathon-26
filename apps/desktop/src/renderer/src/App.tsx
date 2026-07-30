@@ -692,7 +692,7 @@ export function App(): React.JSX.Element {
 
   return (
     <div className="app-frame" style={{ '--chat-width': `${chatWidth}px` } as React.CSSProperties}>
-      <div className="app-titlebar"><span>ZA-ai-hackathon-26 — DualMind</span></div>
+      <div className="app-titlebar"><span>ZA-ai-hackathon-26 - DualMind</span></div>
       <main className="app-shell">
       <section className="center-panel">
         <header className="topbar">
